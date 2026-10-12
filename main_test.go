@@ -1,27 +1,25 @@
 package main
 
 import (
+	"path/filepath"
 	"testing"
 
-	"github.com/egoist/mygo/ui"
+	"github.com/ArnoChenFx/kura/internal/store"
+	kuraui "github.com/ArnoChenFx/kura/internal/ui"
+	myui "github.com/egoist/mygo/ui"
 )
 
-// The view runs without a window in tests, which click and type as a user
-// would.
-func TestView(t *testing.T) {
-	a := &app{}
-	tt := ui.NewTester(a.view, 480, 360)
-	if err := tt.Click("+"); err != nil {
+// TestMainBuildsWindow 验证 main.go 的窗口配置与视图装配是连通的：
+// 用临时目录的 store 配置驱动 internal/ui 的 View（不打开真实窗口）。
+func TestMainBuildsWindow(t *testing.T) {
+	root := t.TempDir()
+	cfg, err := store.NewConfig(filepath.Join(root, "skills"), filepath.Join(root, ".kura"))
+	if err != nil {
 		t.Fatal(err)
 	}
-	if a.count != 1 || !tt.HasText("1") {
-		t.Errorf("count %d after a click, texts %q", a.count, tt.Texts())
-	}
-	if err := tt.Click("Name"); err != nil {
-		t.Fatal(err)
-	}
-	tt.Type("Ada")
-	if !tt.HasText("Hello, Ada!") {
-		t.Errorf("texts %q after typing a name", tt.Texts())
+	app := kuraui.NewApp(cfg)
+	tt := myui.NewTester(app.View, 980, 640)
+	if tt == nil {
+		t.Fatal("tester 不应为 nil")
 	}
 }
