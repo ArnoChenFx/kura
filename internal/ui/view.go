@@ -92,17 +92,24 @@ func (a *App) View(c *myui.Context) {
 		"取消", "确认移入"); n == 1 {
 		a.RemoveAsync(a.confirm.name)
 	}
+
+	// 更新评审面板（检查更新/全部检查的结果 + 应用/取消）。
+	a.viewReviewModal(c)
 }
 
-// viewToolbar 是顶栏：搜索框、刷新、导入元数据。
+// viewToolbar 是顶栏：搜索框、刷新、全部检查、导入元数据。
 func (a *App) viewToolbar(c *myui.Context) {
 	myui.Row(c).FillWidth().Padding(10, 12).Gap(8).AlignItems(myui.Center).Children(func() {
 		myui.SearchField(c, &a.query).Grow(1).Label("搜索技能")
-		if a.scanning {
+		if a.scanning || a.checkingAll || a.checking != "" {
 			myui.Spinner(c)
 		}
 		if myui.Button(c, "刷新").Clicked() {
 			a.ReloadAsync()
+		}
+		// 全部检查：逐个预览根目录技能的更新（评审面板见 viewReviewModal）。
+		if myui.Button(c, "全部检查").Disabled(a.checkingAll || a.checking != "").Clicked() {
+			a.CheckAllAsync()
 		}
 		if myui.Button(c, "导入元数据").Clicked() {
 			a.ImportAsync()
@@ -249,6 +256,10 @@ func (a *App) viewDetail(c *myui.Context, rows []*store.Skill) {
 			}
 			switch s.State {
 			case store.StateEnabled:
+				// 检查更新：预览上游差异，弹出评审面板（不直接改盘）。
+				if myui.Button(c, "检查更新").Label("详情:检查更新").Clicked() {
+					a.CheckAsync(s.Name)
+				}
 				if myui.Button(c, "停用").Clicked() {
 					a.ToggleAsync(s.Name, false)
 				}
@@ -315,4 +326,181 @@ func shortHash(h string) string {
 		return h[:i+13] + "…"
 	}
 	return h
+}
+
+// diffStatusText 把文件差异状态翻译成短标签。
+func diffStatusText(status string) string {
+	switch status {
+	case store.DiffAdded:
+		return "新增"
+	case store.DiffRemoved:
+		return "删除"
+	default:
+		return "修改"
+	}
+}
+
+// diffStatusColor 返回差异标签的颜色：新增绿、删除红、修改琥珀。
+func diffStatusColor(c *myui.Context, status string) myui.Color {
+	t := c.Theme()
+	switch status {
+	case store.DiffAdded:
+		return t.Success
+	case store.DiffRemoved:
+		return t.Danger
+	default:
+		return t.Warning
+	}
+}
+
+// viewReviewModal 渲染更新评审面板（Modal）：
+//
+//   - 单技能模式：标题为「更新 <skill>」；副行显示来源类型/上游 commit 与
+//     目录级新旧哈希；正文逐行列出每个变更文件（状态、路径、±行数、新哈希）；
+//     无变化时提示「与上游一致」；底部 应用更新 / 取消。
+//   - 全部检查模式：标题「全部检查」；正文每个技能一小节，有变化的列出
+//     文件摘要行，无变化的显示「已是最新」，失败的显示错误；底部
+//     「应用全部更新」（逐个 Update 有变化的技能）/ 关闭。
+//
+// Apply 走 ApplyAsync（后台执行，完成后重扫并关闭面板）；取消仅关面板，
+// 不动磁盘。Escape/点击外部关闭由 Modal 自带，语义与取消相同。
+func (a *App) viewReviewModal(c *myui.Context) {
+	r := &a.review
+	t := c.Theme()
+	myui.Modal(c, &r.open, func() {
+		myui.Column(c).Width(560).Gap(12).Children(func() {
+			switch {
+			case r.all:
+				myui.Text(c, "全部检查").FontSize(16).Bold()
+				if len(r.entries) == 0 {
+					myui.Text(c, "根目录里没有可检查的技能").TextColor(t.TextMuted)
+				}
+				myui.Scroll(c).Grow(1).Height(340).Children(func() {
+					myui.Column(c).FillWidth().Gap(10).Children(func() {
+						for _, e := range r.entries {
+							a.viewReviewEntry(c, e)
+						}
+					})
+				})
+				myui.Row(c).Gap(8).Justify(myui.End).Children(func() {
+					if myui.Button(c, "关闭").Clicked() {
+						a.CloseReview()
+					}
+					label := "应用全部更新"
+					if r.applyBusy {
+						label = "正在应用…"
+					}
+					if myui.PrimaryButton(c, label).Disabled(r.applyBusy || !reviewHasChanges(r.entries)).Clicked() {
+						a.ApplyAsync()
+					}
+				})
+			case r.preview != nil:
+				p := r.preview
+				myui.Text(c, "更新 "+r.skill).FontSize(16).Bold()
+				myui.Row(c).Gap(8).AlignItems(myui.Center).Children(func() {
+					myui.Text(c, previewMetaText(p)).SingleLine().TextColor(t.TextMuted)
+				})
+				if !p.HasChanges() {
+					myui.Text(c, "与上游一致，无需更新").TextColor(t.Success)
+				}
+				myui.Scroll(c).Grow(1).Height(320).Children(func() {
+					myui.Column(c).FillWidth().Gap(2).Children(func() {
+						for _, f := range p.Files {
+							a.viewDiffRow(c, f)
+						}
+					})
+				})
+				myui.Row(c).Gap(8).Justify(myui.End).Children(func() {
+					if myui.Button(c, "取消").Clicked() {
+						a.CloseReview()
+					}
+					label := "应用更新"
+					if r.applyBusy {
+						label = "正在应用…"
+					}
+					// 无变化时禁用应用（ApplyAsync 对空名单也会直接返回）。
+					if myui.PrimaryButton(c, label).Disabled(r.applyBusy || !p.HasChanges()).Clicked() {
+						a.ApplyAsync()
+					}
+				})
+			default:
+				// 理论不可达：open 但无数据。给占位并允许关闭，绝不 panic。
+				myui.Text(c, "没有可显示的检查结果").TextColor(t.TextMuted)
+				if myui.Button(c, "关闭").Clicked() {
+					a.CloseReview()
+				}
+			}
+		})
+	})
+}
+
+// viewReviewEntry 渲染全部检查汇总里的一个技能小节。
+func (a *App) viewReviewEntry(c *myui.Context, e skillReviewEntry) {
+	t := c.Theme()
+	myui.Column(c).FillWidth().Gap(4).Children(func() {
+		myui.Row(c).FillWidth().Gap(8).AlignItems(myui.Center).Children(func() {
+			myui.Text(c, e.skill).Bold()
+			switch {
+			case e.err != "":
+				myui.Text(c, "检查失败").SingleLine().TextColor(t.Danger)
+			case !e.preview.HasChanges():
+				myui.Text(c, "已是最新").SingleLine().TextColor(t.Success)
+			default:
+				added, changed, removed := e.preview.Counts()
+				myui.Text(c, fmt.Sprintf("+%d ~%d -%d（%d 个文件）", added, changed, removed, len(e.preview.Files))).
+					SingleLine().TextColor(t.Warning)
+			}
+		})
+		// 错误详情或变更文件摘要（每个文件一行）。
+		if e.err != "" {
+			myui.Text(c, e.err).TextColor(t.Danger)
+			return
+		}
+		for _, f := range e.preview.Files {
+			a.viewDiffRow(c, f)
+		}
+	})
+}
+
+// viewDiffRow 渲染一个变更文件行：状态标签 + 路径 + ±行数 + 新内容哈希。
+func (a *App) viewDiffRow(c *myui.Context, f store.FileDiff) {
+	t := c.Theme()
+	myui.Row(c).FillWidth().Padding(2, 8).Gap(8).AlignItems(myui.Center).Children(func() {
+		myui.Text(c, diffStatusText(f.Status)).SingleLine().Width(44).
+			TextColor(diffStatusColor(c, f.Status))
+		myui.Text(c, f.Path).SingleLine().Grow(1)
+		counts := fmt.Sprintf("+%d/-%d", f.Added, f.Removed)
+		myui.Text(c, counts).SingleLine().TextColor(t.TextMuted)
+		if f.NewHash != "" {
+			myui.Text(c, f.NewHash[:8]).SingleLine().TextColor(t.TextMuted)
+		}
+	})
+}
+
+// previewMetaText 生成单技能评审面板的元信息行。
+func previewMetaText(p *store.UpdatePreview) string {
+	parts := []string{"来源: " + p.SourceType}
+	if p.Commit != "" {
+		parts = append(parts, "上游 commit: "+shortCommit(p.Commit))
+	}
+	parts = append(parts, "旧 "+shortHash(p.OldHash), "新 "+shortHash(p.NewHash))
+	return strings.Join(parts, " · ")
+}
+
+// shortCommit 缩短 commit 哈希用于展示。
+func shortCommit(s string) string {
+	if len(s) > 10 {
+		return s[:10]
+	}
+	return s
+}
+
+// reviewHasChanges 报告全部检查汇总里是否存在任何可应用的变更。
+func reviewHasChanges(entries []skillReviewEntry) bool {
+	for _, e := range entries {
+		if e.preview != nil && e.preview.HasChanges() {
+			return true
+		}
+	}
+	return false
 }

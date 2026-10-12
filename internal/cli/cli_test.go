@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -508,5 +509,255 @@ func TestEnvVarRoot(t *testing.T) {
 	skills := out["skills"].([]any)
 	if len(skills) != 1 {
 		t.Errorf("应看到 envskill, got %v", skills)
+	}
+}
+
+// ------------------------ update --check（里程碑 4） ------------------------
+
+// checkTestRepo 建一个本地 git 仓库（skills/<name>/SKILL.md + extra 表），
+// 配置 insteadOf 重写（写入隔离的临时全局配置，不碰用户真实配置），
+// 返回 (repo, restore)。restore 由 t.Cleanup 注册。
+func checkTestRepo(t *testing.T, name, body string, extra map[string]string) (string, func()) {
+	t.Helper()
+	repo := filepath.Join(t.TempDir(), "repo")
+	dir := filepath.Join(repo, "skills", name)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte("---\nname: "+name+"\n---\n\n"+body+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for rel, content := range extra {
+		p := filepath.Join(dir, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	gitCLI(t, repo, "init", "-q")
+	gitCLI(t, repo, "config", "user.email", "t@t")
+	gitCLI(t, repo, "config", "user.name", "t")
+	gitCLI(t, repo, "add", ".")
+	gitCLI(t, repo, "commit", "-q", "-m", "init")
+	// 隔离 git 全局配置（屏蔽 autocrlf；insteadOf 只落临时文件）。
+	empty := filepath.Join(t.TempDir(), "empty-gitconfig")
+	os.WriteFile(empty, nil, 0o644)
+	t.Setenv("GIT_CONFIG_GLOBAL", empty)
+	t.Setenv("GIT_CONFIG_SYSTEM", empty)
+	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
+	// 镜像 bare 并重写 URL。restore 同时清理新旧两个 insteadOf 键
+	//（重镜像时旧 key 若不清理，两个规则会同时匹配同一 URL，git 的选择
+	// 不可靠——与 store 测试同一教训）。
+	bare := filepath.Join(t.TempDir(), "bare.git")
+	gitCLI(t, "", "clone", "-q", "--bare", repo, bare)
+	key := "url." + bare + ".insteadOf"
+	gitCLI(t, "", "config", "--global", key, "https://github.com/owner/"+name+".git")
+	restore := func() {
+		exec.Command("git", "config", "--global", "--unset", key).Run() //nolint:errcheck
+	}
+	return repo, restore
+}
+
+// gitCLI 是 cli 测试里的 git 助手（失败即 Fatal）。
+func gitCLI(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git %v: %v: %s", args, err, out)
+	}
+}
+
+// installViaCLI 用 CLI add --github 安装 owner/<name> 的技能（走与用户
+// 相同的路径，顺带覆盖 add 的 github 分支）。
+func installViaCLI(t *testing.T, e *cliEnv, name string) {
+	t.Helper()
+	if code := e.run("--json", "add", "--github", "owner/"+name, "--sub-path", "skills/"+name); code != ExitOK {
+		t.Fatalf("add 失败: %s", e.stderr.String())
+	}
+}
+
+// TestUpdateCheckExitCodesAndJSON 验证：--check 无变化退出 0，有变化退出 3；
+// --json 形状稳定（files 数组、hasChanges、新旧哈希）。
+func TestUpdateCheckExitCodesAndJSON(t *testing.T) {
+	e := newEnv(t)
+	repo, restore := checkTestRepo(t, "c-demo", "v1", map[string]string{"keep.md": "same\n"})
+	t.Cleanup(restore)
+	installViaCLI(t, e, "c-demo")
+
+	// 无变化：退出 0，hasChanges=false，files=[]。
+	code, out := e.runJSON(t, "update", "--check", "c-demo")
+	if code != ExitOK {
+		t.Fatalf("无变化应退出 0, got %d, stderr=%s", code, e.stderr.String())
+	}
+	requireString(t, out, "skill", "c-demo")
+	requireString(t, out, "sourceType", "github")
+	if out["hasChanges"] != false {
+		t.Errorf("hasChanges 应为 false, got %v", out["hasChanges"])
+	}
+	files, ok := out["files"].([]any)
+	if !ok || len(files) != 0 {
+		t.Errorf("无变化时 files 应为空数组, got %v", out["files"])
+	}
+	if out["oldHash"] == "" || out["newHash"] == "" {
+		t.Error("新旧哈希应始终输出")
+	}
+	if out["commit"] == "" {
+		t.Error("github 来源应输出上游 commit")
+	}
+
+	// 上游推进 v2：改 SKILL.md、删 keep.md、加 extra-new.md；重新镜像 bare。
+	dir := filepath.Join(repo, "skills", "c-demo")
+	if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte("---\nname: c-demo\n---\n\nv2\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(filepath.Join(dir, "keep.md")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "extra-new.md"), []byte("new\nline\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitCLI(t, repo, "add", "-A")
+	gitCLI(t, repo, "commit", "-q", "-m", "v2")
+	// 重镜像前先 unset 旧 key：两个规则同时匹配同一 URL 时 git 的选择不可靠。
+	restore()
+	bare2 := filepath.Join(t.TempDir(), "bare2.git")
+	gitCLI(t, "", "clone", "-q", "--bare", repo, bare2)
+	key := "url." + bare2 + ".insteadOf"
+	gitCLI(t, "", "config", "--global", key, "https://github.com/owner/c-demo.git")
+	t.Cleanup(func() { exec.Command("git", "config", "--global", "--unset", key).Run() })
+
+	// 有变化：退出 3，JSON 里三类文件齐全。
+	code, out = e.runJSON(t, "update", "--check", "c-demo")
+	if code != ExitDoctorProblem {
+		t.Fatalf("有待更新应退出 3, got %d", code)
+	}
+	if out["hasChanges"] != true {
+		t.Errorf("hasChanges 应为 true, got %v", out["hasChanges"])
+	}
+	files, ok = out["files"].([]any)
+	if !ok || len(files) != 3 {
+		t.Fatalf("应有 3 个差异文件, got %v", out["files"])
+	}
+	byPath := map[string]map[string]any{}
+	for _, raw := range files {
+		f := raw.(map[string]any)
+		byPath[f["path"].(string)] = f
+	}
+	if f := byPath["extra-new.md"]; f == nil || f["status"] != "added" || f["added"] != float64(2) {
+		t.Errorf("extra-new.md 应为 added(+2): %v", f)
+	}
+	if f := byPath["keep.md"]; f == nil || f["status"] != "removed" || f["removed"] != float64(1) {
+		t.Errorf("keep.md 应为 removed(-1): %v", f)
+	}
+	if f := byPath["SKILL.md"]; f == nil || f["status"] != "changed" {
+		t.Errorf("SKILL.md 应为 changed: %v", f)
+	}
+	// 有变化时新旧目录哈希应不同。
+	if out["oldHash"] == out["newHash"] {
+		t.Error("有变化时新旧哈希应不同")
+	}
+
+	// --check 后内容未被修改（预览只读）：再跑一次 update 应用，然后
+	// --check 应回到退出 0（自证预览期间盘上无变化）。
+	if code := e.run("update", "c-demo"); code != ExitOK {
+		t.Fatalf("update 失败: %s", e.stderr.String())
+	}
+	if code := e.run("--json", "update", "--check", "c-demo"); code != ExitOK {
+		t.Errorf("应用后 --check 应退出 0, got %d", code)
+	}
+}
+
+// TestUpdateCheckAllJSON 验证：--check --all 汇总形状与退出码聚合逻辑。
+func TestUpdateCheckAllJSON(t *testing.T) {
+	e := newEnv(t)
+	repo, restore := checkTestRepo(t, "all-a", "v1", nil)
+	t.Cleanup(restore)
+	installViaCLI(t, e, "all-a")
+
+	// 只有一个技能、无变化：退出 0。
+	code, out := e.runJSON(t, "update", "--check", "--all")
+	if code != ExitOK {
+		t.Fatalf("全部无变化应退出 0, got %d", code)
+	}
+	requireString(t, out, "root", e.root)
+	results, ok := out["results"].([]any)
+	if !ok || len(results) != 1 {
+		t.Fatalf("应有 1 条结果, got %v", out["results"])
+	}
+	r0 := results[0].(map[string]any)
+	requireString(t, r0, "skill", "all-a")
+	if r0["check"] == nil {
+		t.Fatalf("成功条目应带 check 载荷: %v", r0)
+	}
+	chk := r0["check"].(map[string]any)
+	if chk["hasChanges"] != false {
+		t.Errorf("hasChanges 应为 false: %v", chk)
+	}
+
+	// 上游推进 → 汇总退出 3，条目里 hasChanges=true。
+	if err := os.WriteFile(filepath.Join(repo, "skills", "all-a", "SKILL.md"),
+		[]byte("---\nname: all-a\n---\n\nv2\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitCLI(t, repo, "add", "-A")
+	gitCLI(t, repo, "commit", "-q", "-m", "v2")
+	// 重镜像前先 unset 旧 key（同 TestUpdateCheckExitCodesAndJSON）。
+	restore()
+	bare2 := filepath.Join(t.TempDir(), "bare2.git")
+	gitCLI(t, "", "clone", "-q", "--bare", repo, bare2)
+	key := "url." + bare2 + ".insteadOf"
+	gitCLI(t, "", "config", "--global", key, "https://github.com/owner/all-a.git")
+	t.Cleanup(func() { exec.Command("git", "config", "--global", "--unset", key).Run() })
+
+	code, out = e.runJSON(t, "update", "--check", "--all")
+	if code != ExitDoctorProblem {
+		t.Fatalf("有待更新应退出 3, got %d", code)
+	}
+	results, ok = out["results"].([]any)
+	if !ok || len(results) != 1 {
+		t.Fatalf("应有 1 条结果, got %v", out["results"])
+	}
+	chk = results[0].(map[string]any)["check"].(map[string]any)
+	if chk["hasChanges"] != true {
+		t.Errorf("hasChanges 应为 true: %v", chk)
+	}
+}
+
+// TestUpdateCheckAllSkipsBrokenSkill 验证：--all 里单个技能预览失败
+// 不中断整体：失败条目带 error，成功条目照常，退出码按有变化聚合。
+func TestUpdateCheckAllSkipsBrokenSkill(t *testing.T) {
+	e := newEnv(t)
+	_, restore := checkTestRepo(t, "good-a", "v1", nil)
+	t.Cleanup(restore)
+	installViaCLI(t, e, "good-a")
+	// 一个无元数据的技能（预览必失败）。
+	e.writeSkill("broken-b")
+
+	code, out := e.runJSON(t, "update", "--check", "--all")
+	if code != ExitOK {
+		t.Fatalf("无变化（含失败条目）应退出 0, got %d", code)
+	}
+	results, ok := out["results"].([]any)
+	if !ok || len(results) != 2 {
+		t.Fatalf("应有 2 条结果, got %v", out["results"])
+	}
+	bySkill := map[string]map[string]any{}
+	for _, raw := range results {
+		r := raw.(map[string]any)
+		bySkill[r["skill"].(string)] = r
+	}
+	if r := bySkill["broken-b"]; r == nil || r["error"] == nil {
+		t.Errorf("broken-b 应带 error: %v", r)
+	}
+	if r := bySkill["good-a"]; r == nil || r["check"] == nil {
+		t.Errorf("good-a 应带 check: %v", r)
+	}
+
+	// 用法错误：--check 既无 NAME 又无 --all → 退出 2。
+	if code := e.run("update", "--check"); code != ExitUsage {
+		t.Errorf("--check 缺参数应退出 2, got %d", code)
 	}
 }

@@ -35,12 +35,15 @@ type App struct {
 	selRow int            // 过滤后列表的选中行，-1 为未选中
 	list   myui.ListState // 列表的滚动与选择状态（可持久保存）
 
-	busy      map[string]bool // 正在执行操作的技能名
-	scanning  bool            // 正在重新扫描
-	loadErr   string          // 扫描/环境错误（如根目录不存在）
-	status    string          // 底部状态行的文字
-	statusErr bool            // 状态行是否为错误
-	confirm   confirmState    // 待确认的删除操作
+	busy        map[string]bool // 正在执行操作的技能名
+	checking    string          // 正在预览更新的技能名（空为无）
+	checkingAll bool            // 正在全部检查
+	scanning    bool            // 正在重新扫描
+	loadErr     string          // 扫描/环境错误（如根目录不存在）
+	status      string          // 底部状态行的文字
+	statusErr   bool            // 状态行是否为错误
+	confirm     confirmState    // 待确认的删除操作
+	review      reviewState     // 更新评审面板（Modal）
 
 	// spawn 在后台运行 fn：生产环境为 go fn()。
 	spawn func(func())

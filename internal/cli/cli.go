@@ -218,6 +218,11 @@ const usageText = `kura —— agent skills 管理器（无界面命令行）
   add --github owner/repo [--sub-path P] [--ref R] [--name N]
                        从 GitHub 仓库安装技能
   update <NAME>        按元数据记录的来源重新拉取并替换内容（先快照）
+  update --check <NAME>
+                       预览 NAME 的更新会改什么（不修改任何文件）；
+                       有待更新退出码 3，无变化退出码 0
+  update --check --all
+                       预览根目录全部技能的更新（每个技能一段结果）
   doctor               只读体检：缺元数据 / 元数据损坏 / 内容漂移 /
                        缺 SKILL.md / disabled 与 trash 中的残留条目
   version              打印版本
@@ -244,4 +249,15 @@ JSON 输出形状（--json 时）:
                       no-skillmd | leftover
   import-meta {"root": string, "lockPath": string, "dryRun": bool,
               "wouldImport"?: [string], "imported"?: [string]}
+  update --check NAME
+              {"skill": string, "sourceType": string, "commit"?: string,
+              "hasChanges": bool, "oldHash": string, "newHash": string,
+              "files": [{path, status, added, removed, oldHash?, newHash?}],
+              "unchanged": int}
+              status ∈ added | changed | removed；files 只含差异文件，
+              无变化时为 []。退出码：有待更新 3，无变化 0。
+  update --check --all
+              {"root": string,
+              "results": [{skill, error?, check?}]}
+              check 的形状同上；任一技能有待更新退出码 3。
 `

@@ -97,11 +97,54 @@ future UI（里程碑 2/4 的窗口版）可直接消费。来源代码：`inter
 
 `--dry-run` 时用 `wouldImport`（且绝不写文件）；实际导入用 `imported`。
 
+## update --check（里程碑 4）
+
+```json
+{
+  "skill": "yixin-api",
+  "sourceType": "github",
+  "commit": "3f9c1ab8d2…",               // local 来源无此字段
+  "hasChanges": true,
+  "oldHash": "sha256:3301…",
+  "newHash": "sha256:7072…",
+  "files": [
+    {
+      "path": "SKILL.md",
+      "status": "changed",               // added | changed | removed
+      "added": 2,
+      "removed": 1,
+      "oldHash": "<文件级 sha256 十六进制，无前缀>",
+      "newHash": "<…>"
+    }
+  ],
+  "unchanged": 4
+}
+```
+
+`files` 只含差异文件（按路径排序），无变化时为 `[]`；`unchanged` 是两侧
+一致的文件数。`kura update --check` 绝不修改任何文件。退出码：有待更新
+**3**，无变化 **0**，预览失败（技能不存在/元数据损坏/clone 失败等）**1**。
+
+## update --check --all
+
+```json
+{
+  "root": "C:\\Users\\me\\.agents\\skills",
+  "results": [
+    {"skill": "good", "check": { …同上，不含 skill 字段之外的部分… }},
+    {"skill": "broken", "error": "store: … 元数据不可读 …"}
+  ]
+}
+```
+
+成功条目带 `check`（形状同 `update --check` 减去顶层 skill），失败条目带
+`error`；`results` 恒为数组。任一技能有待更新 → 退出码 3。
+
 ## 退出码
 
 | 码 | 含义 |
 | --- | --- |
-| 0 | 成功（doctor 表示"干净"） |
-| 1 | 操作失败（技能不存在、同名冲突、IO 错误等） |
+| 0 | 成功（doctor/--check 表示“干净/无待更新”） |
+| 1 | 操作失败（技能不存在、同名冲突、IO 错误、--check 预览失败等） |
 | 2 | 用法错误（未知命令、flag 解析失败、参数个数不对） |
-| 3 | doctor 发现问题 |
+| 3 | doctor 发现问题 / update --check 有待更新 |
