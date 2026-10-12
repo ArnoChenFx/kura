@@ -1,0 +1,82 @@
+# CI：每次 push 和 pull_request 都跑测试，并交叉编译无界面 CLI。
+# 桌面应用的打包在 release.yml（仅 tag 触发）。
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  # 测试：MyGo 无 cgo，但两个平台都跑一遍，暴露平台相关的行为差异。
+  test:
+    name: test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    defaults:
+      run:
+        # Windows runner 默认是 PowerShell，统一用 bash 保证脚本可移植。
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: gofmt 检查
+        run: |
+          out="$(gofmt -l .)"
+          if [ -n "$out" ]; then
+            echo "以下文件未通过 gofmt："
+            echo "$out"
+            exit 1
+          fi
+      - name: go vet
+        run: go vet ./...
+      - name: mygo vet
+        run: go tool mygo vet .
+      - name: go test
+        run: go test ./...
+      - name: go test（CGO_ENABLED=0）
+        run: CGO_ENABLED=0 go test ./...
+      - name: go build
+        run: go build ./...
+
+  # 无界面 CLI 交叉编译：纯 Go，无 cgo，全部在 ubuntu 上完成。
+  # 每个目标一行 matrix，产物名 kura-cli-<os>-<arch>。
+  build-cli:
+    name: build-cli (${{ matrix.os }}/${{ matrix.arch }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: linux, arch: amd64 }
+          - { os: linux, arch: arm64 }
+          - { os: windows, arch: amd64 }
+          - { os: darwin, arch: amd64 }
+          - { os: darwin, arch: arm64 }
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: 交叉编译 kura CLI
+        env:
+          GOOS: ${{ matrix.os }}
+          GOARCH: ${{ matrix.arch }}
+        run: |
+          ext=""
+          if [ "$GOOS" = "windows" ]; then ext=".exe"; fi
+          CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" \
+            -o "kura-cli-${GOOS}-${GOARCH}${ext}" ./cmd/kura
+      - name: 上传构建产物
+        uses: actions/upload-artifact@v7
+        with:
+          name: kura-cli-${{ matrix.os }}-${{ matrix.arch }}
+          path: kura-cli-${{ matrix.os }}-${{ matrix.arch }}*
+          if-no-files-found: error
