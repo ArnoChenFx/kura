@@ -122,6 +122,9 @@ func (c *Config) Restore(name, stampName string) (*Result, error) {
 	if err := os.Rename(src, dst); err != nil {
 		return nil, fmt.Errorf("store: 恢复 %s 失败: %w", name, err)
 	}
+	// 清掉可能残留的空壳目录 trash/<name>（里面的 stamp 已移走）。
+	// 只删空目录：失败不影响恢复结果。
+	os.Remove(trashDir)
 	return &Result{ID: name, State: StateEnabled, Dir: dst}, nil
 }
 
