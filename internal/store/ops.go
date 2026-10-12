@@ -122,6 +122,9 @@ func (c *Config) Restore(name, stampName string) (*Result, error) {
 	if err := os.Rename(src, dst); err != nil {
 		return nil, fmt.Errorf("store: 恢复 %s 失败: %w", name, err)
 	}
+	// 清理 trash/<name> 空壳目录：os.Remove 只能删空目录，若同一技能还有
+	// 其他时间戳副本则会失败并忽略（保留它们是正确的）。
+	os.Remove(trashDir)
 	return &Result{ID: name, State: StateEnabled, Dir: dst}, nil
 }
 

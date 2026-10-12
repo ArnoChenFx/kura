@@ -1,0 +1,107 @@
+# kura CLI JSON 输出契约（里程碑 3）
+
+`kura --json` 的全部输出形状。**稳定承诺**：字段只增不改义、不删除；
+future UI（里程碑 2/4 的窗口版）可直接消费。来源代码：`internal/cli`。
+
+## 约定
+
+- 成功输出到 stdout（缩进两格 JSON，末尾换行）；
+- `--json` 模式下错误输出到 stderr，形状恒为 `{"error": "..."}`；
+- 路径一律绝对路径（`resolveConfig` 做 `filepath.Abs`）；
+- 数组字段永远输出 `[]`，绝不输出 `null`；
+- 环境变量 `KURA_ROOT`/`KURA_HOME` 等价于 `--root`/`--home`，flag 优先。
+
+## list / scan
+
+```json
+{
+  "root": "C:\\Users\\me\\.agents\\skills",
+  "skills": [
+    {
+      "name": "yixin-api",
+      "state": "enabled",              // enabled | disabled | trashed
+      "hasSkillMd": true,
+      "dir": "C:\\Users\\me\\.agents\\skills\\yixin-api",
+      "sourceType": "github",          // 来自 meta.source.type
+      "sourceUrl": "https://github.com/owner/repo.git",
+      "ref": "main",
+      "subPath": "skills/yixin-api",
+      "pluginName": "mattpocock-skills",
+      "updatedAt": "2026-09-06T13:34:08Z",
+      "contentHash": "sha256:3301…",
+      "metaError": ""                  // 仅当 .kura-meta.json 损坏时出现
+    }
+  ]
+}
+```
+
+带 `omitempty` 的字段在无值时不出现。trashed 条目的目录结构是
+`trash/<name>/<stamp>`，容器本身没有 SKILL.md/元数据，因此
+`hasSkillMd=false` 且不输出 source* 字段，属于正常现象。
+
+## disable / enable / remove / restore / add / update
+
+对应 `store.Result`：
+
+```json
+{
+  "id": "beta",
+  "state": "disabled",
+  "dir": "C:\\Users\\me\\.kura\\disabled\\beta",
+  "snapshotDir": "C:\\Users\\me\\.kura\\snapshots\\beta\\20260621-000000"
+}
+```
+
+`snapshotDir` 仅有快照动作（remove/update）时出现。
+
+## doctor
+
+```json
+{
+  "root": "C:\\Users\\me\\.agents\\skills",
+  "problems": [
+    {
+      "kind": "hash-drift",
+      "skill": "alpha",
+      "detail": "内容与元数据不符: 当前 sha256:bbf4…，记录 sha256:3301…（可用 kura update 刷新）"
+    }
+  ]
+}
+```
+
+`kind` 的全部取值（稳定枚举）：
+
+| kind | 含义 |
+| --- | --- |
+| `not-a-dir` | 根/disabled/trash 下与技能同级的普通文件，或目录本身不可读 |
+| `no-meta` | 技能文件夹缺少 `.kura-meta.json`（或元数据缺 contentHash） |
+| `meta-parse` | `.kura-meta.json` 存在但 JSON 损坏 |
+| `hash-drift` | 内容哈希与元数据记录不符（内容漂移） |
+| `no-skillmd` | 技能文件夹缺少 SKILL.md |
+| `leftover` | disabled/trash 中的残留条目（提醒，可用 enable/restore 处理） |
+
+`skill` 与具体技能无关时为空串。干净根目录输出 `"problems": []` 且
+退出码 0；发现任何问题时退出码 3。
+
+## import-meta
+
+```json
+{
+  "root": "C:\\Users\\me\\.agents\\skills",
+  "lockPath": "C:\\Users\\me\\.agents\\.skill-lock.json",
+  "lockFound": true,
+  "dryRun": true,
+  "wouldImport": ["locked-skill"]
+}
+```
+
+`--dry-run` 时用 `wouldImport`（且绝不写文件）；实际导入用 `imported`。
+
+## 退出码
+
+| 码 | 含义 |
+| --- | --- |
+| 0 | 成功（doctor 表示"干净"） |
+| 1 | 操作失败（技能不存在、同名冲突、IO 错误等） |
+| 2 | 用法错误（未知命令、flag 解析失败、参数个数不对） |
+| 3 | doctor 发现问题 |

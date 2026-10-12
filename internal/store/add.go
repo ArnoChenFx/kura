@@ -26,6 +26,9 @@ type AddOptions struct {
 	SubPath string
 	// Ref 是分支/标签/commit（可选，默认仓库默认分支）。
 	Ref string
+	// Name 是安装后的技能名（可选）。为空时取来源目录名。
+	// 元数据中的来源信息始终记录真实来源，与改名无关。
+	Name string
 }
 
 // validate 校验来源参数：必须且只能提供一种来源。
@@ -72,7 +75,7 @@ func (c *Config) Add(opts *AddOptions) (*Result, error) {
 	if cleanup != nil {
 		defer cleanup()
 	}
-	return c.installDir(srcDir, src)
+	return c.installDir(srcDir, src, opts.Name)
 }
 
 // resolveLocal 处理本地目录来源。
@@ -133,9 +136,14 @@ func gitHead(dir string) string {
 }
 
 // installDir 把 srcDir 复制为根目录下的技能文件夹并写入元数据。
-// 技能名 = 目录名；重名或名字非法时报错。
-func (c *Config) installDir(srcDir string, src Source) (*Result, error) {
-	name := filepath.Base(srcDir)
+// 技能名优先用 nameOverride（AddOptions.Name），否则取来源目录名；
+// 重名或名字非法时报错。元数据里的来源始终是真实来源（srcDir/src），
+// 与改名无关。
+func (c *Config) installDir(srcDir string, src Source, nameOverride string) (*Result, error) {
+	name := nameOverride
+	if name == "" {
+		name = filepath.Base(srcDir)
+	}
 	if name == "." || name == string(filepath.Separator) || strings.ContainsAny(name, `\/`) {
 		return nil, fmt.Errorf("store: 无法从来源推导技能名: %s", srcDir)
 	}
