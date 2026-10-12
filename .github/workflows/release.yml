@@ -1,0 +1,103 @@
+# Release：push v* 标签时构建全平台桌面应用并发布 GitHub Release。
+#
+# kura 是 MyGo 原生 UI 应用（无前端），构建用 `go tool mygo build`，
+# 不安装 Bun/npm/Node。mygo.json 未配置 updates（属于里程碑 6），
+# `mygo build -upload` 没有上传目标，所以上传用 gh release 手动完成。
+# 发版方式见 docs/note/ci.md。
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write # 创建草稿 Release 并上传产物
+
+jobs:
+  # 先校验 tag 与 mygo.json 的 version 一致，再建草稿 Release。
+  # 两者不匹配时尽早失败，避免按错误版本号构建出全部产物。
+  draft-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: 校验 tag 与 mygo.json 版本一致
+        run: |
+          version="$(jq -r .version mygo.json)"
+          if [ "$GITHUB_REF_NAME" != "v$version" ]; then
+            echo "错误：tag $GITHUB_REF_NAME 与 mygo.json 的版本 v$version 不一致"
+            echo "请先更新 mygo.json 的 version，提交后再打 tag。"
+            exit 1
+          fi
+          echo "版本一致：v$version"
+      - name: 创建草稿 Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ! gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
+              --draft --verify-tag --title "$GITHUB_REF_NAME" --generate-notes
+          fi
+
+  # 每个平台目标一行 matrix，并行构建、各自上传：
+  # - macOS 必须在 macOS runner（签名与 dmg 制作）；
+  # - Windows 与 Linux 无 cgo，在 ubuntu 上构建即可；
+  #   Windows 安装器用 NSIS，Linux runner 需要先用 apt 装好。
+  build:
+    needs: draft-release
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: macOS (arm64), os: macos-latest, platform: "darwin/arm64" }
+          - { name: macOS (amd64), os: macos-latest, platform: "darwin/amd64" }
+          - { name: Windows (amd64), os: ubuntu-latest, platform: "windows/amd64" }
+          - { name: Linux (amd64), os: ubuntu-latest, platform: "linux/amd64" }
+          - { name: Linux (arm64), os: ubuntu-latest, platform: "linux/arm64" }
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: 安装 NSIS（Windows 安装器用）
+        if: matrix.name == 'Windows (amd64)'
+        run: sudo apt-get update && sudo apt-get install -y nsis
+      - name: 构建桌面应用
+        run: go tool mygo build -platform "${{ matrix.platform }}"
+      # 只上传可安装的二进制包：Setup .exe、裸 kura.exe、.dmg、.deb、
+      # 带 install.sh 的 .tar.gz。产物目录是 build/<os>-<arch>/，
+      # 安装器文件名含空格与版本号，用 glob 匹配后放进数组逐个引用。
+      - name: 上传产物到草稿 Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          shopt -s nullglob
+          files=()
+          for f in "build/"*/*.dmg \
+                   "build/"*/*Setup*.exe \
+                   "build/"*/kura.exe \
+                   "build/"*/*.deb \
+                   "build/"*/*-linux-*.tar.gz; do
+            files+=("$f")
+          done
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "错误：build/ 下没有可上传的产物" >&2
+            ls -la build/ || true
+            exit 1
+          fi
+          gh release upload "$GITHUB_REF_NAME" "${files[@]}" \
+            --repo "$GITHUB_REPOSITORY" --clobber
+
+  # 全部平台上传完成后，把草稿发布为正式 Release。
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: 发布 Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false
