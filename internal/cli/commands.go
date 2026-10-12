@@ -432,18 +432,48 @@ func cmdAdd(args []string, stdout, stderr io.Writer, pre *globalFlags) int {
 
 // ------------------------------- update -------------------------------
 
-// cmdUpdate 实现 `kura update NAME`：按元数据记录的来源重新拉取并替换。
+// cmdUpdate 实现 `kura update NAME` 与 `kura update --check`（里程碑 4）。
+//
+//   - `kura update NAME`            按元数据记录的来源重新拉取并替换（先快照）；
+//   - `kura update --check NAME`    预览更新会改什么，不落盘；有待更新退出 3，无则 0；
+//   - `kura update --check --all`   对根目录全部 enabled 技能逐个预览。
 func cmdUpdate(args []string, stdout, stderr io.Writer, pre *globalFlags) int {
 	g := &globalFlags{}
 	fs := newFlagSet("update", stderr, g, pre)
+	check := fs.Bool("check", false, "预览更新会改什么（不修改任何文件）；有待更新时退出码 3")
+	all := fs.Bool("all", false, "配合 --check：检查根目录全部技能")
 	positional, err := parseArgs(fs, args)
 	if err != nil {
 		return usageError(stderr, err)
 	}
-	if len(positional) != 1 {
-		return printError(g, stderr, "用法: kura update <NAME>")
+	if !*check {
+		// 原有路径：直接更新。
+		if len(positional) != 1 || *all {
+			return printError(g, stderr, "用法: kura update <NAME>")
+		}
+		return runUpdateApply(g, positional[0], stdout, stderr)
 	}
-	name := positional[0]
+	// --check 路径：NAME 与 --all 二选一。
+	if *all {
+		if len(positional) != 0 {
+			// 用法错误：--all 不接受 NAME。
+			fmt.Fprintf(stderr, "kura: 用法: kura update --check --all（不能同时给 NAME）\n")
+			_ = writeJSON(stderr, errorJSON{Error: "用法: kura update --check --all（不能同时给 NAME）"})
+			return ExitUsage
+		}
+		return runUpdateCheckAll(g, stdout, stderr)
+	}
+	if len(positional) != 1 {
+		// 用法错误（缺 NAME）：按约定退出 2，并把用法写进 stderr。
+		fmt.Fprintf(stderr, "kura: 用法: kura update --check <NAME> | kura update --check --all\n")
+		_ = writeJSON(stderr, errorJSON{Error: "用法: kura update --check <NAME> | kura update --check --all"})
+		return ExitUsage
+	}
+	return runUpdateCheck(g, positional[0], stdout, stderr)
+}
+
+// runUpdateApply 执行真正的更新（原有行为，见 store.Update）。
+func runUpdateApply(g *globalFlags, name string, stdout, stderr io.Writer) int {
 	c, err := resolveConfig(g)
 	if err != nil {
 		return printError(g, stderr, "%v", err)
@@ -463,3 +493,198 @@ func cmdUpdate(args []string, stdout, stderr io.Writer, pre *globalFlags) int {
 	}
 	return ExitOK
 }
+
+// checkJSON 是 `kura update --check <NAME> --json` 的顶层形状（稳定契约）。
+// files 只含 added/changed/removed 的文件，unchanged 是两侧一致的文件数；
+// 数组字段永远输出 []（不输出 null）。
+type checkJSON struct {
+	// Skill 是技能名。
+	Skill string `json:"skill"`
+	// SourceType 是元数据记录的来源类型（local/github）。
+	SourceType string `json:"sourceType"`
+	// Commit 是上游最新 commit（local 来源无此字段）。
+	Commit string `json:"commit,omitempty"`
+	// HasChanges 是是否存在任何文件差异。
+	HasChanges bool `json:"hasChanges"`
+	// OldHash/NewHash 是目录级内容哈希（与 .kura-meta.json 的 contentHash 同格式）。
+	OldHash string `json:"oldHash"`
+	NewHash string `json:"newHash"`
+	// Files 是全部差异文件（按路径排序）。
+	Files []fileDiffJSON `json:"files"`
+	// Unchanged 是两侧内容一致的文件数。
+	Unchanged int `json:"unchanged"`
+}
+
+// fileDiffJSON 是 --check 输出里的单个文件差异条目。
+type fileDiffJSON struct {
+	Path    string `json:"path"`
+	Status  string `json:"status"` // added | changed | removed
+	Added   int    `json:"added"`
+	Removed int    `json:"removed"`
+	OldHash string `json:"oldHash,omitempty"`
+	NewHash string `json:"newHash,omitempty"`
+}
+
+// toCheckJSON 把 store.UpdatePreview 转成 CLI 的输出形状。
+func toCheckJSON(p *store.UpdatePreview) checkJSON {
+	files := make([]fileDiffJSON, 0, len(p.Files))
+	for _, f := range p.Files {
+		files = append(files, fileDiffJSON{
+			Path: f.Path, Status: f.Status,
+			Added: f.Added, Removed: f.Removed,
+			OldHash: f.OldHash, NewHash: f.NewHash,
+		})
+	}
+	return checkJSON{
+		Skill: p.ID, SourceType: p.SourceType, Commit: p.Commit,
+		HasChanges: p.HasChanges(),
+		OldHash:    p.OldHash, NewHash: p.NewHash,
+		Files: files, Unchanged: p.Unchanged,
+	}
+}
+
+// runUpdateCheck 预览单个技能的更新。退出码：3 有待更新，0 无变化；
+// 预览失败按操作失败处理（退出码 1）。绝不修改磁盘。
+func runUpdateCheck(g *globalFlags, name string, stdout, stderr io.Writer) int {
+	c, err := resolveConfig(g)
+	if err != nil {
+		return printError(g, stderr, "%v", err)
+	}
+	p, err := c.PreviewUpdate(name)
+	if err != nil {
+		return printError(g, stderr, "check 失败: %v", err)
+	}
+	cj := toCheckJSON(p)
+	if g.json {
+		if code := writeJSONOrErr(stdout, cj); code != ExitOK {
+			return code
+		}
+	} else {
+		printCheckText(stdout, &cj)
+	}
+	// 退出码与输出模式无关：有待更新 3，无变化 0。
+	if cj.HasChanges {
+		return ExitDoctorProblem
+	}
+	return ExitOK
+}
+
+// checkAllJSON 是 `kura update --check --all --json` 的顶层形状。
+// results 按 skill 名排序（store.Scan 保证）；数组恒为 []（不输出 null）。
+type checkAllJSON struct {
+	// Root 是被检查的技能根目录。
+	Root string `json:"root"`
+	// Results 是每个技能的预览结果（含失败条目）。
+	Results []checkEntryJSON `json:"results"`
+}
+
+// checkEntryJSON 是 --all 汇总里的单技能条目：成功时带 check 载荷，
+// 失败时只有 skill + error。
+type checkEntryJSON struct {
+	Skill string `json:"skill"`
+	// Error 是预览失败原因；成功时省略。
+	Error string `json:"error,omitempty"`
+	// Check 是预览成功时的完整结果；失败时省略。
+	Check *checkJSON `json:"check,omitempty"`
+}
+
+// runUpdateCheckAll 预览根目录全部 enabled 技能。退出码：任何一个技能
+// 有待更新即 3；全部最新（或没有技能）为 0。预览失败记入对应条目，
+// 不中断整体（与 doctor 的容错口径一致）。
+func runUpdateCheckAll(g *globalFlags, stdout, stderr io.Writer) int {
+	c, err := resolveConfig(g)
+	if err != nil {
+		return printError(g, stderr, "%v", err)
+	}
+	skills, err := c.Scan()
+	if err != nil {
+		return printError(g, stderr, "扫描根目录失败: %v", err)
+	}
+	out := checkAllJSON{Root: c.Root, Results: []checkEntryJSON{}}
+	pending := false
+	for _, s := range skills {
+		p, perr := c.PreviewUpdate(s.Name)
+		if perr != nil {
+			out.Results = append(out.Results, checkEntryJSON{Skill: s.Name, Error: perr.Error()})
+			continue
+		}
+		cj := toCheckJSON(p)
+		out.Results = append(out.Results, checkEntryJSON{Skill: s.Name, Check: &cj})
+		if cj.HasChanges {
+			pending = true
+		}
+	}
+	if g.json {
+		if code := writeJSONOrErr(stdout, out); code != ExitOK {
+			return code
+		}
+	} else {
+		for _, r := range out.Results {
+			if r.Error != "" {
+				fmt.Fprintf(stdout, "[%s] 检查失败: %s\n", r.Skill, r.Error)
+				continue
+			}
+			printCheckText(stdout, r.Check)
+		}
+		fmt.Fprintf(stdout, "共 %d 个技能，%d 个有待更新\n", len(out.Results), countPending(out.Results))
+	}
+	if pending {
+		return ExitDoctorProblem
+	}
+	return ExitOK
+}
+
+// countPending 统计汇总里有待更新的技能数。
+func countPending(rs []checkEntryJSON) int {
+	n := 0
+	for _, r := range rs {
+		if r.Check != nil && r.Check.HasChanges {
+			n++
+		}
+	}
+	return n
+}
+
+// printCheckText 输出人类可读的 --check 结果。
+func printCheckText(w io.Writer, cj *checkJSON) {
+	if !cj.HasChanges {
+		fmt.Fprintf(w, "%s: 已是最新\n", cj.Skill)
+		return
+	}
+	fmt.Fprintf(w, "%s: %d 个文件有变化（新增 %d · 修改 %d · 删除 %d）\n",
+		cj.Skill, len(cj.Files),
+		statusCount(cj, store.DiffAdded), statusCount(cj, store.DiffChanged), statusCount(cj, store.DiffRemoved))
+	for _, f := range cj.Files {
+		fmt.Fprintf(w, "  %-8s +%-4d -%-4d %s\n", statusLabel(f.Status), f.Added, f.Removed, f.Path)
+	}
+	fmt.Fprintf(w, "  哈希: %s -> %s\n", shortHashCLI(cj.OldHash), shortHashCLI(cj.NewHash))
+	if cj.Commit != "" {
+		fmt.Fprintf(w, "  上游 commit: %s\n", cj.Commit)
+	}
+}
+
+// statusLabel 把差异状态翻译成短标签（对齐 --check 的文本输出）。
+func statusLabel(status string) string {
+	switch status {
+	case store.DiffAdded:
+		return "新增"
+	case store.DiffRemoved:
+		return "删除"
+	default:
+		return "修改"
+	}
+}
+
+// statusCount 统计某状态的文件数。
+func statusCount(cj *checkJSON, status string) int {
+	n := 0
+	for _, f := range cj.Files {
+		if f.Status == status {
+			n++
+		}
+	}
+	return n
+}
+
+// shortHashCLI 缩短 "sha256:..." 哈希用于文本展示（复用 doctor 的口径）。
+func shortHashCLI(h string) string { return shortHash(h) }
