@@ -1157,6 +1157,14 @@ func (a *App) viewReviewModal(c *myui.Context) {
 				if !p.HasChanges() {
 					myui.Text(c, "与上游一致，无需更新").TextColor(t.Success)
 				}
+				if p.LocalModified {
+					// 上游没变时只是提醒；有变化时提示应用会覆盖本地改动。
+					msg := "已安装的内容与安装时不一致（本地改过）"
+					if p.HasChanges() {
+						msg += "，应用更新会覆盖这些改动（旧内容在快照中）"
+					}
+					myui.Text(c, msg).TextColor(t.Warning)
+				}
 				myui.Scroll(c).Grow(1).Height(320).Children(func() {
 					myui.Column(c).FillWidth().Gap(2).Children(func() {
 						for _, f := range p.Files {
@@ -1199,6 +1207,9 @@ func (a *App) viewReviewEntry(c *myui.Context, e skillReviewEntry) {
 				myui.Text(c, "检查失败").SingleLine().TextColor(t.Danger)
 			case !e.preview.HasChanges():
 				myui.Text(c, "已是最新").SingleLine().TextColor(t.Success)
+				if e.preview.LocalModified {
+					myui.Text(c, "本地有改动").SingleLine().TextColor(t.Warning)
+				}
 			default:
 				added, changed, removed := e.preview.Counts()
 				myui.Text(c, fmt.Sprintf("+%d ~%d -%d（%d 个文件）", added, changed, removed, len(e.preview.Files))).
@@ -1231,13 +1242,22 @@ func (a *App) viewDiffRow(c *myui.Context, f store.FileDiff) {
 	})
 }
 
-// previewMetaText 生成单技能评审面板的元信息行。
+// previewMetaText 生成单技能评审面板的元信息行。上游没变（凭 commit 或
+// 目录树哈希判定）时没有逐文件比较，只在本地被改过时才显示新旧哈希。
 func previewMetaText(p *store.UpdatePreview) string {
 	parts := []string{"来源: " + p.SourceType}
 	if p.Commit != "" {
 		parts = append(parts, "上游 commit: "+shortCommit(p.Commit))
 	}
-	parts = append(parts, "旧 "+shortHash(p.OldHash), "新 "+shortHash(p.NewHash))
+	switch p.Basis {
+	case store.BasisCommit:
+		parts = append(parts, "上游 commit 未变")
+	case store.BasisTree:
+		parts = append(parts, "上游该目录未变")
+	}
+	if p.Basis == store.BasisContent || p.LocalModified {
+		parts = append(parts, "旧 "+shortHash(p.OldHash), "新 "+shortHash(p.NewHash))
+	}
 	return strings.Join(parts, " · ")
 }
 

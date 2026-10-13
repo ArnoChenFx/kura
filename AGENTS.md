@@ -56,6 +56,8 @@ kura 是一个**桌面技能管理器**，用 [MyGo](https://github.com/egoist/m
 11. **技能区的排列模式存在 `config.json` 的 `view`**（`grid` / `list`；缺省与手改出的未知值都按 `grid`，不算错误）。读写只经 `store.Library`（`View`、`SetView`，`store.NormalizeView` 规范化），与 `theme` 一样是 `configMu` 下的「读—改—写」；界面切换走 `SetViewAsync`（立刻换排列，后台写盘，失败只在状态行报告）。默认是卡片网格。
 12. **翻译 API 的凭据与全局目标语言存在 `~/.kura/settings.json`**（`baseUrl` / `apiKey` / `model` / `targetLang`）。密钥**明文**保存、文件权限 0600：这是用户明确选择的本地单人方案，不接系统凭据管理器、不做加密；密钥绝不能进日志、错误信息、测试夹具或任何导出文件。读写只经 `store.LoadSettings` / `SaveSettings`；目标语言一律 `store.NormalizeTargetLang` 规范化（不认识的值报 `ErrUnknownLang`，**不猜**）。**翻译只用于界面显示**：译文只活在内存里（`internal/ui/translate.go` 的 `translateState`），绝不写技能目录、不改 `SKILL.md`、不写 `.kura-meta.json`、不落任何缓存文件。未配置齐全（`Settings.Ready()`）时不发请求，界面给引导。
 
+11. **检查更新比的是 git 对象哈希，不是时钟，也不为每个技能各 clone 一次**。流程见 `internal/store/upstream.go` 与 `store.PreviewUpdates`：先 `git ls-remote` 比 `source.commit`，变了再做一次只取树的浅 clone（`--filter=blob:none --no-checkout`）比技能子目录的 `source.tree`，仍不同才稀疏检出该子目录逐文件比较。同一仓库（URL 去掉 `.git` 与末尾 `/`，加 ref）的技能共用一次 clone，检查与更新都一样（`PreviewUpdates` / `UpdateMany`，不要在循环里逐个调 `PreviewUpdate` / `Update`）。所有 git 调用走 `runGit` / `gitOutput`（带超时、`GIT_TERMINAL_PROMPT=0`、低速中止），它们经 `gitCommandContext`（`exec_cmd_windows.go` / `exec_cmd_other.go`）启动 git，Windows 下不弹控制台窗口：这是唯一的 git 入口，非测试代码不要再直接 `exec.Command("git", …)`。`Add` 与 `Update` 都要把 `commit` 与 `tree` 写进元数据；元数据没有它们（旧版本安装、由 lock 导入）时退回逐文件比较。
+
 kura 自己的目录：
 
 ```

@@ -27,10 +27,12 @@
 - `CandidatesError`：多候选时由 `Add` 返回，`errors.As` 可还原 `Repo`
   与 `Paths`，`Error()` 给出可读中文清单。
 - `Config.DiscoverRepoSkills(repo, ref)`：UI 用的只读入口，复用
-  `resolveGitHub` 的 clone 与临时目录清理，不另起一套网络边界。
+  `resolveGitHub` 的 clone 与临时目录清理，不另起一套网络边界。clone 现在只取树，
+  发现只检出各级 `SKILL.md` 与根目录的插件清单（`upstream.CheckoutDiscovery`），
+  `Add` 选定技能之后才检出它的目录，仓库里与技能无关的文件不下载。
 - `Add` 的行为变化（`add.go`）：GitHub 来源且**未显式给 `--sub-path`** 时
   先发现再装——恰好一个候选直接装（仓库根是技能时默认名取仓库名尾段，
-  避免拿到随机的 `kura-clone-NNN` 临时目录名，且元数据 `SubPath` 记录
+  避免拿到随机的 `kura-upstream-NNN` 临时目录名，且元数据 `SubPath` 记录
   发现结果，后续 `Update` 可照常重拉）；多候选返回 `CandidatesError`；
   零候选沿用旧文案「来源目录缺少 SKILL.md」。显式 `--sub-path` 时一律
   照装，行为与旧版完全一致（向后兼容）。

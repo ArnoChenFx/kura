@@ -7,6 +7,7 @@ package ui
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/ArnoChenFx/kura/internal/store"
@@ -315,5 +316,92 @@ func TestCheckAllDisabledButtonWhileChecking(t *testing.T) {
 	tt.Frame()
 	if !a.review.open || !a.review.all {
 		t.Fatal("全部检查后汇总面板应打开")
+	}
+}
+
+// TestApplyAllPartialFailure 验证：批量应用时个别技能失败不影响其他技能，
+// 状态行报告「几个成功、几个失败」，失败的技能仍标「有更新」。
+func TestApplyAllPartialFailure(t *testing.T) {
+	a, cfg := newTestApp(t)
+	seedWithLocalSource(t, cfg, "good",
+		"---\nname: good\n---\n\nold\n", "---\nname: good\n---\n\nnew\n")
+	badSrc := seedWithLocalSource(t, cfg, "bad",
+		"---\nname: bad\n---\n\nold\n", "---\nname: bad\n---\n\nnew\n")
+
+	tt := newTester(a, 980, 640)
+	a.settle()
+	tt.Frame()
+	a.settle()
+	tt.Frame()
+
+	if err := tt.Click("全部检查"); err != nil {
+		t.Fatal(err)
+	}
+	a.waitBusy()
+	tt.Frame()
+	if !a.updates["good"] || !a.updates["bad"] {
+		t.Fatalf("检查后两个技能都应标有更新: %v", a.updates)
+	}
+	// 检查之后、应用之前，bad 的来源消失。
+	if err := os.RemoveAll(badSrc); err != nil {
+		t.Fatal(err)
+	}
+	if err := tt.Click("应用全部更新"); err != nil {
+		t.Fatal(err)
+	}
+	a.waitBusy()
+	tt.Frame()
+
+	if got, _ := os.ReadFile(filepath.Join(cfg.SkillPath("good"), "SKILL.md")); string(got) != "---\nname: good\n---\n\nnew\n" {
+		t.Errorf("good 应已更新, got %q", got)
+	}
+	if got, _ := os.ReadFile(filepath.Join(cfg.SkillPath("bad"), "SKILL.md")); string(got) != "---\nname: bad\n---\n\nold\n" {
+		t.Errorf("bad 应保持原样, got %q", got)
+	}
+	if a.updates["good"] || !a.updates["bad"] {
+		t.Errorf("只应清掉成功的标记: %v", a.updates)
+	}
+	if !a.statusErr || !strings.Contains(a.status, "已更新 1 个技能，1 个失败") {
+		t.Errorf("状态行应报告部分失败, got %q (err=%v)", a.status, a.statusErr)
+	}
+}
+
+// TestReviewPanelLocalModifiedAndBasis 验证：上游没变但本地被改过时，面板写明
+// 判定依据并提醒本地改动；全部检查汇总里也标出「本地有改动」。
+func TestReviewPanelLocalModifiedAndBasis(t *testing.T) {
+	a, cfg := newTestApp(t)
+	p := &store.UpdatePreview{
+		ID: "mod", SourceType: store.SourceGitHub, Commit: "0123456789abcdef",
+		Basis: store.BasisCommit, LocalModified: true,
+		OldHash: "sha256:aaaaaaaaaaaaaaaa", NewHash: "sha256:bbbbbbbbbbbbbbbb",
+		Files: []store.FileDiff{},
+	}
+	a.review = reviewState{open: true, cfg: cfg, skill: "mod", preview: p}
+	tt := newTester(a, 980, 640)
+	a.settle()
+	tt.Frame()
+	tt.Frame()
+	if !tt.HasText("与上游一致，无需更新") {
+		t.Errorf("应显示与上游一致，文本 %v", tt.Texts())
+	}
+	if !tt.HasText("已安装的内容与安装时不一致（本地改过）") {
+		t.Errorf("应提醒本地改过，文本 %v", tt.Texts())
+	}
+	meta := previewMetaText(p)
+	if !strings.Contains(meta, "上游 commit 未变") || !strings.Contains(meta, "旧 ") {
+		t.Errorf("元信息应写明依据并在本地改过时显示新旧哈希: %q", meta)
+	}
+	// 本地没改过：不显示哈希。
+	p.LocalModified = false
+	if m := previewMetaText(p); strings.Contains(m, "旧 ") {
+		t.Errorf("上游没变且本地未改时不应显示哈希: %q", m)
+	}
+
+	a.review = reviewState{open: true, cfg: cfg, all: true,
+		entries: []skillReviewEntry{{skill: "mod", preview: &store.UpdatePreview{Basis: store.BasisTree, LocalModified: true, Files: []store.FileDiff{}}}}}
+	tt.Frame()
+	tt.Frame()
+	if !tt.HasText("已是最新") || !tt.HasText("本地有改动") {
+		t.Errorf("汇总应标已是最新与本地有改动，文本 %v", tt.Texts())
 	}
 }

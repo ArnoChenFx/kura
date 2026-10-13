@@ -65,35 +65,39 @@ func (c *Config) Add(opts *AddOptions) (*Result, error) {
 	}
 	var srcDir string
 	var src Source
-	var cleanup func()
 	var err error
 	name := opts.Name
 	if opts.LocalPath != "" {
 		srcDir, src, err = c.resolveLocal(opts)
-	} else {
-		srcDir, src, cleanup, err = c.resolveGitHub(opts)
-	}
-	// resolveGitHub 在 clone 失败时也返回 cleanup：先登记清理，再看错误，
-	// 否则每次失败都会遗留一个 kura-clone-* 临时目录。
-	if cleanup != nil {
-		defer cleanup()
-	}
-	if err != nil {
-		return nil, err
-	}
-	// GitHub 来源且未显式指定子目录：先发现仓库内的技能再决定装什么。
-	// 显式给了 SubPath 时跳过（用户指定的子目录一律照装，不自作主张）。
-	if opts.LocalPath == "" && opts.SubPath == "" {
-		dir, sub, err := discoverForAdd(opts.Repo, srcDir)
 		if err != nil {
 			return nil, err
 		}
-		srcDir = dir
-		src.SubPath = sub
-		if sub == "" && name == "" {
-			// 仓库根本身是技能：临时目录名是随机的（kura-clone-NNN），
-			// 不能当技能名；默认取仓库名（owner/repo 的尾段）。
-			name = opts.Repo[strings.LastIndex(opts.Repo, "/")+1:]
+	} else {
+		var u *upstream
+		u, src, err = c.resolveGitHub(opts)
+		if err != nil {
+			return nil, err
+		}
+		defer u.Close()
+		srcDir = u.Dir(src.SubPath)
+		// GitHub 来源且未显式指定子目录：先发现仓库内的技能再决定装什么。
+		// 显式给了 SubPath 时跳过（用户指定的子目录一律照装，不自作主张）。
+		if opts.SubPath == "" {
+			dir, sub, err := discoverForAdd(opts.Repo, u.dir)
+			if err != nil {
+				return nil, err
+			}
+			srcDir = dir
+			src.SubPath = sub
+			// 选定技能后才检出它的文件，并记下子目录树哈希。
+			if err := c.checkoutSkill(u, &src); err != nil {
+				return nil, err
+			}
+			if sub == "" && name == "" {
+				// 仓库根本身是技能：临时目录名是随机的（kura-upstream-NNN），
+				// 不能当技能名；默认取仓库名（owner/repo 的尾段）。
+				name = opts.Repo[strings.LastIndex(opts.Repo, "/")+1:]
+			}
 		}
 	}
 	return c.installDir(srcDir, src, name)
@@ -140,47 +144,49 @@ func (c *Config) resolveLocal(opts *AddOptions) (string, Source, error) {
 	return abs, Source{Type: SourceLocal, Path: abs}, nil
 }
 
-// resolveGitHub 用 git clone --depth 1 把 owner/repo 拉到临时目录。
-// 返回仓库内技能目录的路径与清理函数（调用方 defer 执行）。SubPath 为空
-// 时返回 clone 根本身；未指定 SubPath 时的发现结果由 Add 经 discoverForAdd
-// 二次修正（这里保持单一职责：只负责克隆与按显式 SubPath 定位）。
-func (c *Config) resolveGitHub(opts *AddOptions) (string, Source, func(), error) {
-	tmp, err := os.MkdirTemp("", "kura-clone-")
+// resolveGitHub 浅 clone owner/repo（只取树，不取文件），再按需稀疏检出：
+// 仓库里与技能无关的文件不下载。返回 clone（调用方 defer Close）与来源。
+//   - 显式给了 SubPath：只检出该目录，来源里记下 SubPath、commit 与子目录树哈希；
+//   - 没给 SubPath：只检出发现技能要用的文件（各级 SKILL.md 与插件清单，见
+//     CheckoutDiscovery），来源里 SubPath/Tree 留空，由 Add 经 discoverForAdd
+//     选定技能后补全；DiscoverRepoSkills 直接在这份检出上做发现。
+//
+// 这里保持单一职责：只负责克隆与按显式 SubPath 定位。
+func (c *Config) resolveGitHub(opts *AddOptions) (*upstream, Source, error) {
+	url := githubURL(opts.Repo)
+	sub := cleanSubPath(opts.SubPath)
+	u, err := cloneUpstream(url, opts.Ref)
 	if err != nil {
-		return "", Source{}, nil, fmt.Errorf("store: 创建临时目录失败: %w", err)
+		return nil, Source{}, err
 	}
-	cleanup := func() { os.RemoveAll(tmp) }
-	url := fmt.Sprintf("https://github.com/%s.git", opts.Repo)
-	args := []string{"clone", "--depth", "1"}
-	if opts.Ref != "" {
-		args = append(args, "--branch", opts.Ref)
+	// 记录 commit 与子目录树哈希，检查更新时据此判断上游是否变化。
+	src := Source{Type: SourceGitHub, URL: url, Ref: opts.Ref, SubPath: sub, Commit: u.Commit}
+	if sub == "" {
+		if err := u.CheckoutDiscovery(); err != nil {
+			u.Close()
+			return nil, Source{}, err
+		}
+		return u, src, nil
 	}
-	args = append(args, url, tmp)
-	cmd := gitCommand(args...)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return "", Source{}, cleanup, fmt.Errorf("store: git clone 失败: %w: %s", err, strings.TrimSpace(string(out)))
+	if err := c.checkoutSkill(u, &src); err != nil {
+		u.Close()
+		return nil, Source{}, err
 	}
-	dir := tmp
-	if opts.SubPath != "" {
-		dir = filepath.Join(tmp, filepath.FromSlash(opts.SubPath))
-	}
-	if !fileExists(dir) {
-		return "", Source{}, cleanup, fmt.Errorf("store: 仓库内不存在目录 %s", opts.SubPath)
-	}
-	// 记录 clone 到的 commit，便于 Update 判断是否有新版本。
-	commit := gitHead(dir)
-	return dir, Source{Type: SourceGitHub, URL: url, Ref: opts.Ref, SubPath: opts.SubPath, Commit: commit}, cleanup, nil
+	return u, src, nil
 }
 
-// gitHead 读取 repo 的 HEAD commit（短哈希）。失败返回空串，不阻塞安装。
-func gitHead(dir string) string {
-	cmd := gitCommand("-C", dir, "rev-parse", "HEAD")
-	out, err := cmd.Output()
+// checkoutSkill 检出 src.SubPath 指向的技能目录，并把它的树哈希写进 src.Tree。
+// 目录在上游不存在（或不是目录）时报错。
+func (c *Config) checkoutSkill(u *upstream, src *Source) error {
+	tree, err := u.Tree(src.SubPath)
 	if err != nil {
-		return ""
+		return err
 	}
-	return strings.TrimSpace(string(out))
+	if err := u.Checkout([]string{src.SubPath}); err != nil {
+		return err
+	}
+	src.Tree = tree
+	return nil
 }
 
 // installDir 把 srcDir 复制为根目录下的技能文件夹并写入元数据。
@@ -202,12 +208,10 @@ func (c *Config) installDir(srcDir string, src Source, nameOverride string) (*Re
 	if !fileExists(filepath.Join(srcDir, "SKILL.md")) {
 		return nil, fmt.Errorf("store: 来源目录缺少 SKILL.md: %s", srcDir)
 	}
-	if err := copyDir(srcDir, dst); err != nil {
+	// GitHub 来源的仓库根技能目录里带着 clone 的 .git，不能装进技能根目录，
+	// 复制时就跳过它。
+	if err := copyTree(srcDir, dst, src.Type == SourceGitHub); err != nil {
 		return nil, fmt.Errorf("store: 安装 %s 失败: %w", name, err)
-	}
-	if src.Type == SourceGitHub {
-		// clone 的临时目录里带着 .git，安装进技能根目录会污染。
-		os.RemoveAll(filepath.Join(dst, ".git"))
 	}
 	hash, err := HashDir(dst)
 	if err != nil {

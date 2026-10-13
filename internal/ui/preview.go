@@ -92,21 +92,24 @@ func (a *App) CheckAllAsync() {
 		// 只扫根目录；扫描失败等价于没有可检查的技能。
 		skills, err := cfg.Scan()
 		entries := make([]skillReviewEntry, 0, len(skills))
-		var scanErr string
 		if err != nil {
-			scanErr = err.Error()
-		}
-		for _, s := range skills {
-			if scanErr != "" {
-				entries = append(entries, skillReviewEntry{skill: s.Name, err: "根目录扫描失败: " + scanErr})
-				continue
+			for _, s := range skills {
+				entries = append(entries, skillReviewEntry{skill: s.Name, err: "根目录扫描失败: " + err.Error()})
 			}
-			p, perr := cfg.PreviewUpdate(s.Name)
-			if perr != nil {
-				entries = append(entries, skillReviewEntry{skill: s.Name, err: perr.Error()})
-				continue
+		} else {
+			names := make([]string, len(skills))
+			for i, s := range skills {
+				names[i] = s.Name
 			}
-			entries = append(entries, skillReviewEntry{skill: s.Name, preview: p})
+			// 批量检查：同一仓库的技能共用一次 ls-remote / clone，上游没变的
+			// 技能不下载任何文件。
+			for _, r := range cfg.PreviewUpdates(names) {
+				if r.Err != nil {
+					entries = append(entries, skillReviewEntry{skill: r.Name, err: r.Err.Error()})
+					continue
+				}
+				entries = append(entries, skillReviewEntry{skill: r.Name, preview: r.Preview})
+			}
 		}
 		sort.Slice(entries, func(i, j int) bool { return entries[i].skill < entries[j].skill })
 		a.publish(func() {
@@ -151,11 +154,19 @@ func (a *App) ApplyAsync() {
 	}
 	a.status, a.statusErr = "正在更新 "+strings.Join(names, "、")+"…", false
 	a.spawn(func() {
+		// 批量更新：同一仓库的技能共用一次 clone。
+		var done []string
 		var firstErr error
-		for _, name := range names {
-			if _, err := cfg.Update(name); err != nil && firstErr == nil {
-				firstErr = err
+		failed := 0
+		for _, res := range cfg.UpdateMany(names) {
+			if res.Err != nil {
+				failed++
+				if firstErr == nil {
+					firstErr = res.Err
+				}
+				continue
 			}
+			done = append(done, res.Name)
 		}
 		skills, scanErr := cfg.ScanAll()
 		a.publish(func() {
@@ -163,15 +174,19 @@ func (a *App) ApplyAsync() {
 			r.open = false // 更新完成后关闭评审面板
 			if gen == a.gen {
 				a.applyScan(skills, scanErr)
-				for _, n := range names {
+				// 只清掉更新成功的；失败的仍然「有更新」。
+				for _, n := range done {
 					delete(a.updates, n)
 				}
 			}
-			if firstErr != nil {
+			switch {
+			case firstErr == nil:
+				a.status, a.statusErr = fmt.Sprintf("已更新 %d 个技能（旧内容在快照中）", len(done)), false
+			case len(done) == 0:
 				a.status, a.statusErr = "更新失败: "+firstErr.Error(), true
-				return
+			default:
+				a.status, a.statusErr = fmt.Sprintf("已更新 %d 个技能，%d 个失败: %v", len(done), failed, firstErr), true
 			}
-			a.status, a.statusErr = fmt.Sprintf("已更新 %d 个技能（旧内容在快照中）", len(names)), false
 		})
 	})
 }

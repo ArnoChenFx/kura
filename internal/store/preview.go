@@ -4,8 +4,8 @@ package store
 //
 // 设计要点：
 //   - 只读操作：除临时目录外绝不修改磁盘上的任何内容（不写快照、不动技能
-//     目录、不改元数据）。github 来源复用 Update 的 refetchGitHub，把上游
-//     clone 进 os.MkdirTemp 并在返回前清理；local 来源直接只读原路径。
+//     目录、不改元数据）。git 来源先 ls-remote、再只取树、最后才稀疏检出
+//     技能子目录（见 upstream.go），临时目录在返回前清理；local 来源直接只读原路径。
 //   - v1 不产出 unified hunk（godiff 是整个 GUI 应用而非库，无法复用其
 //     diff 核心），只产出文件级清单：每个文件标记 added/removed/changed，
 //     changed 附带新增/删除行数（LCS 最小编辑距离，超大文件退化为多重集差）。
@@ -17,7 +17,6 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -56,16 +55,31 @@ type UpdatePreview struct {
 	// 为空串）。
 	Commit string
 	// OldHash/NewHash 是目录级内容哈希（与 Meta.ContentHash 同格式
-	// "sha256:hex"），分别对应已安装内容与更新后的内容。
+	// "sha256:hex"），分别对应已安装内容与更新后的内容。上游没有变化、
+	// 没有下载内容时（Basis 为 commit/tree）NewHash 取元数据记录的
+	// ContentHash（更新后的内容就是安装时那份）。
 	OldHash string
 	NewHash string
 	// Files 只包含有差异的文件（added/removed/changed），按路径排序；
 	// 未变化的文件数放在 Unchanged。这样评审面板天然「每行一个变更文件」，
 	// 无差异技能的 Files 为空数组。
 	Files []FileDiff
-	// Unchanged 是两侧内容完全一致的文件数。
+	// Unchanged 是两侧内容完全一致的文件数。Basis 不是 content 时没有逐文件
+	// 比较：本地没被改过取已安装的文件数，被改过则为 0（不知道哪些文件被改）。
 	Unchanged int
+	// Basis 说明这次是凭什么判定的：commit / tree / content（见 PreviewUpdates）。
+	Basis string
+	// LocalModified 表示已安装内容与安装/更新时记录的 contentHash 不一致
+	// （被手改过）。应用更新会覆盖这些改动（旧内容在快照中）。
+	LocalModified bool
 }
+
+// 判定依据常量（CLI JSON、UI 文案共用的稳定词汇）。
+const (
+	BasisCommit  = "commit"  // 上游 commit 与安装时相同，未下载任何内容
+	BasisTree    = "tree"    // 上游技能子目录的树哈希与安装时相同，未下载文件
+	BasisContent = "content" // 逐文件比较了已安装内容与上游内容
+)
 
 // HasChanges 报告预览是否发现了任何文件差异。
 func (p *UpdatePreview) HasChanges() bool { return len(p.Files) > 0 }
@@ -85,66 +99,172 @@ func (p *UpdatePreview) Counts() (added, changed, removed int) {
 	return
 }
 
-// PreviewUpdate 对比已安装技能与「按元数据重新拉取的上游内容」，返回
-// 文件级差异摘要。它不修改任何磁盘内容（github 来源的 clone 发生在
-// 临时目录中并自动清理），也不创建快照——那是 Update 的职责。
+// PreviewUpdate 检查单个技能的更新，等价于只含一个技能的 PreviewUpdates。
+func (c *Config) PreviewUpdate(name string) (*UpdatePreview, error) {
+	r := c.PreviewUpdates([]string{name})[0]
+	return r.Preview, r.Err
+}
+
+// PreviewResult 是 PreviewUpdates 里单个技能的结果：成功时 Preview 非 nil，
+// 失败时 Err 非 nil。
+type PreviewResult struct {
+	Name    string
+	Preview *UpdatePreview
+	Err     error
+}
+
+// PreviewUpdates 检查 names 里每个技能是否有更新，结果与 names 一一对应。
+// 它不修改任何磁盘内容（clone 发生在临时目录中并自动清理），也不创建
+// 快照——那是 Update 的职责。
+//
+// git 来源按仓库（URL+ref）分组，逐级判断，能早停就早停：
+//  1. git ls-remote 取 ref 当前 commit；与元数据记录的 commit 相同 → 最新
+//     （BasisCommit），什么都不下载；
+//  2. 否则对该仓库做一次只取树的浅 clone，比较技能子目录的树哈希；与元数据
+//     记录的相同 → 最新（BasisTree），仍不下载文件；
+//  3. 树变了，或元数据里没有树哈希（旧版本安装、导入的元数据）→ 稀疏检出
+//     这些技能的子目录，逐文件比较（BasisContent）。
+//
+// 前两级比的是「上游相对安装时是否变化」，本地手改不算有更新（见
+// LocalModified）；第三级比的是已安装内容与上游内容，本地手改也会显示为差异。
+// local 来源直接只读原路径逐文件比较（BasisContent）。
 //
 // 错误语义与 Update 对齐：技能不存在 → ErrUnknownSkill；元数据缺失或
-// 损坏 → 明确报错；clone 失败/来源路径消失 → 原样上抛，调用方展示即可。
-func (c *Config) PreviewUpdate(name string) (*UpdatePreview, error) {
-	src := c.SkillPath(name)
-	if !fileExists(src) {
-		return nil, fmt.Errorf("store: %w: %s", ErrUnknownSkill, name)
+// 损坏 → 明确报错；git 失败/超时/来源路径消失 → 记入对应技能，不影响其他技能。
+func (c *Config) PreviewUpdates(names []string) []PreviewResult {
+	out := make([]PreviewResult, len(names))
+	metas := make([]*Meta, len(names))
+	groups := map[repoKey][]int{}
+	var order []repoKey
+	for i, name := range names {
+		out[i].Name = name
+		meta, err := c.sourceMeta(name, "检查更新")
+		if err != nil {
+			out[i].Err = err
+			continue
+		}
+		metas[i] = meta
+		if meta.Source.Type == SourceLocal {
+			out[i].Preview, out[i].Err = c.contentPreview(name, meta, meta.Source.Path, "")
+			continue
+		}
+		k := newRepoKey(meta.Source.URL, meta.Source.Ref)
+		if _, ok := groups[k]; !ok {
+			order = append(order, k)
+		}
+		groups[k] = append(groups[k], i)
 	}
-	// 读取元数据；缺失或损坏时无法知道来源，直接报错（与 Update 一致）。
-	res := readMeta(src)
-	if res.Err != nil {
-		return nil, fmt.Errorf("store: %s 的元数据不可读: %w", name, res.Err)
+	for _, k := range order {
+		c.previewRepo(groups[k], names, metas, out)
 	}
-	if !res.Found {
-		return nil, fmt.Errorf("store: %s 缺少 .kura-meta.json，无法检查更新", name)
-	}
-	meta := res.Meta
+	return out
+}
 
-	var newDir, commit string
-	var cleanup func()
-	switch meta.Source.Type {
-	case SourceLocal:
-		// 本地来源：Update 是从原路径复制，预览直接只读该路径即可。
-		if meta.Source.Path == "" {
-			return nil, errors.New("store: 元数据缺少 local 来源路径")
+// previewRepo 检查同一仓库（同 URL 与 ref）里的一组技能（idx 是它们在 names
+// 里的下标），结果写回 out。整个仓库最多一次 ls-remote、一次只取树的 clone、
+// 一次稀疏检出。
+func (c *Config) previewRepo(idx []int, names []string, metas []*Meta, out []PreviewResult) {
+	url, ref := metas[idx[0]].Source.URL, metas[idx[0]].Source.Ref
+	fail := func(is []int, err error) {
+		for _, i := range is {
+			out[i].Err = err
 		}
-		newDir = meta.Source.Path
-		if !fileExists(newDir) {
-			return nil, fmt.Errorf("store: 本地来源不存在: %s", meta.Source.Path)
+	}
+	head, err := remoteHead(url, ref)
+	if err != nil {
+		fail(idx, err)
+		return
+	}
+	// 第一级：仓库 commit 没变。
+	var pending []int
+	for _, i := range idx {
+		if m := metas[i]; m.Source.Commit != "" && m.Source.Commit == head {
+			out[i].Preview, out[i].Err = c.upToDatePreview(names[i], m, head, BasisCommit)
+			continue
 		}
-	case SourceGitHub:
-		// 复用 Update 的拉取逻辑：浅 clone 到临时目录（自动清理）。
-		if meta.Source.URL == "" {
-			return nil, errors.New("store: 元数据缺少 github 来源 URL")
+		pending = append(pending, i)
+	}
+	if len(pending) == 0 {
+		return
+	}
+	u, err := cloneUpstream(url, ref)
+	if err != nil {
+		fail(pending, err)
+		return
+	}
+	defer u.Close()
+	// 第二级：技能子目录的树没变。
+	subs := make([]string, len(pending))
+	for j, i := range pending {
+		subs[j] = metas[i].Source.SubPath
+	}
+	trees, err := u.Trees(subs)
+	if err != nil {
+		fail(pending, err)
+		return
+	}
+	var need []int
+	var needSubs []string
+	for _, i := range pending {
+		m := metas[i]
+		r := trees[m.Source.SubPath]
+		if r.Err != nil {
+			out[i].Err = r.Err
+			continue
 		}
-		var err error
-		newDir, _, cleanup, err = c.refetchGitHub(name, meta)
+		if m.Source.Tree != "" && m.Source.Tree == r.Tree {
+			out[i].Preview, out[i].Err = c.upToDatePreview(names[i], m, u.Commit, BasisTree)
+			continue
+		}
+		need = append(need, i)
+		needSubs = append(needSubs, m.Source.SubPath)
+	}
+	if len(need) == 0 {
+		return
+	}
+	// 第三级：只检出需要的子目录，逐文件比较。
+	if err := u.Checkout(needSubs); err != nil {
+		fail(need, err)
+		return
+	}
+	for _, i := range need {
+		out[i].Preview, out[i].Err = c.contentPreview(names[i], metas[i], u.Dir(metas[i].Source.SubPath), u.Commit)
+	}
+}
+
+// upToDatePreview 构造「上游没有变化」的预览：Files 为空。上游没变，意味着
+// 更新后的内容就是安装/更新时记录的那份，所以 NewHash 取元数据里的
+// ContentHash；本地没被改过时，已安装的文件都算「一致」。
+func (c *Config) upToDatePreview(name string, meta *Meta, commit, basis string) (*UpdatePreview, error) {
+	p := &UpdatePreview{ID: name, SourceType: meta.Source.Type, Commit: commit, Basis: basis,
+		Files: []FileDiff{}, NewHash: meta.ContentHash}
+	if err := c.fillLocalState(p, meta); err != nil {
+		return nil, err
+	}
+	if !p.LocalModified {
+		files, err := listFiles(c.SkillPath(name))
 		if err != nil {
 			return nil, err
 		}
-		defer cleanup()
-		// 在临时目录还活着时读取上游 commit（rev-parse 对子目录同样有效）。
-		commit = gitHeadStaging(newDir)
-	default:
-		return nil, fmt.Errorf("store: 未知来源类型 %q", meta.Source.Type)
+		p.Unchanged = len(files)
 	}
+	return p, nil
+}
 
-	p, err := diffTree(src, newDir)
+// contentPreview 逐文件比较已安装内容与上游目录 newDir。
+func (c *Config) contentPreview(name string, meta *Meta, newDir, commit string) (*UpdatePreview, error) {
+	if !fileExists(newDir) {
+		return nil, fmt.Errorf("store: 上游目录不存在: %s", newDir)
+	}
+	p, err := diffTree(c.SkillPath(name), newDir)
 	if err != nil {
 		return nil, err
 	}
 	p.ID = name
 	p.SourceType = meta.Source.Type
 	p.Commit = commit
-	// 旧哈希与 Meta.ContentHash/doctor 同口径（HashDir），便于展示漂移。
-	p.OldHash, err = HashDir(src)
-	if err != nil {
+	p.Basis = BasisContent
+	if err := c.fillLocalState(p, meta); err != nil {
 		return nil, err
 	}
 	// 新哈希排除 .git 与元数据文件，与「Update 完成后 HashDir 的结果」一致。
@@ -153,6 +273,18 @@ func (c *Config) PreviewUpdate(name string) (*UpdatePreview, error) {
 		return nil, err
 	}
 	return p, nil
+}
+
+// fillLocalState 填写已安装一侧的目录哈希，以及它是否偏离安装时记录的哈希。
+func (c *Config) fillLocalState(p *UpdatePreview, meta *Meta) error {
+	// 旧哈希与 Meta.ContentHash/doctor 同口径（HashDir），便于展示漂移。
+	h, err := HashDir(c.SkillPath(p.ID))
+	if err != nil {
+		return err
+	}
+	p.OldHash = h
+	p.LocalModified = meta.ContentHash != "" && meta.ContentHash != h
+	return nil
 }
 
 // skipUpstream 是上游内容树（clone 目录或本地来源目录）的排除谓词：

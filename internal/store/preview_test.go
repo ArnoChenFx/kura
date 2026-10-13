@@ -261,6 +261,14 @@ func TestPreviewUpdateNoChanges(t *testing.T) {
 	if p.HasChanges() || len(p.Files) != 0 {
 		t.Errorf("无变化时 Files 应为空: %+v", p.Files)
 	}
+	// 上游 commit 没变：凭 ls-remote 就判定最新，不下载内容；新哈希就是记录的
+	// contentHash，已安装的文件都算一致。
+	if p.Basis != BasisCommit || p.LocalModified {
+		t.Errorf("Basis 应为 commit 且本地未改动, got %q / %v", p.Basis, p.LocalModified)
+	}
+	if m := readMeta(c.SkillPath("same")).Meta; p.NewHash != m.ContentHash || p.NewHash != p.OldHash {
+		t.Errorf("NewHash 应等于记录的 contentHash: %q vs %q (old %q)", p.NewHash, m.ContentHash, p.OldHash)
+	}
 	if p.Unchanged != 1 {
 		t.Errorf("Unchanged 应为 1, got %d", p.Unchanged)
 	}
@@ -282,7 +290,8 @@ func TestPreviewUpdateDrifted(t *testing.T) {
 	newMirror(t, repo, "repo3")
 	installFromGitHub(t, c, "repo3", "drift")
 
-	// 手工改动已安装的内容（不推进上游）→ 预览应把本地漂移报告为 changed。
+	// 手工改动已安装的内容（不推进上游）→ 上游没变，不算有更新，
+	// 但要报告本地改动（应用更新会覆盖它们）。
 	driftDir := c.SkillPath("drift")
 	if err := os.WriteFile(filepath.Join(driftDir, "SKILL.md"),
 		[]byte("---\nname: drift\n---\n\nlocally edited\n"), 0o644); err != nil {
@@ -292,21 +301,15 @@ func TestPreviewUpdateDrifted(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PreviewUpdate 失败: %v", err)
 	}
-	fd, ok := findDiff(p, "SKILL.md")
-	if !ok || fd.Status != DiffChanged || fd.Added != 1 || fd.Removed != 1 {
-		t.Fatalf("漂移文件应为 changed(+1/-1): %+v (files=%v)", fd, p.Files)
+	if p.HasChanges() || p.Basis != BasisCommit {
+		t.Errorf("上游未变时不应有更新: basis=%q files=%v", p.Basis, p.Files)
 	}
-	// keep.txt 未漂移 → Unchanged=1，Files 只有 SKILL.md。
-	if p.Unchanged != 1 || len(p.Files) != 1 {
-		t.Errorf("Unchanged/Files 应为 1/1, got %d/%d", p.Unchanged, len(p.Files))
+	if !p.LocalModified {
+		t.Error("手改后 LocalModified 应为 true")
 	}
 	// 元数据里记录的 contentHash 与当前内容不一致（漂移成立）。
 	m := readMeta(driftDir).Meta
-	cur, err := HashDir(driftDir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if m.ContentHash == cur {
+	if m.ContentHash == p.OldHash {
 		t.Error("手改后元数据哈希应与当前内容不一致（漂移成立）")
 	}
 }

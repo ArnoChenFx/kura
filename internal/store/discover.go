@@ -239,14 +239,14 @@ func (c *Config) DiscoverRepoSkills(repo, ref string) ([]string, error) {
 	if err := opts.validate(); err != nil {
 		return nil, err
 	}
-	// resolveGitHub 在 SubPath 为空时返回 clone 根本身，正好是发现入口
-	// 需要的「已 clone 好的仓库目录」。
-	tmp, _, cleanup, err := c.resolveGitHub(opts)
+	// resolveGitHub 在 SubPath 为空时只检出发现技能要用的文件（各级 SKILL.md
+	// 与插件清单），clone 根本身正好是发现入口需要的「已 clone 好的仓库目录」。
+	u, _, err := c.resolveGitHub(opts)
 	if err != nil {
 		return nil, err
 	}
-	defer cleanup()
-	dr, err := DiscoverSkills(tmp)
+	defer u.Close()
+	dr, err := DiscoverSkills(u.dir)
 	if err != nil {
 		return nil, err
 	}

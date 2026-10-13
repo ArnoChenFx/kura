@@ -50,7 +50,8 @@ Written inside each managed skill folder, next to `SKILL.md`:
     "url": "https://github.com/billionsintelligence/yixin-api.git",
     "ref": "main",
     "subPath": "skills/yixin-api",
-    "commit": "abc1234"
+    "commit": "abc1234",
+    "tree": "def5678"
   },
   "pluginName": "mattpocock-skills",
   "installedAt": "2026-06-21T04:42:05.890Z",
@@ -70,6 +71,34 @@ refuse an added root (exit code 1).
 `contentHash` is a SHA-256 over the skill folder's files, with paths sorted and
 `.kura-meta.json` itself excluded, so an unchanged skill keeps a stable hash and
 drift can be detected.
+
+`source.commit` and `source.tree` record the upstream commit and the git tree hash
+of the skill's subdirectory (the repository root tree when there is no `subPath`)
+at install or update time. They are what makes checking for updates cheap (below).
+
+## Checking for updates
+
+The check never relies on local clocks or file times; it compares git object
+hashes, cheapest first, and stops as soon as it can decide:
+
+1. `git ls-remote` for the recorded `ref` (the default branch when empty). Same
+   commit as `source.commit` → up to date, nothing is downloaded.
+2. Otherwise one treeless shallow clone per repository (`--depth 1
+   --filter=blob:none --no-checkout`): fetches the commit and trees, no file
+   contents. Same tree hash for the skill's subdirectory as `source.tree` → up to
+   date (the repository changed elsewhere), still no file contents.
+3. Otherwise (or when the metadata has no `commit`/`tree`, as for skills imported
+   from `.skill-lock.json`) a sparse checkout of just the skill subdirectories
+   and a per-file comparison with the installed content.
+
+Skills from the same repository (same URL and ref) share one `ls-remote`, one
+clone and one sparse checkout, both when checking and when applying updates. A
+`local` source is compared file by file directly. Every git command has a
+timeout, aborts a stalled transfer (below 1 KB/s for 30 s) and never prompts for
+credentials. Steps 1 and 2 compare upstream against what was installed, so a
+locally edited skill is not reported as "has update"; the check flags it as
+locally modified instead (applying an update overwrites the edits, after a
+snapshot).
 
 ## kura's own directories
 
