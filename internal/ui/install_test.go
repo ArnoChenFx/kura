@@ -14,7 +14,12 @@ func TestParseRepo(t *testing.T) {
 		{"mattpocock/skills", "mattpocock/skills", "", ""},
 		{"https://github.com/mattpocock/skills.git", "mattpocock/skills", "", ""},
 		{"github.com/me/r/tree/dev/skills/tdd/", "me/r", "dev", "skills/tdd"},
-		{" https://github.com/me/r/blob/main/a/SKILL.md ", "me/r", "main", "a/SKILL.md"},
+		// blob 链接指向文件：子目录是文件所在的目录，不含 SKILL.md。
+		{" https://github.com/me/r/blob/main/a/SKILL.md ", "me/r", "main", "a"},
+		{"https://github.com/me/r/blob/main/skills/tdd/SKILL.md?plain=1#L3", "me/r", "main", "skills/tdd"},
+		{"https://github.com/me/r/blob/main/SKILL.md", "me/r", "main", ""},
+		{"https://github.com/me/r/blob/main", "me/r", "main", ""},
+		{"https://github.com/me/r/tree/main/skills/tdd#readme", "me/r", "main", "skills/tdd"},
 		{"onlyowner", "onlyowner", "", ""},
 	}
 	for _, c := range cases {
@@ -29,6 +34,11 @@ func TestParseRepo(t *testing.T) {
 	}
 	if (&installState{repo: "onlyowner"}).installReady() {
 		t.Error("不完整的仓库名不应允许安装")
+	}
+	// 粘贴 SKILL.md 的 blob 链接，装的是它所在的技能目录。
+	b := installState{repo: "https://github.com/me/r/blob/dev/skills/tdd/SKILL.md"}
+	if o := b.installOptions(); o.Repo != "me/r" || o.Ref != "dev" || o.SubPath != "skills/tdd" || !b.installReady() {
+		t.Errorf("blob 链接应指向 SKILL.md 所在目录：%+v", o)
 	}
 }
 
