@@ -145,13 +145,34 @@ func shortCommit(s string) string {
 }
 
 // metaField 是详情面板里的一行「标签：值」。放进 Form 里使用：标签右
-// 对齐、与值的第一行对齐；wrap 允许长值换行。
-func metaField(c *myui.Context, k, v string, wrap bool) {
+// 对齐、与值的第一行对齐；wrap 允许长值换行。render 非空时改由它渲染值
+// （目前只有「来源」用它换可点击的链接），其余字段传 nil 照旧按普通
+// 文本渲染，不会意外变成链接。
+func metaField(c *myui.Context, k, v string, wrap bool, render func()) {
 	myui.Field(c, k, func() {
+		if render != nil {
+			render()
+			return
+		}
 		t := myui.Text(c, v).TextColor(c.Theme().Text)
 		if !wrap {
 			t = t.SingleLine()
 		}
+	})
+}
+
+// metaFieldLink 是「来源」行专用的值：GitHub 来源渲染成可点击的链接
+// （myui.Link 走 host 的 openURL 在系统浏览器打开，悬停自带下划线）；
+// 本地/未知来源不用 Link——Link 只认 URL，传路径会打开失败——保持
+// 可选中的普通文本（所在「元数据」组已是 Selectable，见 detailGroup）。
+func metaFieldLink(c *myui.Context, m *store.Meta) {
+	url := sourceURLText(m)
+	myui.Field(c, "来源", func() {
+		if m.Source.Type == store.SourceGitHub {
+			myui.Link(c, url, url).FontSize(c.Theme().FontSize)
+			return
+		}
+		metaField(c, "", url, true, nil)
 	})
 }
 

@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -543,11 +544,18 @@ func (a *App) cardMenu(c *myui.Context, m *myui.Menu, s *store.Skill) {
 	}
 }
 
-// viewDetail 是右栏：所选技能的详情。头部是头像、名字与状态；正文是描述
-// 与分组的信息块（来源、元数据、位置）；底部固定操作栏。
+// viewDetail 是右栏：所选技能的详情。头部是头像、名字与状态；下面是
+// 「概览 / 全文」tab：概览是描述与分组的信息块（来源、元数据、位置），
+// 全文是渲染出的 SKILL.md（后台读取，见 detailBody）；底部固定操作栏。
 func (a *App) viewDetail(c *myui.Context, s *store.Skill) {
 	t := c.Theme()
 	busy := a.isBusy(s.Name)
+	// 换技能时把 tab 重置回概览（detailSel 记录 tab 属于哪个技能），
+	// 避免看到上一个技能的全文。
+	if a.detailSel != s.Name {
+		a.detailSel = s.Name
+		a.detailTab = 0
+	}
 	myui.Column(c).Width(detailWidth).Shrink(0).FillHeight().Background(a.pal.canvas).Children(func() {
 		myui.Scroll(c).Grow(1).FillWidth().Children(func() {
 			myui.Column(c).FillWidth().Padding(t.Space(4), t.Space(5)).Gap(t.Space(4)).Children(func() {
@@ -567,16 +575,10 @@ func (a *App) viewDetail(c *myui.Context, s *store.Skill) {
 					})
 					ghostButton(c, iconClose, "关闭详情", false, func() { a.selName = "" })
 				})
-				if s.Description != "" {
-					myui.Text(c, s.Description).TextColor(t.Text.Alpha(0.85))
-				}
-				if !s.HasSKILLMD && s.State != store.StateTrashed {
-					myui.Text(c, "缺少 SKILL.md").TextColor(t.Warning)
-				}
-				a.detailGroup(c, "元数据", func() { a.viewDetailMeta(c, s) })
-				a.detailGroup(c, "位置", func() {
-					myui.Text(c, s.Dir).FontSize(t.FontSize - 1).TextColor(t.TextMuted)
-				})
+				// 概览/全文 tab：绑定 a.detailTab。点选在下一次构建生效，
+				// 两个页面都按 a.detailTab 分支，本帧内的切换下一帧生效。
+				myui.Tabs(c, &a.detailTab, detailTabOverview, detailTabFull).FillWidth()
+				a.detailBody(c, s)
 			})
 		})
 		myui.Divider(c)
@@ -586,13 +588,124 @@ func (a *App) viewDetail(c *myui.Context, s *store.Skill) {
 	})
 }
 
+// detailTabLabels 是详情 tab 的两个标签（下标即 detailTab 的取值）。
+const (
+	detailTabOverview = "概览"
+	detailTabFull     = "全文"
+)
+
+// detailBody 按 detailTab 渲染详情正文：概览页是原有的描述与信息块，
+// 全文页是后台读出并渲染的 SKILL.md。
+func (a *App) detailBody(c *myui.Context, s *store.Skill) {
+	if a.detailTab != 0 {
+		a.viewDetailFullText(c, s)
+		return
+	}
+	a.viewDetailOverview(c, s)
+}
+
+// viewDetailOverview 是概览页：描述、缺 SKILL.md 提示、元数据与位置。
+// 这两组信息加 Selectable（理由见 detailGroup）。
+func (a *App) viewDetailOverview(c *myui.Context, s *store.Skill) {
+	t := c.Theme()
+	if s.Description != "" {
+		myui.Text(c, s.Description).TextColor(t.Text.Alpha(0.85))
+	}
+	if !s.HasSKILLMD && s.State != store.StateTrashed {
+		myui.Text(c, "缺少 SKILL.md").TextColor(t.Warning)
+	}
+	a.detailGroup(c, "元数据", true, func() { a.viewDetailMeta(c, s) })
+	a.detailGroup(c, "位置", true, func() {
+		myui.Text(c, s.Dir).FontSize(t.FontSize - 1).TextColor(t.TextMuted)
+	})
+}
+
+// fullTextLoading 是 skillDocs 里的「正在读」占位值：占位与失败都走
+// err 字段，加载中的提示不染危险色。
+const fullTextLoading = "正在读取 SKILL.md…"
+
+// viewDetailFullText 是全文页：渲染技能的 SKILL.md。
+//
+// 正文在后台读取（startFullTextLoad 经 spawn 进 goroutine，不在 UI 线程
+// 做磁盘 I/O），读出后按技能名缓存进 a.skillDocs：切 tab、来回切技能
+// 不必反复读盘；扫描后缓存整体失效（applyScan，更新/恢复等操作都会触发
+// 重扫），届时 docGen 递增，还在路上的旧读盘结果不再回写。加载中显示
+// 提示；读失败或没有 SKILL.md（回收站里的技能可能没有）显示明确原因，
+// 绝不留白，绝不 panic。
+func (a *App) viewDetailFullText(c *myui.Context, s *store.Skill) {
+	a.startFullTextLoad(s)
+	doc := a.skillDocs[s.Name]
+	switch {
+	case doc.err == fullTextLoading:
+		myui.Text(c, fullTextLoading).TextColor(c.Theme().TextMuted)
+	case doc.err != "":
+		myui.Text(c, doc.err).TextColor(c.Theme().Danger)
+	default:
+		// 渲染进外层已有的 Scroll，宽度铺满（renderMarkdown 只管内容列）。
+		renderMarkdown(c, doc.src)
+	}
+}
+
+// fullTextDoc 是一个技能的 SKILL.md 读盘结果：src 是源文本，err 是提示
+// 文案（含加载中占位与失败原因），两者不会同时有值。
+type fullTextDoc struct {
+	src string
+	err string
+}
+
+// startFullTextLoad 确保技能的 SKILL.md 有一份缓存：没有就去后台读
+// （key 是技能名：同名技能只可能处于启用/停用/回收站之一，名字是稳定
+// 键）。任务发出前先占位「正在读取」，避免重复发任务；读结果回写前检查
+// docGen，扫描已刷新过缓存的任务直接丢弃。startFullTextLoad 只在
+// viewDetailFullText（UI 线程）里调用。
+func (a *App) startFullTextLoad(s *store.Skill) {
+	if a.skillDocs == nil {
+		a.skillDocs = map[string]fullTextDoc{}
+	}
+	if _, ok := a.skillDocs[s.Name]; ok {
+		return
+	}
+	a.skillDocs[s.Name] = fullTextDoc{err: fullTextLoading}
+	name, dir, hasMD, gen := s.Name, s.Dir, s.HasSKILLMD, a.docGen
+	a.spawn(func() {
+		doc := fullTextDoc{err: "没有 SKILL.md 可显示"}
+		if hasMD {
+			data, err := os.ReadFile(filepath.Join(dir, "SKILL.md"))
+			if err != nil {
+				doc = fullTextDoc{err: "读取 SKILL.md 失败：" + err.Error()}
+			} else {
+				doc = fullTextDoc{src: string(data)}
+			}
+		}
+		a.publish(func() {
+			if gen != a.docGen {
+				// 读取期间扫过描（缓存已重置），这份旧结果不要。
+				return
+			}
+			if a.skillDocs == nil {
+				a.skillDocs = map[string]fullTextDoc{}
+			}
+			a.skillDocs[name] = doc
+		})
+	})
+}
+
 // detailGroup 是详情里的一个信息块：小标题 + 比底色浅一档的圆角框。
-func (a *App) detailGroup(c *myui.Context, title string, fn func()) {
+// selectable 为 true 时内层容器加 Selectable：组内文字可拖选、双击选词、
+// Ctrl+C 拷贝（MyGo 容器上的 Selectable 让内部 Text/RichText 共享一次
+// 选择）。只给「元数据」「位置」这两组开：组里现在没有控件，将来若有
+// 按钮/输入框，必须给它们 .Unselectable()，否则控件交互和选择打架；
+// 其余组（如即将出现的详情正文）保持普通，不为加选择改变排版。
+func (a *App) detailGroup(c *myui.Context, title string, selectable bool, fn func()) {
 	t := c.Theme()
 	myui.Column(c).FillWidth().Gap(t.Space(1.5)).Children(func() {
 		sectionHeader(c, title)
-		myui.Column(c).FillWidth().Padding(t.Space(3)).Gap(t.Space(1.5)).
-			Radius(t.Radius).Background(a.pal.card).Border(1, a.pal.line).Children(fn)
+		inner := myui.Column(c).FillWidth().Padding(t.Space(3)).Gap(t.Space(1.5)).
+			Radius(t.Radius).Background(a.pal.card).Border(1, a.pal.line)
+		if selectable {
+			inner.Selectable()
+		}
+		inner.Children(fn)
 	})
 }
 
@@ -612,28 +725,30 @@ func (a *App) viewDetailMeta(c *myui.Context, s *store.Skill) {
 	// 标签用弱化色，值在 metaField 里单独设为正文色，主次分明。
 	myui.Column(c).FillWidth().TextColor(t.TextMuted).Children(func() {
 		myui.Form(c, func() {
-			metaField(c, "来源", sourceURLText(m), true)
+			// 来源行：GitHub 渲染成可点击链接（metaFieldLink，在系统浏览器
+			// 打开），本地保持可选中的普通文本（Link 只认 URL，不收路径）。
+			metaFieldLink(c, m)
 			if m.Source.Type == store.SourceGitHub {
 				if m.Source.Ref != "" {
-					metaField(c, "Ref", m.Source.Ref, false)
+					metaField(c, "Ref", m.Source.Ref, false, nil)
 				}
 				if m.Source.SubPath != "" {
-					metaField(c, "SubPath", m.Source.SubPath, true)
+					metaField(c, "SubPath", m.Source.SubPath, true, nil)
 				}
 				if m.Source.Commit != "" {
-					metaField(c, "Commit", shortCommit(m.Source.Commit), false)
+					metaField(c, "Commit", shortCommit(m.Source.Commit), false, nil)
 				}
 			}
 			if m.PluginName != "" {
-				metaField(c, "Plugin", m.PluginName, false)
+				metaField(c, "Plugin", m.PluginName, false, nil)
 			}
 			if m.InstalledAt != "" {
-				metaField(c, "安装", shortTime(m.InstalledAt), false)
+				metaField(c, "安装", shortTime(m.InstalledAt), false, nil)
 			}
 			if m.UpdatedAt != "" {
-				metaField(c, "更新", shortTime(m.UpdatedAt), false)
+				metaField(c, "更新", shortTime(m.UpdatedAt), false, nil)
 			}
-			metaField(c, "哈希", shortHash(m.ContentHash), false)
+			metaField(c, "哈希", shortHash(m.ContentHash), false, nil)
 		})
 	})
 }
