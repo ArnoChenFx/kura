@@ -78,5 +78,14 @@ func TestRenderDesignShots(t *testing.T) {
 	render("design-1-grid", 1280, 800, nil)
 	render("design-2-selected", 1280, 800, func(tt *myui.Tester) { a.selName = "yixin-api" })
 	render("design-3-narrow", 960, 640, func(tt *myui.Tester) { a.selName = "tdd" })
+	render("design-5-install-github", 1280, 800, func(tt *myui.Tester) {
+		a.selName, a.filter = "", filterAll
+		a.install = installState{open: true, repo: "https://github.com/mattpocock/skills/tree/main/skills/grill-me"}
+	})
+	render("design-6-install-local", 1280, 800, func(tt *myui.Tester) {
+		a.install = installState{open: true, source: installLocal, local: `D:\skills\pdf-tools`,
+			err: "store: 已存在同名技能: pdf-tools"}
+	})
+	a.install = installState{}
 	render("design-4-trash", 1280, 800, func(tt *myui.Tester) { a.selName = "legacy-lint"; a.filter = filterTrashed })
 }

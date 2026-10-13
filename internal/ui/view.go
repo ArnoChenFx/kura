@@ -70,6 +70,9 @@ func (a *App) View(c *myui.Context) {
 
 	// 更新评审面板（检查更新/全部检查的结果 + 应用/取消）。
 	a.viewReviewModal(c)
+
+	// 安装技能弹窗。
+	a.viewInstallModal(c)
 }
 
 // viewRoots 是左栏：应用名、技能目录列表（每项带在用技能数）与底部的
@@ -137,6 +140,14 @@ func (a *App) viewMainHeader(c *myui.Context) {
 		if a.scanning || a.checkingAll || a.checking != "" {
 			myui.Spinner(c)
 		}
+		ib := myui.PrimaryButton(c, "").Label("安装技能")
+		ib.Children(func() {
+			myui.Icon(c, iconPlus)
+			myui.Text(c, "安装技能")
+		})
+		if ib.Clicked() {
+			a.OpenInstall()
+		}
 		iconButton(c, iconRefresh, "刷新", a.scanning, a.ReloadAsync)
 		iconButton(c, iconCheckAll, "全部检查", a.checkingAll || a.checking != "", a.CheckAllAsync)
 		// .skill-lock.json 只描述默认目录里的技能。
@@ -192,7 +203,7 @@ func (a *App) viewGrid(c *myui.Context, rows []*store.Skill) {
 // 「目录里没有技能」。
 func (a *App) viewGridEmpty(c *myui.Context) {
 	t := c.Theme()
-	msg, hint := "这个目录里还没有技能", "把技能文件夹放进该目录，或用命令行 kura add 安装"
+	msg, hint := "这个目录里还没有技能", "点右上角的「安装技能」，从 GitHub 或本地文件夹安装"
 	switch {
 	case a.query != "":
 		msg, hint = "没有匹配「"+a.query+"」的技能", "换个关键词试试"
