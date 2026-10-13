@@ -39,11 +39,19 @@ kura 这边的三个接点(都在本里程碑落盘):
   一个 `Version` 常量(CLI 是独立二进制,不参与自更新),发版时需人工与
   `mygo.json` 保持一致。
 
-密钥现状:密钥对已用 `go tool mygo keygen` 生成,存放在本机 `.mygo/keys/`
-(`.gitignore` 的 `/.mygo/` 规则覆盖,已验证 `git check-ignore` 命中);
-公钥内容已抄进 `mygo.json`。仓库与全部 git 历史中没有任何私钥文件。
+密钥现状:密钥对用 `go tool mygo keygen` 生成,keygen 的默认输出目录是
+`%APPDATA%\mygo\update-keys\`(Windows;macOS/Linux 为
+`~/Library/Application Support/mygo/update-keys` 与 `~/.config/mygo/update-keys`),
+即 `mygo-update.key`(私钥)与 `mygo-update.pub`(公钥)。该目录在仓库之外,
+不受 `.gitignore` 管辖;**密钥文件也一样不能复制进仓库**。公钥内容已抄进
+`mygo.json` 的 `updates.publicKey`。仓库与全部 git 历史中没有任何私钥文件。
 CI 侧应把**私钥内容**存为仓库 secret `MYGO_UPDATER_PRIVATE_KEY`(名字与
 mygo 读取的环境变量一致),详见下文「CI 现状」。
+
+> 版本记录:2026-10-13 用 `go tool mygo keygen` 重新生成了一次密钥对——此前
+> `mygo.json` 里的公钥在本机找不到对应私钥(可能是 `-o` 指定的临时目录已随
+> worktree 删除),而当时尚未发布任何 Release、也没有已安装的应用持有旧公钥,
+> 换钥零代价。此后请固定使用 keygen 默认目录并做好备份。
 
 ## 用户看到什么
 
@@ -68,8 +76,9 @@ mygo 读取的环境变量一致),详见下文「CI 现状」。
 
 ## 维护者发布一个带自更新的版本(确切步骤)
 
-前提:`gh` CLI 可用(或设 `GH_TOKEN`);私钥在手(本机 `.mygo/keys/mygo-update.key`
-或密码管理器);CHANGELOG.md 存在。
+前提:`gh` CLI 可用(或设 `GH_TOKEN`,且 token 需 `repo` 权限才能写 secret
+与 Release);私钥在手(keygen 默认目录 `%APPDATA%\mygo\update-keys\mygo-update.key`,
+或密码管理器);`CHANGELOG.md` 存在。
 
 1. **改版本号**:把 `mygo.json` 的 `version` 改成新版本,如 `0.1.0` → `0.2.0`;
    同步改 `internal/cli` 的 `Version` 常量(人工保持一致)。
@@ -81,7 +90,7 @@ mygo 读取的环境变量一致),详见下文「CI 现状」。
 4. **构建并上传**(每平台一次;macOS 的签名与 dmg 须在 macOS 上执行):
 
    ```sh
-   MYGO_UPDATER_PRIVATE_KEY="$(cat .mygo/keys/mygo-update.key)" \
+   MYGO_UPDATER_PRIVATE_KEY="$(cat "$APPDATA/mygo/update-keys/mygo-update.key")" \
      go tool mygo build -platform windows/amd64 -upload
    ```
 
@@ -100,26 +109,19 @@ mygo 读取的环境变量一致),详见下文「CI 现状」。
 (`updates.deltas` 可调,`0` 关闭);首个版本或取不到已发布清单时跳过 delta
 并说明原因,不影响发布。
 
-## CI 现状(诚实声明)
+## CI 现状(已接入自更新)
 
-`.github/workflows/release.yml` 是**里程碑 5 的文件**(在 `m5-ci` 分支并入
-main;本 worktree 的历史基于更早的提交,所以这里看不到该文件)。它做的事:
-校验 tag 与 `mygo.json` 版本一致 → 建草稿 Release → 每平台
-`go tool mygo build -platform <目标>` → `gh release upload` 上传安装器 →
-`publish` job 把草稿转正。它**不依赖任何 secret,也不做自更新**。
-
-把自更新接入 CI 是**独立的一步改动,本里程碑没有做**,需要:
+`.github/workflows/release.yml` 已接入自更新。它做的事:校验 tag 与
+`mygo.json` 版本一致 → 从 `CHANGELOG.md` 提取本版本小节作为发布说明(缺该
+小节即失败) → 确认 secret `MYGO_UPDATER_PRIVATE_KEY` 已配置(缺即失败) →
+建草稿 Release → 每平台 `go tool mygo build -platform <目标> -upload`(安装器
++ 签名更新包 + delta + 清单,清单最后上传) → Windows 行补传裸 `kura.exe` →
+`publish` job 把草稿转正。要做的准备工作只有一件:
 
 1. 在 GitHub 仓库设置里添加 secret `MYGO_UPDATER_PRIVATE_KEY`,内容是
-   `mygo-update.key` 的全部内容(单行 base64,不是文件路径);
-2. 在 `release.yml` 的构建步骤给 `go tool mygo build` 加环境变量
-   `MYGO_UPDATER_PRIVATE_KEY: ${{ secrets.MYGO_UPDATER_PRIVATE_KEY }}`,
-   使每平台产物多出签名的更新压缩包、delta 与清单;
-3. 上传方式改用 `mygo build -upload`(或保留 `gh release upload` 但把
-   `update-*.json`、`*.delta`、`kura-<版本>-<目标>.tar.gz` 一并纳入 glob),
-   保证清单最后上传。
+   `mygo-update.key` 的全部内容(单行 base64,不是文件路径)。
 
-在那之前,带自更新的版本按上面「维护者发布步骤」手工发。
+其余细节见 `docs/note/ci.md`。
 
 ## 已验证 / 未验证
 
@@ -130,7 +132,7 @@ main;本 worktree 的历史基于更早的提交,所以这里看不到该文件)
 - `go tool mygo build -platform windows/amd64` 成功——挂上更新插件后应用
   仍能正常打包;
 - `mygo.json` 只含公钥(`grep -c PRIVATE mygo.json` 为 0),git 历史无任何
-  私钥文件;`.mygo/` 被 `.gitignore` 忽略;
+  私钥文件;私钥在仓库外的 keygen 默认目录;
 - 测试覆盖:插件挂载冒烟、应用菜单结构(含更新项占位与 Click 透传)、
   主窗口 Tester 照常构建、开发构建下版本号为空。
 

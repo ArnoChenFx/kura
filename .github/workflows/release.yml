@@ -1,9 +1,15 @@
 # Release：push v* 标签时构建全平台桌面应用并发布 GitHub Release。
 #
 # kura 是 MyGo 原生 UI 应用（无前端），构建用 `go tool mygo build`，
-# 不安装 Bun/npm/Node。mygo.json 未配置 updates（属于里程碑 6），
-# `mygo build -upload` 没有上传目标，所以上传用 gh release 手动完成。
-# 发版方式见 docs/note/ci.md。
+# 不安装 Bun/npm/Node。`mygo.json` 已配置 `updates`（GitHub 仓库 + Ed25519
+# 公钥），所以构建带 `-upload`：安装器、签名的更新压缩包、delta 与
+# `update-<目标>.json` 清单一起上传，清单最后上传（由 mygo 保证顺序）。
+#
+# 需要的仓库 secret：`MYGO_UPDATER_PRIVATE_KEY`，内容是 `go tool mygo keygen`
+# 生成的 `mygo-update.key` 全文（单行 base64，不是文件路径）。缺失时本工作流
+# 直接失败：发出的版本必须能自更新，不能悄悄发出没有更新清单的版本。
+#
+# 发版方式见 docs/note/ci.md 与 docs/note/updates.md。
 name: Release
 
 on:
@@ -29,13 +35,45 @@ jobs:
             exit 1
           fi
           echo "版本一致：v$version"
+      # 签名构建要求 CHANGELOG.md 里有所发布版本的 `## <版本号>` 小节，
+      # 否则 mygo 直接报错。这里提前检查，并把该小节作为 Release 说明。
+      - name: 提取 CHANGELOG 里本版本的发布说明
+        run: |
+          version="$(jq -r .version mygo.json)"
+          awk -v want="$version" '
+            { line = $0; sub(/\r$/, "", line) }
+            /^## / {
+              if (on) exit
+              n = split(substr(line, 4), f, /[ \t]+/)
+              v = f[1]
+              sub(/^\[/, "", v); sub(/\].*$/, "", v); sub(/^v/, "", v)
+              if (n > 0 && v == want) on = 1
+              next
+            }
+            on { print line }
+          ' CHANGELOG.md > notes.md
+          if [ -z "$(tr -d '[:space:]' < notes.md)" ]; then
+            echo "错误：CHANGELOG.md 缺少“## $version”小节，签名构建会失败。" >&2
+            exit 1
+          fi
+          echo "已提取 $(wc -c < notes.md) 字节的发布说明"
+      - name: 确认更新签名密钥 secret 已配置
+        env:
+          KEY: ${{ secrets.MYGO_UPDATER_PRIVATE_KEY }}
+        run: |
+          if [ -z "$KEY" ]; then
+            echo "错误：仓库 secret MYGO_UPDATER_PRIVATE_KEY 未设置。" >&2
+            echo "没有它，构建出的版本不带签名更新包与清单，应用无法自更新。" >&2
+            exit 1
+          fi
+          echo "签名密钥 secret 已就绪"
       - name: 创建草稿 Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           if ! gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
-              --draft --verify-tag --title "$GITHUB_REF_NAME" --generate-notes
+              --draft --verify-tag --title "$GITHUB_REF_NAME" --notes-file notes.md
           fi
 
   # 每个平台目标一行 matrix，并行构建、各自上传：
@@ -66,31 +104,26 @@ jobs:
       - name: 安装 NSIS（Windows 安装器用）
         if: matrix.name == 'Windows (amd64)'
         run: sudo apt-get update && sudo apt-get install -y nsis
-      - name: 构建桌面应用
-        run: go tool mygo build -platform "${{ matrix.platform }}"
-      # 只上传可安装的二进制包：Setup .exe、裸 kura.exe、.dmg、.deb、
-      # 带 install.sh 的 .tar.gz。产物目录是 build/<os>-<arch>/，
-      # 安装器文件名含空格与版本号，用 glob 匹配后放进数组逐个引用。
-      - name: 上传产物到草稿 Release
+      - name: 构建并上传（安装器 + 签名更新包 + 清单）
+        env:
+          MYGO_UPDATER_PRIVATE_KEY: ${{ secrets.MYGO_UPDATER_PRIVATE_KEY }}
+          GH_TOKEN: ${{ github.token }}
+        run: go tool mygo build -platform "${{ matrix.platform }}" -upload
+      # mygo 的 -upload 只收安装器与更新文件（`Setup *.exe`、`*.dmg`、`*.deb`、
+      # `*-linux-*.tar.gz`、`*.delta`、`update-*.json`），不含 Windows 的裸
+      # kura.exe；这里补传它，保住旧工作流就有的便携版。它不被清单引用，
+      # 所以放在清单之后上传也不影响更新。
+      - name: 补传 Windows 裸二进制
+        if: matrix.name == 'Windows (amd64)'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          shopt -s nullglob
-          files=()
-          for f in "build/"*/*.dmg \
-                   "build/"*/*Setup*.exe \
-                   "build/"*/kura.exe \
-                   "build/"*/*.deb \
-                   "build/"*/*-linux-*.tar.gz; do
-            files+=("$f")
-          done
-          if [ "${#files[@]}" -eq 0 ]; then
-            echo "错误：build/ 下没有可上传的产物" >&2
-            ls -la build/ || true
-            exit 1
+          if [ -f build/windows-amd64/kura.exe ]; then
+            gh release upload "$GITHUB_REF_NAME" build/windows-amd64/kura.exe \
+              --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            echo "未找到 build/windows-amd64/kura.exe，跳过"
           fi
-          gh release upload "$GITHUB_REF_NAME" "${files[@]}" \
-            --repo "$GITHUB_REPOSITORY" --clobber
 
   # 全部平台上传完成后，把草稿发布为正式 Release。
   publish:
