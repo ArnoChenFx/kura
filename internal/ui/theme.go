@@ -9,6 +9,7 @@ import (
 	"hash/fnv"
 	"time"
 
+	"github.com/ArnoChenFx/kura/internal/store"
 	myui "github.com/egoist/mygo/ui"
 )
 
@@ -22,6 +23,9 @@ type palette struct {
 	sel     myui.Color // 左栏选中项的底色
 	textMid myui.Color // 左栏未选中项的文字（介于正文与弱化色之间）
 	toggle  myui.Color // 开关「开」的颜色
+	// 卡片的三种交互态：悬停时底色与描边都亮（深色）/暗（浅色）一点，
+	// 选中时描边是强调色、底色带一丝强调色。
+	cardHover, lineHover, cardSel myui.Color
 	// avatars 是头像色板：低饱和的暖色与青绿，刻意不含蓝紫，
 	// 不和强调色抢戏。
 	avatars []myui.Color
@@ -31,6 +35,9 @@ type palette struct {
 type skin struct {
 	theme *myui.Theme
 	pal   palette
+	// cell 是构建卡片网格时用的主题：与 theme 相同，只是 GridView 给每个
+	// 单元格画选中框与悬停底用的四个颜色（见 newSkin）都是透明的。
+	cell *myui.Theme
 }
 
 // scheme 是浅色与深色两个皮肤。
@@ -38,14 +45,23 @@ type scheme struct {
 	light, dark *skin
 }
 
-// apply 让本帧使用与系统外观一致的皮肤，返回对应的表面色。
-func (s *scheme) apply(c *myui.Context) palette {
+// apply 让本帧使用 mode 指定的皮肤并返回它：store.ThemeLight、ThemeDark
+// 固定用浅/深色，其余（跟随系统）看系统当前的外观。每帧开头 c.Theme()
+// 是系统的默认主题，所以读 Dark 得到的是系统外观，不是上一帧设的皮肤。
+func (s *scheme) apply(c *myui.Context, mode string) *skin {
+	dark := c.Theme().Dark
+	switch mode {
+	case store.ThemeLight:
+		dark = false
+	case store.ThemeDark:
+		dark = true
+	}
 	sk := s.light
-	if c.Theme().Dark {
+	if dark {
 		sk = s.dark
 	}
 	c.SetTheme(sk.theme)
-	return sk.pal
+	return sk
 }
 
 // tone 是一个皮肤的颜色清单（十六进制），newSkin 把它换成主题与表面色。
@@ -82,17 +98,32 @@ func newSkin(dark bool, k tone) *skin {
 	for i, a := range k.avatars {
 		avatars[i] = hx(a)
 	}
-	return &skin{theme: t, pal: palette{
+	pal := palette{
 		sidebar: hx(k.sidebar), canvas: hx(k.canvas), card: hx(k.card), line: hx(k.line),
 		shadow: k.shadow, sel: hx(k.sel), textMid: hx(k.textMid), toggle: hx(k.toggle),
 		avatars: avatars,
-	}}
+	}
+	// 向正文色混一点：深色里变亮、浅色里变暗，两个皮肤用同一条规则。
+	pal.cardHover = pal.card.Mix(t.Text, 0.035)
+	pal.lineHover = pal.line.Mix(t.Text, 0.22)
+	pal.cardSel = pal.card.Mix(t.Accent, 0.07)
+
+	// GridView 给每个单元格自己画一层选中框与悬停底：选中（网格有焦点）时是
+	// 2px 的 Accent 边加 Accent 淡底，选中（无焦点）时是 SurfacePressed 底加
+	// 2px 的 Border 边，悬停时是 SurfaceHover 底，圆角是主题的 Radius。卡片
+	// 自己的圆角更大、边框更细，两层叠在一起就是「高亮框和卡片边框对不齐」。
+	// 单元格的颜色取自构建网格时的主题，所以给网格一份把这四个颜色换成透明
+	// 的主题，单元格什么也不画，选中与悬停全由卡片自己画。
+	cell := *t
+	cell.Accent, cell.SurfacePressed, cell.SurfaceHover, cell.Border =
+		myui.Transparent, myui.Transparent, myui.Transparent, myui.Transparent
+	return &skin{theme: t, pal: pal, cell: &cell}
 }
 
 // kuraScheme 是应用的配色。
 var kuraScheme = &scheme{
 	light: newSkin(false, tone{
-		accent: "#525fa3", accentHover: "#46528f", accentPressed: "#3c477c", accentText: "#ffffff",
+		accent: "#5b668f", accentHover: "#4f5a82", accentPressed: "#455074", accentText: "#ffffff",
 		toggle:  "#36a874",
 		success: "#2f9e6a", warning: "#b7791f", danger: "#d64550",
 		bg: "#ffffff", surface: "#f0f0f4", surfaceHover: "#e7e7ed", surfacePressed: "#dddde5",
@@ -171,24 +202,44 @@ func ghostButton(c *myui.Context, icon *myui.SVG, label string, disabled bool, o
 	}
 }
 
-// kuraSwitch 是开关：与 MyGo 的 Switch 同尺寸、同动画与同样的白色圆钮，
-// 只是「开」的颜色由 onColor 指定，不必与主题的强调色相同。
+// kuraSwitch 是开关：尺寸、动画与白色圆钮和 MyGo 的 Switch 一致，「开」的
+// 颜色由 onColor 指定，不必与主题的强调色相同。交互反馈：
+//   - 悬停：指针变手形，轨道向正文色靠一点（深色里变亮、浅色里变暗），旋钮
+//     周围出现一圈淡淡的光晕；
+//   - 按下：轨道再靠一点，旋钮朝行进方向拉长；
+//   - 键盘聚焦：MyGo 默认的聚焦环。
+//
+// 反馈都用短动画过渡；系统要求减少动效时直接到位。
 func kuraSwitch(c *myui.Context, on *bool, onColor myui.Color) myui.Element {
 	t := c.Theme()
-	sw := myui.SwitchBase(c, on).Size(t.Space(9), t.Space(5)).Radius(t.Space(2.5))
-	target := float32(0)
-	if *on {
-		target = 1
-	}
-	pos := sw.Animate("knob", target, 140*time.Millisecond)
+	sw := myui.SwitchBase(c, on).Size(t.Space(9), t.Space(5)).Radius(t.Space(2.5)).
+		Cursor(myui.CursorPointer)
+	pos := sw.Animate("knob", boolF(*on), 140*time.Millisecond)
+	hover := sw.Animate("hover", boolF(sw.Hovered()), 120*time.Millisecond)
+	press := sw.Animate("press", boolF(sw.Pressed()), 90*time.Millisecond)
 	off := t.Border.Mix(t.Text, 0.15)
-	sw.Background(off.Mix(onColor, pos))
+	sw.Background(off.Mix(onColor, pos).Mix(t.Text, 0.09*hover+0.07*press))
 	sw.Draw(func(p *myui.Painter, r myui.Rect) {
 		in := t.Space(0.5)
 		d := r.H - 2*in
-		knob := myui.Rect{X: r.X + in + pos*(r.W-r.H), Y: r.Y + in, W: d, H: d}
+		// 按下时旋钮拉长；位置按拉长后的宽度算，两端都贴着轨道内缘。
+		w := d + t.Space(1)*press
+		knob := myui.Rect{X: r.X + in + pos*(r.W-2*in-w), Y: r.Y + in, W: w, H: d}
+		if hover > 0 {
+			// 光晕：和轨道等高的胶囊，罩在旋钮外面，不超出轨道。
+			halo := myui.Rect{X: knob.X - in, Y: r.Y, W: knob.W + 2*in, H: r.H}
+			p.Fill(halo, t.Text.Alpha(0.12*hover), halo.H/2)
+		}
 		p.Shadow(knob, d/2, 0, 1, 3, 0, myui.RGBA(0, 0, 0, 0.25))
 		p.Fill(knob, myui.RGB(255, 255, 255), d/2)
 	})
 	return sw
+}
+
+// boolF 把 bool 换成动画的目标值：true 为 1，false 为 0。
+func boolF(b bool) float32 {
+	if b {
+		return 1
+	}
+	return 0
 }

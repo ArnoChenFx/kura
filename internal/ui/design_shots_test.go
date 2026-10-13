@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/ArnoChenFx/kura/internal/store"
+	myui "github.com/egoist/mygo/ui"
 )
 
 // seedDescribed 写一个带 description 的技能。
@@ -67,17 +68,23 @@ func TestRenderDesignShots(t *testing.T) {
 		t.Skip("未设置 KURA_UI_SHOTS，跳过设计稿截图")
 	}
 	a := seedDesignApp(t)
-	render := func(name string, w, h int, prep func()) {
+	// render 渲染一个状态，深色、浅色各一张。post 在两帧稳定后对 Tester 做
+	// 指针/键盘操作（悬停、聚焦），再补一帧才截图。
+	render := func(name string, w, h int, prep func(), post ...func(tt *myui.Tester)) {
 		if prep != nil {
 			prep()
 		}
 		for _, dark := range []bool{true, false} {
 			tt := newTester(a, w, h)
+			tt.SetPreferences(myui.Preferences{ReduceMotion: true})
 			tt.SetDark(dark)
 			a.settle()
 			tt.Frame()
 			a.settle()
 			tt.Frame()
+			for _, f := range post {
+				f(tt)
+			}
 			tt.Frame()
 			mode := "light"
 			if dark {
@@ -97,5 +104,20 @@ func TestRenderDesignShots(t *testing.T) {
 	render("6-install-local", 1280, 800, func() {
 		a.install = installState{open: true, source: installLocal, local: `D:\skills\pdf-tools`,
 			err: "store: 已存在同名技能: pdf-tools"}
+	})
+	// 悬停：指针停在 tdd 的卡片上（未选中的卡片亮一档），以及停在 pdf-tools 的开关上。
+	render("7-hover-card", 1280, 800, func() { a.selName, a.filter, a.install = "yixin-api", filterAll, installState{} }, func(tt *myui.Tester) {
+		r, _ := tt.Find("tdd")
+		tt.Move(r.X+40, r.Y+60)
+	})
+	render("8-hover-switch", 1280, 800, func() { a.selName, a.filter, a.install = "", filterAll, installState{} }, func(tt *myui.Tester) {
+		r, _ := tt.Find("pdf-tools 开关")
+		tt.Move(r.X+r.W/2, r.Y+r.H/2)
+	})
+	// 键盘聚焦：Tab 到第一个开关上，出现聚焦环。
+	render("9-focus-switch", 1280, 800, func() { a.selName, a.filter, a.install = "", filterAll, installState{} }, func(tt *myui.Tester) {
+		for i := 0; i < 40 && !(tt.Focused("git-guardrails 开关") && !tt.Focused("pdf-tools 开关")); i++ {
+			tt.Key(0, myui.KeyTab)
+		}
 	})
 }
