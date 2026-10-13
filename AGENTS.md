@@ -52,6 +52,7 @@ kura 是一个**桌面技能管理器**，用 [MyGo](https://github.com/egoist/m
 7. **`contentHash` 稳定**：路径排序后对全部文件求 SHA-256，排除 `.kura-meta.json`，这样未改动的技能哈希不变、漂移可检测。
 8. 元数据损坏**不能让应用崩溃**：返回错误、界面保持可用。`config.json` 损坏同理：`LoadLibrary` 返回只含默认根目录的列表并附带错误，界面报告它并继续可用。
 9. **每个根目录的状态互相隔离**：默认根目录沿用原有布局（`~/.kura/disabled|trash|snapshots`，已有数据无需迁移）；追加的根目录用 `~/.kura/roots/<id>/disabled|trash|snapshots`（`<id>` 是规范化路径 SHA-256 的前 12 位，见 `store.RootID`）。两个根目录里的同名技能互不干扰。**从列表移除一个根目录只改 `config.json`，绝不动磁盘上的技能。** 命令行的 `--root` 指向列表里的根目录时落到同一处（`cli.resolveConfig` 经 `Library.Config`）。
+10. **外观偏好存在 `config.json` 的 `theme`**（`system` / `light` / `dark`；缺省与手改出的未知值都按 `system`，不算错误）。读写只经 `store.Library`（`Theme`、`SetTheme`，`store.NormalizeTheme` 规范化）。`config.json` 的「读—改—写」一律持 `configMu`（`SetTheme` 与 `save` 都已持有）：外观与目录列表是各自的后台任务，不串行会互相覆盖；新增写 `config.json` 的路径必须照做。
 
 kura 自己的目录：
 
@@ -61,7 +62,7 @@ kura 自己的目录：
   trash/<skill>/                 # 已移除的技能（带时间戳）
   snapshots/<skill>/<timestamp>/ # 更新前/移除前的快照
   roots/<id>/                    # 追加根目录各自的 disabled/ trash/ snapshots/
-  config.json                    # 根目录与偏好
+  config.json                    # 根目录与偏好（theme：system | light | dark）
 ```
 
 ---
@@ -86,6 +87,11 @@ kura 自己的目录：
 - **切换根目录要作废旧结果**：后台任务启动时记下 `App.gen`，发布时 `gen != a.gen` 就只清 busy、不覆盖当前列表（见 `publishAfterWork`、`reload`）。新增后台路径必须照做。
 - 选中以**技能名**为准（`selName`），网格里才用下标（`selIdx`，由 `syncSelection` 对齐）；筛选把选中项藏起来时右栏保持不变。
 - **颜色只从 `internal/ui/theme.go` 来**（`kuraScheme` / `palette`），视图代码里不写十六进制。配色取自参考截图：深炭灰底、带边框的卡片、薄荷绿开关、一种低饱和的雾蓝紫强调色。**不要用饱和的蓝紫/靛蓝**（用户明确说过很丑），头像色板也刻意不含蓝紫（`theme_test.go` 守着）。
+- **GridView 给每个单元格自己画一层选中框与悬停底**（圆角 8、2px 边：网格有焦点时 `Accent`，无焦点时 `SurfacePressed` 底加 `Border` 边，悬停时 `SurfaceHover` 底），颜色取自构建网格时的主题。kura 的卡片自己画选中与悬停（圆角更大、边 1px），两层叠一起就是「高亮框和卡片边框对不齐」。所以 `viewGrid` 用 `skin.cell`（这四个颜色透明的主题副本）构建网格，卡片里换回真主题（见 `viewGrid`、`newSkin`）。动网格或卡片外框后先跑 `TestCardChromeIsOneAlignedRing`（读真实渲染的像素）。
+- **别在要参与网格点击的元素上调 `RightClicked()` / `Clicked()` / `Pressed()`**：它们把元素标成可点击，会吞掉网格单元格要收的左键点击（表现为点卡片选不中）。右键要做的事放进 `ContextMenu` 的构建函数（它只在菜单打开、选了菜单项后各跑一次；右键选中卡片就在那里做）。
+- **部件绑定的局部变量在构建结束或查询响应时才被写入**：构建中途直接比较它，拿不到这一次的点击，下一遍构建又从应用状态重新推出，点击就丢了。分段控件用 `Track.Changed()`、开关用 `Changed()` 在同一次构建里取到新值（见 `viewThemeSwitch`、`viewCard` 里的开关），或者直接绑应用的持久字段（`a.filter`、`a.rootSel`）。
+- **原生右键菜单**（`Element.ContextMenu`）不出现在截图里。菜单项的 `Chosen()` 在选择后的下一帧报告，副作用只能放在它里面；测试用 `tt.RightClick` / `tt.Menu()` / `tt.ChooseMenuItem`（见 `menus_test.go`）。
+- **外观**：`App.themeMode` 决定皮肤（`View` 开头 `kuraScheme.apply(c, a.themeMode)`，跟随系统时读系统外观）。改它一律走 `SetThemeAsync`：立刻换皮肤，后台同步原生外观（`mygo.Theme.SetSource`）并写 `config.json`，连续切换只有最新一次执行，写盘失败只在状态行报告、不回滚皮肤。启动时 `main.go` 在 `App.Run` 之前调 `app.SyncTheme()`。
 - 详见 `.agents/skills/mygo-maintenance/SKILL.md`；MyGo 的 API 以**固定版本源码**为准（`go list -m -f '{{.Dir}}' github.com/egoist/mygo`），不要凭记忆猜。
 
 ### CLI 退出码（已固定，不要改）
@@ -132,6 +138,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools/capture-window.ps1 \
 - 依赖 git 的测试要固定 `GIT_CONFIG_GLOBAL` 等环境，避免受本机配置影响。
 - 不要写会联网的测试（GitHub 取源要在测试里注入/替换；UI 里要测 GitHub 安装的失败路径，用 `t.Setenv("PATH", t.TempDir())` 让 git 找不到）。
 - UI 测试里文件夹选择框 `App.pickFolder` 必须换成假实现，绝不弹出系统对话框。
+- 打开文件/文件夹、在文件管理器里显示、同步原生外观这三个系统调用（`App.openPath` / `reveal` / `setSource`）在 `newAppFor` 里默认换成空实现；要检查调用就用 `fakeShell` / `recordSource`。绝不真的打开窗口或改系统外观。
 
 ---
 
