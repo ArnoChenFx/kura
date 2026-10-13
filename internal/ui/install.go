@@ -204,7 +204,8 @@ func (a *App) viewInstallModal(c *myui.Context) {
 				if myui.Button(c, "取消").Disabled(s.busy).Clicked() {
 					s.open = false
 				}
-				ib := myui.PrimaryButton(c, "安装").Disabled(s.busy || !s.installReady())
+				// 无障碍名称写成「确认安装」，与详情栏里的「安装」时间字段区分。
+				ib := myui.PrimaryButton(c, "安装").Label("确认安装").Disabled(s.busy || !s.installReady())
 				if ib.Clicked() {
 					a.InstallAsync()
 				}

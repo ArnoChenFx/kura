@@ -22,6 +22,12 @@ func newTestApp(t *testing.T) (*App, *store.Config) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	return newAppFor(cfg), cfg
+}
+
+// newAppFor 为 cfg 建一个同步 spawn、手动回放 update 的应用。需要在建应用
+// 之前先摆好磁盘状态（比如损坏的 config.json）时单独使用。
+func newAppFor(cfg *store.Config) *App {
 	a := NewApp(cfg)
 	var mu sync.Mutex
 	a.spawn = func(fn func()) {
@@ -30,7 +36,7 @@ func newTestApp(t *testing.T) (*App, *store.Config) {
 		fn()
 	}
 	a.update = func(fn func()) { a.pending = append(a.pending, fn) }
-	return a, cfg
+	return a
 }
 
 // flush 回放所有待执行的 update 闭包，相当于窗口处理完一帧。
@@ -258,8 +264,8 @@ func TestSearchFilters(t *testing.T) {
 	}
 }
 
-// TestRemoveConfirmAndRestore 验证：删除需确认，确认后进入回收站，
-// 「恢复」把它放回根目录。
+// TestRemoveConfirmAndRestore 验证：删除需确认，确认后进入回收站（只在
+// 「回收站」筛选下可见），卡片上的「恢复」把它放回根目录。
 func TestRemoveConfirmAndRestore(t *testing.T) {
 	a, cfg := newTestApp(t)
 	seedSkill(t, cfg, "eps", nil)
@@ -305,7 +311,16 @@ func TestRemoveConfirmAndRestore(t *testing.T) {
 	a.settle()
 	tt.Frame()
 
-	// 回收站行显示「恢复」。
+	// 「全部」下不再有它的卡片（详情栏仍停在它身上，方便直接恢复）。
+	if tt.HasText("eps 开关") {
+		t.Errorf("回收站里的技能不应出现在「全部」的卡片里，文本 %v", tt.Texts())
+	}
+	// 切到「回收站」筛选：卡片上是「恢复」。
+	if err := tt.Click("回收站 1"); err != nil {
+		t.Fatal(err)
+	}
+	a.settle()
+	tt.Frame()
 	if err := tt.Click("恢复"); err != nil {
 		t.Fatal(err)
 	}
@@ -378,10 +393,10 @@ func TestMissingRootKeepsAppUsable(t *testing.T) {
 	a.settle()
 	tt.Frame()
 
-	if !tt.HasText("技能根目录不存在") {
-		t.Errorf("应显示根目录缺失的提示，文本 %v", tt.Texts())
+	if !tt.HasText("技能目录不存在") {
+		t.Errorf("应显示目录缺失的提示，文本 %v", tt.Texts())
 	}
-	if !tt.HasText("没有技能") {
+	if !tt.HasText("这个目录里还没有技能") {
 		t.Errorf("空列表应显示占位文本，文本 %v", tt.Texts())
 	}
 	// 刷新按钮仍然可用。
@@ -403,9 +418,12 @@ func TestMissingRootKeepsAppUsable(t *testing.T) {
 	if a.loadErr != "" {
 		t.Errorf("根目录创建后 loadErr 应清空，得到 %q", a.loadErr)
 	}
-	// 计数现在显示在头部（状态词+数字）与空态卡片里。
-	if !tt.HasText("已启用 0") || !tt.HasText("已停用 0") {
-		t.Errorf("头部应显示三态计数，文本 %v", tt.Texts())
+	// 计数显示在筛选栏的每个标签里。
+	if !tt.HasText("启用 0") || !tt.HasText("停用 0") {
+		t.Errorf("筛选栏应显示各状态的数量，文本 %v", tt.Texts())
+	}
+	if tt.HasText("技能目录不存在") {
+		t.Errorf("目录创建后缺失提示应消失，文本 %v", tt.Texts())
 	}
 }
 
@@ -479,11 +497,10 @@ func TestDisabledRowSwitchReenables(t *testing.T) {
 	}
 }
 
-// TestHeaderCountsAndEmptyDetail 验证新结构的两块核心：
-//  1. 头部显示根目录路径与「已启用/已停用/回收站」三态计数；
-//  2. 未选中技能时右侧是有内容的空态（图标提示 + 根目录概况卡片），
-//     选中后又出现元数据字段小节。
-func TestHeaderCountsAndEmptyDetail(t *testing.T) {
+// TestHeaderCountsAndDetailOnSelect 验证三栏结构的两块核心：
+//  1. 中栏头部显示目录名与完整路径，筛选栏的每个标签带数量；
+//  2. 没选中技能时不占出右栏，选中后右栏出现元数据与位置。
+func TestHeaderCountsAndDetailOnSelect(t *testing.T) {
 	a, cfg := newTestApp(t)
 	seedSkill(t, cfg, "alpha", &store.Meta{
 		ID: "alpha", DisplayName: "alpha",
@@ -500,40 +517,58 @@ func TestHeaderCountsAndEmptyDetail(t *testing.T) {
 	a.settle()
 	tt.Frame()
 
-	// 头部：路径（可能被中段省略）与计数（启用 1、停用 1）。
-	if !tt.HasText(cfg.Root) || !tt.HasText("已启用 1") || !tt.HasText("已停用 1") {
-		t.Errorf("头部应显示根目录与计数，文本 %v", tt.Texts())
+	// 头部：完整路径；筛选栏：全部 2（启用 1 + 停用 1）、回收站 0。
+	if !tt.HasText(cfg.Root) {
+		t.Errorf("头部应显示目录路径，文本 %v", tt.Texts())
 	}
-	// 未选中：空态有引导与概况卡片，而不是只有一行灰字。
-	for _, want := range []string{"选择一个技能查看详情", "技能根目录"} {
-		if !tt.HasText(want) {
-			t.Errorf("空态应显示 %q，文本 %v", want, tt.Texts())
+	for _, want := range []string{"全部 2", "启用 1", "停用 1", "回收站 0"} {
+		if _, ok := tt.Find(want); !ok {
+			t.Errorf("筛选栏应有 %q，文本 %v", want, tt.Texts())
 		}
 	}
-	// 未选中时不应出现「元数据」小节标题。
-	for _, texts := range tt.Texts() {
-		if texts == "元数据" {
-			t.Errorf("未选中时不应出现元数据小节，文本 %v", tt.Texts())
-			break
+	// 未选中：没有右栏。
+	for _, absent := range []string{"元数据", "位置", "关闭详情"} {
+		if _, ok := tt.Find(absent); ok {
+			t.Errorf("未选中时不应出现 %q，文本 %v", absent, tt.Texts())
 		}
 	}
 
-	// 选中 alpha：元数据字段出现（Form 的标签），来源 URL 也在。
+	// 选中 alpha：元数据字段与位置出现，来源 URL 也在。
 	if err := tt.Click("alpha"); err != nil {
 		t.Fatal(err)
 	}
 	a.settle()
 	tt.Frame()
-	if !tt.HasText("元数据") || !tt.HasText("来源") || !tt.HasText("https://github.com/me/alpha.git") {
-		t.Errorf("选中后应显示元数据小节与字段，文本 %v", tt.Texts())
+	for _, want := range []string{"元数据", "位置", "来源", "https://github.com/me/alpha.git", cfg.SkillPath("alpha")} {
+		if !tt.HasText(want) {
+			t.Errorf("选中后右栏应显示 %q，文本 %v", want, tt.Texts())
+		}
+	}
+
+	// 关闭详情：右栏收起，卡片仍在。
+	if err := tt.Click("关闭详情"); err != nil {
+		t.Fatal(err)
+	}
+	a.settle()
+	tt.Frame()
+	if _, ok := tt.Find("元数据"); ok {
+		t.Errorf("关闭详情后不应再有元数据小节，文本 %v", tt.Texts())
+	}
+	if !tt.HasText("alpha 开关") {
+		t.Errorf("关闭详情后卡片应仍在，文本 %v", tt.Texts())
 	}
 }
 
-// TestStatusBarShowsTotal 验证状态条显示技能总数（共 N 个技能）。
+// TestStatusBarShowsTotal 验证状态条显示技能总数（共 N 个技能），
+// 与筛选栏的「全部」一致：回收站里的技能不计入。
 func TestStatusBarShowsTotal(t *testing.T) {
 	a, cfg := newTestApp(t)
 	seedSkill(t, cfg, "one", nil)
 	seedSkill(t, cfg, "two", nil)
+	seedSkill(t, cfg, "three", nil)
+	if _, err := cfg.Remove("three"); err != nil {
+		t.Fatal(err)
+	}
 
 	tt := newTester(a, 980, 640)
 	a.settle()
@@ -542,13 +577,19 @@ func TestStatusBarShowsTotal(t *testing.T) {
 	tt.Frame()
 
 	if !tt.HasText("共 2 个技能") {
-		t.Errorf("状态条应显示总数，文本 %v", tt.Texts())
+		t.Errorf("状态条应显示总数（不含回收站），文本 %v", tt.Texts())
+	}
+	if _, ok := tt.Find("全部 2"); !ok {
+		t.Errorf("筛选栏的「全部」应与状态条一致，文本 %v", tt.Texts())
+	}
+	if !tt.HasText("已扫描 2 个技能") {
+		t.Errorf("扫描完成的提示也不应把回收站算进去，文本 %v", tt.Texts())
 	}
 }
 
-// TestTrashedRowLooksDifferent 验证回收站行的降级外观：名字带删除线、
-// 状态点为 Danger，行内是「恢复」而不是开关。
-func TestTrashedRowLooksDifferent(t *testing.T) {
+// TestTrashedCardLooksDifferent 验证回收站卡片的降级外观：只在「回收站」
+// 筛选下出现，带「回收站」标签，卡片上是「恢复」而不是开关。
+func TestTrashedCardLooksDifferent(t *testing.T) {
 	a, cfg := newTestApp(t)
 	seedSkill(t, cfg, "gone", nil)
 	if _, err := cfg.Remove("gone"); err != nil {
@@ -561,23 +602,44 @@ func TestTrashedRowLooksDifferent(t *testing.T) {
 	a.settle()
 	tt.Frame()
 
-	if !tt.HasText("回收站 1") {
-		t.Errorf("头部应统计回收站技能，文本 %v", tt.Texts())
+	if _, ok := tt.Find("回收站 1"); !ok {
+		t.Errorf("筛选栏应统计回收站技能，文本 %v", tt.Texts())
 	}
-	// 回收站行没有开关（Label 是「gone 开关」），只有恢复按钮。
+	// 「全部」下看不到它。
+	if tt.HasText("gone") {
+		t.Errorf("「全部」不应显示回收站技能，文本 %v", tt.Texts())
+	}
+
+	if err := tt.Click("回收站 1"); err != nil {
+		t.Fatal(err)
+	}
+	a.settle()
+	tt.Frame()
+	if !tt.HasText("gone") {
+		t.Fatalf("「回收站」筛选下应显示 gone，文本 %v", tt.Texts())
+	}
+	if _, ok := tt.Find("回收站"); !ok {
+		t.Errorf("回收站卡片应带「回收站」标签，文本 %v", tt.Texts())
+	}
+	// 没有开关（Label 是「gone 开关」），只有恢复按钮。
 	if tt.HasText("gone 开关") {
 		t.Error("回收站技能不应显示启用开关")
 	}
 	if err := tt.Click("恢复"); err != nil {
-		t.Fatalf("回收站行应有恢复按钮: %v", err)
+		t.Fatalf("回收站卡片应有恢复按钮: %v", err)
 	}
 	a.waitBusy()
 	tt.Frame()
 	if _, err := os.Stat(cfg.SkillPath("gone")); err != nil {
 		t.Errorf("恢复后根目录应有 gone: %v", err)
 	}
-	// 恢复后开关回来。
+	// 回到「全部」：开关回来了。
+	if err := tt.Click("全部 1"); err != nil {
+		t.Fatal(err)
+	}
+	a.settle()
+	tt.Frame()
 	if !tt.HasText("gone 开关") {
-		t.Errorf("恢复后行内应出现开关，文本 %v", tt.Texts())
+		t.Errorf("恢复后卡片上应出现开关，文本 %v", tt.Texts())
 	}
 }

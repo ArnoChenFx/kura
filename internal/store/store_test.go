@@ -485,6 +485,29 @@ func TestAddGitHub(t *testing.T) {
 	}
 }
 
+// TestAddGitHubFailureLeavesNoTempDir 验证 git clone 失败时不遗留
+// kura-clone-* 临时目录。PATH 指向空目录，git 必然找不到：既不联网，也不依赖
+// 本机的 git 配置；临时目录指到 t.TempDir() 里以便检查。
+func TestAddGitHubFailureLeavesNoTempDir(t *testing.T) {
+	c := newTestConfig(t)
+	tmp := t.TempDir()
+	t.Setenv("TMPDIR", tmp) // Unix 的 os.TempDir
+	t.Setenv("TMP", tmp)    // Windows 的 os.TempDir
+	t.Setenv("TEMP", tmp)
+	t.Setenv("PATH", t.TempDir())
+
+	if _, err := c.Add(&AddOptions{Repo: "owner/repo"}); err == nil {
+		t.Fatal("找不到 git 时 Add 应报错")
+	}
+	entries, err := os.ReadDir(tmp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		t.Errorf("clone 失败后不应遗留临时目录: %s", e.Name())
+	}
+}
+
 func TestUpdate(t *testing.T) {
 	c := newTestConfig(t)
 	// 准备 git 仓库与 bare 镜像 + insteadOf 重写(同 TestAddGitHub)。

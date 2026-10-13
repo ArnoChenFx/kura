@@ -60,19 +60,6 @@ func stateBadge(c *myui.Context, s store.State) {
 	})
 }
 
-// countChip 是头部的一枚计数：状态点 + 「状态 数量」一个文本节点。
-// 单节点让无障碍与测试都能读到完整的「已启用 3」；颜色统一用弱化色，
-// 状态由色点表达。
-func countChip(c *myui.Context, s store.State, n int) {
-	t := c.Theme()
-	myui.Row(c).Shrink(0).AlignItems(myui.Center).Gap(t.Space(1.5)).
-		Children(func() {
-			stateDot(c, s)
-			myui.Text(c, stateText(s)+" "+itoa(n)).SingleLine().
-				FontSize(t.FontSize - 1).TextColor(t.TextMuted)
-		})
-}
-
 // itoa 把小整数转成字符串（计数、±行数都在用）。
 func itoa(n int) string {
 	if n == 0 {
@@ -168,20 +155,6 @@ func metaField(c *myui.Context, k, v string, wrap bool) {
 	})
 }
 
-// rowCaption 生成列表行第二行的文案：来源 + 补充说明（缺 SKILL.md /
-// 元数据损坏），用统一的 TextMuted 弱化色。元数据损坏时来源是推断值，
-// 不再并列展示以免自相矛盾。
-func rowCaption(s *store.Skill) string {
-	if s.MetaErr != "" {
-		return "元数据损坏"
-	}
-	cap := sourceText(s)
-	if !s.HasSKILLMD && s.State != store.StateTrashed {
-		cap += " · 缺少 SKILL.md"
-	}
-	return cap
-}
-
 // diffStatusText 把文件差异状态翻译成短标签。
 func diffStatusText(status string) string {
 	switch status {
@@ -239,16 +212,6 @@ func searchBox(c *myui.Context, query *string, bg myui.Color) myui.Element {
 	return row
 }
 
-// iconButton 是只有图标的次级按钮：Label 与 Tooltip 都用 label，
-// 供无障碍、悬停提示与测试。
-func iconButton(c *myui.Context, icon *myui.SVG, label string, disabled bool, onClick func()) {
-	b := myui.Button(c, "").Label(label).Tooltip(label).Disabled(disabled)
-	b.Children(func() { myui.Icon(c, icon) })
-	if b.Clicked() {
-		onClick()
-	}
-}
-
 // sourceIcon 返回卡片底行的来源图标。
 func sourceIcon(s *store.Skill) *myui.SVG {
 	if s.Meta == nil {
@@ -261,16 +224,6 @@ func sourceIcon(s *store.Skill) *myui.SVG {
 		return iconLocal
 	}
 	return iconUnknown
-}
-
-// captionColor 是卡片底行文字的颜色：元数据损坏或缺少 SKILL.md 时用
-// Warning 提醒，其余用弱化色。
-func captionColor(c *myui.Context, s *store.Skill) myui.Color {
-	t := c.Theme()
-	if s.MetaErr != "" || !s.HasSKILLMD && s.State != store.StateTrashed {
-		return t.Warning
-	}
-	return t.TextMuted
 }
 
 // pill 是卡片右下角的小标签：浅色底 + 同色文字。
