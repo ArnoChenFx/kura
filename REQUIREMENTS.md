@@ -63,7 +63,9 @@ Written inside each managed skill folder, next to `SKILL.md`:
 `source.type` is `local` (with `path`) or `github`. `pluginName` is imported from
 the sibling `~/.agents/.skill-lock.json` when the skill is listed there; the lock
 file is read and never rewritten by kura v1. It only describes the default root,
-so "import metadata" is offered for the default root only.
+so "import metadata" is offered for the default root only: the window hides the
+action for other roots, and `store.Config.ImportMeta` and `kura import-meta`
+refuse an added root (exit code 1).
 
 `contentHash` is a SHA-256 over the skill folder's files, with paths sorted and
 `.kura-meta.json` itself excluded, so an unchanged skill keeps a stable hash and

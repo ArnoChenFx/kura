@@ -108,6 +108,40 @@ func TestLibraryScopesSeparateSameName(t *testing.T) {
 	}
 }
 
+// TestImportMetaDefaultRootOnly 验证：.skill-lock.json 只描述默认根目录，
+// 对追加的根目录 ImportMeta 返回 ErrImportDefaultOnly，且不写任何元数据——
+// 即使旁边恰好有一份能匹配上的 lock 文件。
+func TestImportMetaDefaultRootOnly(t *testing.T) {
+	base, extra := newLibraryFixture(t)
+	lib, _ := LoadLibrary(base)
+	if err := lib.AddRoot(extra); err != nil {
+		t.Fatal(err)
+	}
+	def, add := lib.Config(base.Root), lib.Config(extra)
+	if !def.CanImportMeta() || add.CanImportMeta() {
+		t.Fatalf("CanImportMeta: 默认=%v 追加=%v，想要 true/false", def.CanImportMeta(), add.CanImportMeta())
+	}
+	writeSkill(t, extra, "locked", nil)
+	lock := `{"version":3,"skills":{"locked":{"source":"o/r","sourceType":"github","sourceUrl":"https://github.com/o/r.git","skillPath":"skills/locked/SKILL.md"}}}`
+	lockPath := filepath.Join(filepath.Dir(extra), ".skill-lock.json")
+	if err := os.WriteFile(lockPath, []byte(lock), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{"", lockPath} {
+		if ids, err := add.ImportMeta(path); !errors.Is(err, ErrImportDefaultOnly) || ids != nil {
+			t.Errorf("ImportMeta(%q) = %v, %v，想要 ErrImportDefaultOnly", path, ids, err)
+		}
+	}
+	if fileExists(filepath.Join(add.SkillPath("locked"), MetaFileName)) {
+		t.Error("被拒绝的导入不能写元数据")
+	}
+	// 默认根目录照常导入。
+	writeSkill(t, base.Root, "locked", nil)
+	if ids, err := def.ImportMeta(lockPath); err != nil || len(ids) != 1 {
+		t.Errorf("默认根目录应能导入，得到 %v, %v", ids, err)
+	}
+}
+
 // TestLibraryCorruptConfigStaysUsable 验证 config.json 损坏时仍有默认根目录。
 func TestLibraryCorruptConfigStaysUsable(t *testing.T) {
 	base, extra := newLibraryFixture(t)

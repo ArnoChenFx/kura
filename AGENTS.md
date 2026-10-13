@@ -43,7 +43,7 @@ kura 是一个**桌面技能管理器**，用 [MyGo](https://github.com/egoist/m
 
 ## 3. 领域规则（不可违反）
 
-1. **根目录来自配置，绝不硬编码**。默认根目录是 `~/.agents/skills`；其余根目录由用户在界面里添加，列表存在 `~/.kura/config.json` 的 `roots`，经 `store.Library` 读写。`.skill-lock.json` 只描述默认根目录，「导入元数据」只对它开放。
+1. **根目录来自配置，绝不硬编码**。默认根目录是 `~/.agents/skills`；其余根目录由用户在界面里添加，列表存在 `~/.kura/config.json` 的 `roots`，经 `store.Library` 读写。`.skill-lock.json` 只描述默认根目录，「导入元数据」只对它开放：界面不给追加的根目录这个按钮，`store.Config.ImportMeta` 对它们返回 `ErrImportDefaultOnly`，命令行 `import-meta` 同样拒绝（退出码 1，含 `--dry-run` 与 `--lock`）。
 2. **`~/.agents/.skill-lock.json` 是只读的**：只读入、**绝不重写**。
 3. **每个技能目录内写 `.kura-meta.json`**（`metaVersion: 1`），记录来源与时间。它自身**不计入** `contentHash`。
 4. **禁用/启用是「移动」**，不是复制、也不是标记位：技能目录在 `~/.agents/skills/` 与 `~/.kura/disabled/` 之间移动。

@@ -221,7 +221,8 @@ const usageText = `kura —— agent skills 管理器（无界面命令行）
                        从回收站恢复；--stamp 省略时取最新一次
   import-meta [--dry-run] [--lock PATH]
                        依据根目录同级的 .skill-lock.json 补写缺失的
-                       .kura-meta.json；--dry-run 只分析不写文件
+                       .kura-meta.json；--dry-run 只分析不写文件；
+                       只适用于默认目录，界面里追加的目录会被拒绝（退出码 1）
   add --local PATH [--name N]
                        从本地目录安装技能
   add --github owner/repo [--sub-path P] [--ref R] [--name N]
