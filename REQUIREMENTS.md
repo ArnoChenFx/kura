@@ -79,7 +79,7 @@ drift can be detected.
   trash/<skill>/        # removed skills with a timestamp
   snapshots/<skill>/<timestamp>/  # pre-update and pre-remove content snapshots
   roots/<id>/           # the same three directories, for each added (non-default) root
-  config.json           # roots, preferences
+  config.json           # roots, preferences (theme: system | light | dark)
 ```
 
 The default root keeps the layout above, so existing data needs no migration.
@@ -104,6 +104,26 @@ Three columns:
    metadata, location and the actions (check update, disable/enable, trash or
    restore).
 
+**Context menus** are the system's native menus, opened with the secondary mouse
+button (they do not show up in screenshots):
+
+- a skill card: open the folder, show it in the file manager, open `SKILL.md`
+  (greyed out when the skill has none), copy the path; below a separator the
+  actions that fit the card's state: an enabled skill can be disabled, checked for
+  updates or moved to the trash, a disabled one enabled or moved to the trash, a
+  trashed one restored. Right-clicking a card selects it first, so the menu always
+  acts on the skill the detail column shows. The state-changing items are greyed
+  out while the skill is busy; moving to the trash still asks for confirmation.
+- a root in the left column: open the folder, copy the path and, for an added root
+  only, remove it from the list (never touches the folder). Right-clicking a root
+  does not switch to it.
+
+**Appearance** is a switch at the foot of the left column: follow the system
+(default) / light / dark. The choice applies at once, is saved as `theme` in
+`~/.kura/config.json` (`system`, `light` or `dark`; a missing or unknown value
+means `system`) and is also given to MyGo, so the native title bar and system
+menus match.
+
 **Install skill** is a dialog: a GitHub repository (`owner/repo` or a pasted URL,
 optional subdirectory, ref and name) or a local folder (system picker, optional
 name). It installs into the selected root.
@@ -111,8 +131,14 @@ name). It installs into the selected root.
 Look: a dark, low-contrast palette taken from the reference screenshot (near
 neutral charcoal base, slightly lighter bordered cards, three grey text levels,
 mint toggles) with one muted periwinkle accent used sparingly; the light skin
-keeps the same hues. Saturated indigo/violet is explicitly unwanted. All colours
-live in `internal/ui/theme.go`.
+keeps the same hues, with the accent darkened just enough for contrast and kept
+as desaturated as the dark one. Saturated indigo/violet is explicitly unwanted.
+All colours live in `internal/ui/theme.go`.
+
+Interaction feedback: a card is ringed once, by its own border (the grid draws
+nothing around it), and brightens on hover; the toggle's track tints and its knob
+gets a halo on hover, stretches while pressed, and rings on keyboard focus; the
+pointer becomes a hand over a toggle.
 
 ## Non-goals for v1
 
