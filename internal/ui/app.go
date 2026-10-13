@@ -50,6 +50,13 @@ type App struct {
 	reveal    func(path string)
 	setSource func(mode string)
 
+	// checkUpdates 打开 MyGo 的原生更新窗口、检查 kura 应用自身的更新
+	// （生产实现是 selfupdate.CheckForUpdates，由 main.go 在窗口就绪后
+	// 注入；依赖更新插件已被挂载，未挂载时调用会 panic）。默认 nil：
+	// NewApp 不填——测试直接建 App，绝不能真的触发更新检查；只有
+	// main.go 里 SetWindow 之后才接线。nil 时按钮点下只在状态行报告。
+	checkUpdates func()
+
 	skills  []*store.Skill  // 当前目录的全部技能（启用 + 停用 + 回收站）
 	query   string          // 搜索词
 	filter  int             // 状态筛选：filterAll/filterEnabled/filterDisabled/filterTrashed
@@ -60,21 +67,22 @@ type App struct {
 	grid    myui.GridState  // 卡片网格的滚动与选择状态
 	updates map[string]bool // 最近一次检查发现有更新的技能（当前目录）
 
-	busy        map[string]bool // 正在执行操作的技能（busyKey）
-	checking    string          // 正在预览更新的技能名（空为无）
-	checkingAll bool            // 正在全部检查
-	scanning    bool            // 正在重新扫描
-	loadErr     string          // 扫描/环境错误（如根目录不存在）
-	status      string          // 底部状态行的文字
-	statusErr   bool            // 状态行是否为错误
-	confirm     confirmState    // 待确认的删除操作
-	install     installState    // 安装技能弹窗
-	pal         palette         // 本帧的表面色（由 themeMode 决定浅色/深色）
-	skin        *skin           // 本帧的皮肤；卡片网格用它的 cell 主题
-	themeMode   string          // 外观偏好：store.ThemeSystem / ThemeLight / ThemeDark
-	themeSeq    atomic.Int64    // 外观切换的序号：后台任务只执行最新一次
-	themeMu     sync.Mutex      // 串行化同步原生外观与写 config.json
-	review      reviewState     // 更新评审面板（Modal）
+	busy           map[string]bool // 正在执行操作的技能（busyKey）
+	checking       string          // 正在预览更新的技能名（空为无）
+	checkingAll    bool            // 正在全部检查
+	checkingUpdate bool            // 正在检查 kura 应用自身的更新（按钮防抖）
+	scanning       bool            // 正在重新扫描
+	loadErr        string          // 扫描/环境错误（如根目录不存在）
+	status         string          // 底部状态行的文字
+	statusErr      bool            // 状态行是否为错误
+	confirm        confirmState    // 待确认的删除操作
+	install        installState    // 安装技能弹窗
+	pal            palette         // 本帧的表面色（由 themeMode 决定浅色/深色）
+	skin           *skin           // 本帧的皮肤；卡片网格用它的 cell 主题
+	themeMode      string          // 外观偏好：store.ThemeSystem / ThemeLight / ThemeDark
+	themeSeq       atomic.Int64    // 外观切换的序号：后台任务只执行最新一次
+	themeMu        sync.Mutex      // 串行化同步原生外观与写 config.json
+	review         reviewState     // 更新评审面板（Modal）
 
 	// spawn 在后台运行 fn：生产环境为 go fn()。
 	spawn func(func())
@@ -158,6 +166,12 @@ func (a *App) publish(fn func()) {
 	a.mu.Unlock()
 	u(fn)
 }
+
+// SetCheckUpdates 注入「检查 kura 应用更新」的生产实现（main.go 在窗口
+// 就绪后调用：app.SetCheckUpdates(selfupdate.CheckForUpdates)）。只允许
+// 生产路径接线；NewApp 与测试都不填，钩子保持 nil，按钮点下只在状态行
+// 报告「更新功能未就绪」，绝不触发真实的更新检查。
+func (a *App) SetCheckUpdates(fn func()) { a.checkUpdates = fn }
 
 // SetLockPath 指定导入元数据时读取的 .skill-lock.json 路径；
 // 为空时由 store 使用默认的 ~/.agents/.skill-lock.json。
@@ -497,6 +511,26 @@ func (a *App) RevealAsync(path string) {
 // 就是对的外观。在 mygo.App.Run 之前调用（MyGo 允许这样用已存的偏好）；
 // 界面本身不依赖它：皮肤由 themeMode 决定。
 func (a *App) SyncTheme() { a.setSource(a.themeMode) }
+
+// CheckAppUpdateAsync 响应「检查更新」按钮：立刻在状态行给一句反馈
+// （更新检查与窗口都由 MyGo 更新插件异步完成，点击后界面不能毫无反应），
+// 然后经 checkUpdates 钩子打开原生更新窗口。钩子在后台调用（它立即
+// 返回、不阻塞，但走后台与其它慢调用一致）；测试注入假实现计数调用。
+func (a *App) CheckAppUpdateAsync() {
+	if a.checkingUpdate {
+		return
+	}
+	if a.checkUpdates == nil {
+		a.status, a.statusErr = "更新功能未就绪（开发构建未挂载更新插件）", true
+		return
+	}
+	a.checkingUpdate = true
+	a.status, a.statusErr = "正在检查 kura 更新…", false
+	a.spawn(func() {
+		a.checkUpdates()
+		a.publish(func() { a.checkingUpdate = false })
+	})
+}
 
 // SetThemeAsync 切换外观为 mode（store.ThemeSystem / ThemeLight / ThemeDark）。
 // 界面立刻换皮肤——皮肤由 themeMode 决定，下一帧生效；同步原生外观与写

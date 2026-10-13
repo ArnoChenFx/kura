@@ -17,9 +17,13 @@ const (
 	// 决定列数，列宽在最小宽度之上平分剩余空间。
 	cardMinWidth = 248
 	cardHeight   = 140
+	// titleBarMinHeight 是自绘标题栏的高度（DIP），与 main.go 里
+	// WindowOptions.TitleBarHeight 保持一致：全屏时窗口按钮藏起来、
+	// c.TitleBar() 返回零，高度取这个兑底，顶栏不塌。
+	titleBarMinHeight = 40
 )
 
-// View 构建 kura 主窗口的一帧，三栏结构：
+// View 构建 kura 主窗口的一帧，顶部自绘标题栏 + 三栏结构：
 //
 //	┌──────────┬──────────────────────────────┬────────────┐
 //	│ kura     │ 目录名 · 路径    刷新 检查 导入 │ 详情（选中   │
@@ -46,7 +50,9 @@ func (a *App) View(c *myui.Context) {
 	a.syncSelection(rows)
 	sel := a.selected()
 
-	myui.Row(c).Fill().AlignItems(myui.Stretch).Children(func() {
+	a.viewTitlebar(c)
+	// 三栏占满标题栏以下的剩余高度；标题栏自身不参与收缩（见 viewTitlebar）。
+	myui.Row(c).Grow(1).MinHeight(0).AlignItems(myui.Stretch).Children(func() {
 		a.viewRoots(c)
 		myui.Divider(c)
 		myui.Column(c).Grow(1).MinWidth(0).FillHeight().Background(a.pal.canvas).Children(func() {
@@ -75,6 +81,28 @@ func (a *App) View(c *myui.Context) {
 
 	// 安装技能弹窗。
 	a.viewInstallModal(c)
+}
+
+// viewTitlebar 是自绘标题栏：跨整个窗口宽度的一条顶栏，放在三栏之上。
+// 窗口用 mygo.TitleBarHidden 隐藏了系统标题栏但保留右上角的窗口按钮，按钮
+// 占掉的区域经 c.TitleBar() 拿到（Height 是顶部那条带的高度，Right 是从右
+// 边缘算的宽度），内边距避开它，让标题文字不被按钮压住；全屏时窗口按钮
+// 藏起来、c.TitleBar() 返回零，高度取 titleBarMinHeight 兜底，顶栏不塌。
+// 整条 DragWindow()：拖动它移动窗口，双击等于标题栏的双击（最大化/还原）。
+// 按钮不放在这里——可交互的元素会吃掉拖动手势，所以标题栏只放标识与名字。
+func (a *App) viewTitlebar(c *myui.Context) {
+	t := c.Theme()
+	bar := c.TitleBar()
+	myui.Row(c).FillWidth().Shrink(0).Height(max(bar.Height, titleBarMinHeight)).
+		Padding(0, bar.Right+12, 0, bar.Left+12).Background(a.pal.sidebar).
+		AlignItems(myui.Center).Gap(t.Space(2.5)).DragWindow().Children(func() {
+		// 标识：强调色方块里的 K，与左栏品牌块同一做法。
+		myui.Box(c).Size(t.Space(6), t.Space(6)).Radius(t.Radius - 2).Background(t.Accent).
+			Center().Children(func() {
+			myui.Text(c, "K").Bold().FontSize(t.FontSize - 1).TextColor(t.AccentText)
+		})
+		myui.Text(c, "kura").Bold().SingleLine()
+	})
 }
 
 // viewRoots 是左栏：品牌、技能目录列表（每项带在用技能数）与底部的
@@ -122,6 +150,28 @@ func (a *App) viewRoots(c *myui.Context) {
 			})
 			if ab.Clicked() {
 				a.AddRootAsync()
+			}
+			// 检查 kura 应用自身的更新（区别于技能级「检查更新」）：打开
+			// MyGo 的原生更新窗口。真实检查经 a.checkUpdates 钩子走
+			// selfupdate.CheckForUpdates，生产环境在 main.go 里注入；测试
+			// 注入假实现，绝不真的触发更新检查（未挂载更新插件会 panic）。
+			// 点击立刻在状态行给一句反馈；更新窗口由插件自己弹出。
+			cb := myui.ButtonBase(c).Label("检查更新").Tooltip("检查 kura 应用更新").
+				FillWidth().Disabled(a.checkingUpdate).
+				Justify(myui.Start).Gap(t.Space(2)).Padding(t.Space(2), t.Space(3)).
+				Radius(t.Radius).Border(1, t.Border).TextColor(a.pal.textMid)
+			if cb.Hovered() && !a.checkingUpdate {
+				cb.Background(t.SurfaceHover).TextColor(t.Text)
+			}
+			if a.checkingUpdate {
+				cb.Opacity(0.45)
+			}
+			cb.Children(func() {
+				myui.Icon(c, iconUpdate)
+				myui.Text(c, "检查更新")
+			})
+			if cb.Clicked() {
+				a.CheckAppUpdateAsync()
 			}
 			a.viewThemeSwitch(c)
 		})
