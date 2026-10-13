@@ -66,10 +66,22 @@ func lockSubPath(e LockEntry) string {
 	return strings.TrimSuffix(p, "/")
 }
 
+// ErrImportDefaultOnly 表示对追加的根目录做「导入元数据」：.skill-lock.json
+// 只描述默认根目录，别的目录不能用它导入。
+var ErrImportDefaultOnly = errors.New("store: .skill-lock.json 只描述默认技能目录，导入元数据只适用于默认目录")
+
+// CanImportMeta 报告该根目录能否「导入元数据」：只有默认根目录可以。
+// 追加的根目录（Library.Config 给它们非空的 Scope）不行。界面与命令行
+// 都以此为准，不各自判断。
+func (c *Config) CanImportMeta() bool { return c.Scope == "" }
+
 // ImportMeta 用 .skill-lock.json 补齐根目录下缺失的 .kura-meta.json。
 // 只处理 lock 文件中列出的技能；已有元数据的技能一律跳过（绝不覆盖）。
-// 返回本次导入的技能 id 列表。
+// 追加的根目录返回 ErrImportDefaultOnly。返回本次导入的技能 id 列表。
 func (c *Config) ImportMeta(lockPath string) ([]string, error) {
+	if !c.CanImportMeta() {
+		return nil, fmt.Errorf("%w: %s", ErrImportDefaultOnly, c.Root)
+	}
 	if lockPath == "" {
 		var err error
 		if lockPath, err = DefaultLockPath(); err != nil {

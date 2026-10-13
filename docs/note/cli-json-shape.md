@@ -97,6 +97,10 @@ future UI（里程碑 2/4 的窗口版）可直接消费。来源代码：`inter
 
 `--dry-run` 时用 `wouldImport`（且绝不写文件）；实际导入用 `imported`。
 
+`.skill-lock.json` 只描述默认根目录，所以 `--root` 指向界面里追加的根目录时
+（含 `--dry-run` 与 `--lock`）直接失败：退出码 1，stdout 无输出，错误按全局
+约定写到 stderr。
+
 ## update --check（里程碑 4）
 
 ```json
