@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -31,7 +32,36 @@ var (
 	ErrDefaultRoot = errors.New("store: 默认技能目录不能移除")
 	// ErrNotDir 表示要添加的路径不存在或不是文件夹。
 	ErrNotDir = errors.New("store: 路径不存在或不是文件夹")
+	// ErrUnknownTheme 表示外观偏好不是 system、light 或 dark。
+	ErrUnknownTheme = errors.New("store: 外观只能是 system、light 或 dark")
 )
+
+// 外观偏好的取值（config.json 的 theme）。
+const (
+	// ThemeSystem 跟随系统的浅色/深色设置，是默认值。
+	ThemeSystem = "system"
+	// ThemeLight 总是浅色。
+	ThemeLight = "light"
+	// ThemeDark 总是深色。
+	ThemeDark = "dark"
+)
+
+// NormalizeTheme 把外观偏好规范成三个取值之一：空串是跟随系统；
+// 不认识的值返回 ErrUnknownTheme。
+func NormalizeTheme(mode string) (string, error) {
+	switch mode {
+	case "", ThemeSystem:
+		return ThemeSystem, nil
+	case ThemeLight, ThemeDark:
+		return mode, nil
+	}
+	return "", fmt.Errorf("%w: %q", ErrUnknownTheme, mode)
+}
+
+// configMu 串行化对 config.json 的「读—改—写」。窗口里改外观与增删目录是
+// 各自的后台任务，不串行的话，一个任务会覆盖另一个刚写下的改动，或者读到
+// 对方写了一半的文件，把它当成损坏的配置覆盖掉。
+var configMu sync.Mutex
 
 // Library 是全部技能根目录。Roots[0] 是默认根目录。
 type Library struct {
@@ -39,16 +69,23 @@ type Library struct {
 	Home string
 	// Roots 是根目录的绝对路径，Roots[0] 为默认根目录。
 	Roots []string
+	// Theme 是读取时 config.json 里的外观偏好（已规范，缺省为 ThemeSystem）。
+	// 只在启动时用来定初始外观；改外观走 SetTheme，它直接读写文件。
+	Theme string
 }
 
 // LoadLibrary 以 base 的根目录为默认根目录、base.Home 为数据目录，读取
 // config.json 里追加的根目录。配置文件不存在时只有默认根目录；文件损坏时
 // 同样返回只含默认根目录的 Library，并附带错误，调用方可继续使用。
 func LoadLibrary(base *Config) (*Library, error) {
-	l := &Library{Home: base.Home, Roots: []string{filepath.Clean(base.Root)}}
+	l := &Library{Home: base.Home, Roots: []string{filepath.Clean(base.Root)}, Theme: ThemeSystem}
 	hc, _, err := LoadHomeConfig(base)
 	if err != nil {
 		return l, err
+	}
+	// 写坏或手改出的未知外观按跟随系统处理，不当作错误。
+	if mode, terr := NormalizeTheme(hc.Theme); terr == nil {
+		l.Theme = mode
 	}
 	for _, r := range hc.Roots {
 		if r == "" || l.index(r) >= 0 {
@@ -122,13 +159,44 @@ func (l *Library) RemoveRoot(root string) error {
 	return nil
 }
 
-// save 把根目录列表写回 config.json，保留已有的 createdAt。
+// SetTheme 把外观偏好写进 config.json（其余内容原样保留）。mode 不是
+// system、light、dark 时返回 ErrUnknownTheme，不写盘。config.json 损坏时
+// 它被只含这一项偏好的新文件覆盖，与 save 对根目录列表的处理一致。
+func (l *Library) SetTheme(mode string) error {
+	mode, err := NormalizeTheme(mode)
+	if err != nil {
+		return err
+	}
+	configMu.Lock()
+	defer configMu.Unlock()
+	c := &Config{Root: l.Roots[0], Home: l.Home}
+	hc, _, err := LoadHomeConfig(c)
+	if err != nil {
+		hc = &HomeConfig{Roots: append([]string(nil), l.Roots...)}
+	}
+	if hc.CreatedAt == "" {
+		hc.CreatedAt = time.Now().UTC().Format(time.RFC3339)
+	}
+	hc.Theme = mode
+	if err := SaveHomeConfig(c, hc); err != nil {
+		return err
+	}
+	l.Theme = mode
+	return nil
+}
+
+// save 把根目录列表写回 config.json，保留已有的 createdAt 与外观偏好。
 func (l *Library) save(roots []string) error {
+	configMu.Lock()
+	defer configMu.Unlock()
 	c := &Config{Root: roots[0], Home: l.Home}
 	hc, _, err := LoadHomeConfig(c)
 	if err != nil {
-		// 损坏的配置文件被新列表覆盖：根目录列表是它唯一有意义的内容。
+		// 损坏的配置文件被新列表覆盖；本次运行里设过的外观偏好带过去。
 		hc = &HomeConfig{}
+		if l.Theme != ThemeSystem {
+			hc.Theme = l.Theme
+		}
 	}
 	if hc.CreatedAt == "" {
 		hc.CreatedAt = time.Now().UTC().Format(time.RFC3339)
