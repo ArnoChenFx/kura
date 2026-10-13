@@ -68,7 +68,9 @@ func edgeGroups(img *image.RGBA, region image.Rectangle, col myui.Color) (rows, 
 func checkCardRing(t *testing.T, tt *myui.Tester, sk *skin, w int, bg, border myui.Color, dark bool) {
 	t.Helper()
 	img := tt.Image()
-	region := image.Rect(rootsWidth+2, 118, w-detailWidth-2, 770)
+	// 118 = 中栏头部的 78px + 自绘标题栏的 40px（viewTitlebar）：窗口加了
+	// 顶栏后全部内容整体下移 40px，区域起点跟着下移。
+	region := image.Rect(rootsWidth+2, 118+titleBarMinHeight, w-detailWidth-2, 770+titleBarMinHeight)
 	rows, cols := edgeGroups(img, region, border)
 	one := func(g [][2]int) bool { return len(g) == 2 && g[0][0] == g[0][1] && g[1][0] == g[1][1] }
 	if !one(rows) || !one(cols) {
