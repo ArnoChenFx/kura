@@ -53,6 +53,8 @@ kura 是一个**桌面技能管理器**，用 [MyGo](https://github.com/egoist/m
 8. 元数据损坏**不能让应用崩溃**：返回错误、界面保持可用。`config.json` 损坏同理：`LoadLibrary` 返回只含默认根目录的列表并附带错误，界面报告它并继续可用。
 9. **每个根目录的状态互相隔离**：默认根目录沿用原有布局（`~/.kura/disabled|trash|snapshots`，已有数据无需迁移）；追加的根目录用 `~/.kura/roots/<id>/disabled|trash|snapshots`（`<id>` 是规范化路径 SHA-256 的前 12 位，见 `store.RootID`）。两个根目录里的同名技能互不干扰。**从列表移除一个根目录只改 `config.json`，绝不动磁盘上的技能。** 命令行的 `--root` 指向列表里的根目录时落到同一处（`cli.resolveConfig` 经 `Library.Config`）。
 10. **外观偏好存在 `config.json` 的 `theme`**（`system` / `light` / `dark`；缺省与手改出的未知值都按 `system`，不算错误）。读写只经 `store.Library`（`Theme`、`SetTheme`，`store.NormalizeTheme` 规范化）。`config.json` 的「读—改—写」一律持 `configMu`（`SetTheme` 与 `save` 都已持有）：外观与目录列表是各自的后台任务，不串行会互相覆盖；新增写 `config.json` 的路径必须照做。
+11. **技能区的排列模式存在 `config.json` 的 `view`**（`grid` / `list`；缺省与手改出的未知值都按 `grid`，不算错误）。读写只经 `store.Library`（`View`、`SetView`，`store.NormalizeView` 规范化），与 `theme` 一样是 `configMu` 下的「读—改—写」；界面切换走 `SetViewAsync`（立刻换排列，后台写盘，失败只在状态行报告）。默认是卡片网格。
+12. **翻译 API 的凭据与全局目标语言存在 `~/.kura/settings.json`**（`baseUrl` / `apiKey` / `model` / `targetLang`）。密钥**明文**保存、文件权限 0600：这是用户明确选择的本地单人方案，不接系统凭据管理器、不做加密；密钥绝不能进日志、错误信息、测试夹具或任何导出文件。读写只经 `store.LoadSettings` / `SaveSettings`；目标语言一律 `store.NormalizeTargetLang` 规范化（不认识的值报 `ErrUnknownLang`，**不猜**）。**翻译只用于界面显示**：译文只活在内存里（`internal/ui/translate.go` 的 `translateState`），绝不写技能目录、不改 `SKILL.md`、不写 `.kura-meta.json`、不落任何缓存文件。未配置齐全（`Settings.Ready()`）时不发请求，界面给引导。
 
 kura 自己的目录：
 
@@ -62,7 +64,8 @@ kura 自己的目录：
   trash/<skill>/                 # 已移除的技能（带时间戳）
   snapshots/<skill>/<timestamp>/ # 更新前/移除前的快照
   roots/<id>/                    # 追加根目录各自的 disabled/ trash/ snapshots/
-  config.json                    # 根目录与偏好（theme：system | light | dark）
+  config.json                    # 根目录与偏好（theme：system | light | dark；view：grid | list）
+  settings.json                  # 翻译 API 与全局目标语言（密钥明文，权限 0600）
 ```
 
 ---
@@ -92,6 +95,10 @@ kura 自己的目录：
 - **部件绑定的局部变量在构建结束或查询响应时才被写入**：构建中途直接比较它，拿不到这一次的点击，下一遍构建又从应用状态重新推出，点击就丢了。分段控件用 `Track.Changed()`、开关用 `Changed()` 在同一次构建里取到新值（见 `viewThemeSwitch`、`viewCard` 里的开关），或者直接绑应用的持久字段（`a.filter`、`a.rootSel`）。
 - **原生右键菜单**（`Element.ContextMenu`）不出现在截图里。菜单项的 `Chosen()` 在选择后的下一帧报告，副作用只能放在它里面；测试用 `tt.RightClick` / `tt.Menu()` / `tt.ChooseMenuItem`（见 `menus_test.go`）。
 - **外观**：`App.themeMode` 决定皮肤（`View` 开头 `kuraScheme.apply(c, a.themeMode)`，跟随系统时读系统外观）。改它一律走 `SetThemeAsync`：立刻换皮肤，后台同步原生外观（`mygo.Theme.SetSource`）并写 `config.json`，连续切换只有最新一次执行，写盘失败只在状态行报告、不回滚皮肤。启动时 `main.go` 在 `App.Run` 之前调 `app.SyncTheme()`。
+- **窗口没有系统标题栏**（`main.go` 用 `mygo.TitleBarHidden` + `TitleBarHeight: 40`，但保留系统的最小化/最大化/关闭按钮）。`viewTitlebar` 自绘一条顶栏：高度取 `max(c.TitleBar().Height, titleBarMinHeight)`，内边距经 `c.TitleBar()` 的 `Left`/`Right` 避开窗口按钮，整条 `DragWindow()`（拖动窗口，双击 = 最大化/还原）。**标题栏里不放可交互元素**——它们会吃掉拖动手势。
+- **要能选中拷贝的文字放进 `Selectable()` 容器；容器内的控件必须 `Unselectable()`**，否则控件交互与选择打架（见 `detailGroup` 的 `selectable` 参数）。
+- **详情页的「概览 / 全文」tab 用 `myui.Tabs`**，tab 状态 `detailTab` 配 `detailSel`：换技能时重置回概览，避免看到上一个技能的全文。全文页在后台读 `SKILL.md`（`startFullTextLoad`，`spawn` 进 goroutine，按技能名缓存进 `skillDocs`），扫描后缓存整体失效并用 `docGen` 作废在途结果；渲染用 `internal/ui/markdown.go` 的 `renderMarkdown`（自写，不引第三方依赖）。
+- **翻译开关只切显示**：`App.trans.on` 为真时，内存里的译文缓存（`translateState.items`，键形如 `card:<技能名>:description`）有值就显示译文、没有就回退原文，**界面永不留白**；发起请求只在 `ensureTranslations` / `TranslateAsync`（后台 + 超时），渲染路径只读缓存。翻译配置变更时 `translateState.epoch` 递增，在途结果作废。
 - 详见 `.agents/skills/mygo-maintenance/SKILL.md`；MyGo 的 API 以**固定版本源码**为准（`go list -m -f '{{.Dir}}' github.com/egoist/mygo`），不要凭记忆猜。
 
 ### CLI 退出码（已固定，不要改）
