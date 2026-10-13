@@ -148,6 +148,9 @@ type HomeConfig struct {
 	Roots []string `json:"roots"`
 	// Theme 是外观偏好：ThemeSystem、ThemeLight 或 ThemeDark；空串等同跟随系统。
 	Theme string `json:"theme,omitempty"`
+	// View 是技能区的排列模式：ViewGrid（卡片网格）或 ViewList（两行列表）；
+	// 空串等同卡片网格。
+	View string `json:"view,omitempty"`
 	// CreatedAt 是配置首次创建时间（RFC3339）。
 	CreatedAt string `json:"createdAt,omitempty"`
 }

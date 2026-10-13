@@ -34,6 +34,8 @@ var (
 	ErrNotDir = errors.New("store: 路径不存在或不是文件夹")
 	// ErrUnknownTheme 表示外观偏好不是 system、light 或 dark。
 	ErrUnknownTheme = errors.New("store: 外观只能是 system、light 或 dark")
+	// ErrUnknownView 表示排列模式不是 grid 或 list。
+	ErrUnknownView = errors.New("store: 排列模式只能是 grid 或 list")
 )
 
 // 外观偏好的取值（config.json 的 theme）。
@@ -58,6 +60,26 @@ func NormalizeTheme(mode string) (string, error) {
 	return "", fmt.Errorf("%w: %q", ErrUnknownTheme, mode)
 }
 
+// 技能区排列模式的取值（config.json 的 view）。
+const (
+	// ViewGrid 是卡片网格，是默认值。
+	ViewGrid = "grid"
+	// ViewList 是两行列表：一个技能占两行（名字与控件、单行描述）。
+	ViewList = "list"
+)
+
+// NormalizeView 把排列模式规范成两个取值之一：空串是卡片网格；
+// 不认识的值返回 ErrUnknownView。
+func NormalizeView(v string) (string, error) {
+	switch v {
+	case "", ViewGrid:
+		return ViewGrid, nil
+	case ViewList:
+		return v, nil
+	}
+	return "", fmt.Errorf("%w: %q", ErrUnknownView, v)
+}
+
 // configMu 串行化对 config.json 的「读—改—写」。窗口里改外观与增删目录是
 // 各自的后台任务，不串行的话，一个任务会覆盖另一个刚写下的改动，或者读到
 // 对方写了一半的文件，把它当成损坏的配置覆盖掉。
@@ -72,13 +94,16 @@ type Library struct {
 	// Theme 是读取时 config.json 里的外观偏好（已规范，缺省为 ThemeSystem）。
 	// 只在启动时用来定初始外观；改外观走 SetTheme，它直接读写文件。
 	Theme string
+	// View 是读取时 config.json 里的排列模式（已规范，缺省为 ViewGrid）。
+	// 与 Theme 一样只在启动时读；改排列模式走 SetView，它直接读写文件。
+	View string
 }
 
 // LoadLibrary 以 base 的根目录为默认根目录、base.Home 为数据目录，读取
 // config.json 里追加的根目录。配置文件不存在时只有默认根目录；文件损坏时
 // 同样返回只含默认根目录的 Library，并附带错误，调用方可继续使用。
 func LoadLibrary(base *Config) (*Library, error) {
-	l := &Library{Home: base.Home, Roots: []string{filepath.Clean(base.Root)}, Theme: ThemeSystem}
+	l := &Library{Home: base.Home, Roots: []string{filepath.Clean(base.Root)}, Theme: ThemeSystem, View: ViewGrid}
 	hc, _, err := LoadHomeConfig(base)
 	if err != nil {
 		return l, err
@@ -86,6 +111,10 @@ func LoadLibrary(base *Config) (*Library, error) {
 	// 写坏或手改出的未知外观按跟随系统处理，不当作错误。
 	if mode, terr := NormalizeTheme(hc.Theme); terr == nil {
 		l.Theme = mode
+	}
+	// 同理：未知的排列模式按卡片网格处理，不当作错误。
+	if v, verr := NormalizeView(hc.View); verr == nil {
+		l.View = v
 	}
 	for _, r := range hc.Roots {
 		if r == "" || l.index(r) >= 0 {
@@ -173,6 +202,9 @@ func (l *Library) SetTheme(mode string) error {
 	hc, _, err := LoadHomeConfig(c)
 	if err != nil {
 		hc = &HomeConfig{Roots: append([]string(nil), l.Roots...)}
+		if l.View != "" && l.View != ViewGrid {
+			hc.View = l.View
+		}
 	}
 	if hc.CreatedAt == "" {
 		hc.CreatedAt = time.Now().UTC().Format(time.RFC3339)
@@ -185,7 +217,37 @@ func (l *Library) SetTheme(mode string) error {
 	return nil
 }
 
-// save 把根目录列表写回 config.json，保留已有的 createdAt 与外观偏好。
+// SetView 把排列模式写进 config.json（其余内容原样保留）。v 不是 grid、
+// list 时返回 ErrUnknownView，不写盘。与 SetTheme 一样是持 configMu 的
+// 「读—改—写」；config.json 损坏时它被只含根目录列表、外观与这一项偏好的
+// 新文件覆盖。
+func (l *Library) SetView(v string) error {
+	v, err := NormalizeView(v)
+	if err != nil {
+		return err
+	}
+	configMu.Lock()
+	defer configMu.Unlock()
+	c := &Config{Root: l.Roots[0], Home: l.Home}
+	hc, _, err := LoadHomeConfig(c)
+	if err != nil {
+		hc = &HomeConfig{Roots: append([]string(nil), l.Roots...)}
+		if l.Theme != ThemeSystem {
+			hc.Theme = l.Theme
+		}
+	}
+	if hc.CreatedAt == "" {
+		hc.CreatedAt = time.Now().UTC().Format(time.RFC3339)
+	}
+	hc.View = v
+	if err := SaveHomeConfig(c, hc); err != nil {
+		return err
+	}
+	l.View = v
+	return nil
+}
+
+// save 把根目录列表写回 config.json，保留已有的 createdAt、外观与排列偏好。
 func (l *Library) save(roots []string) error {
 	configMu.Lock()
 	defer configMu.Unlock()
@@ -196,6 +258,9 @@ func (l *Library) save(roots []string) error {
 		hc = &HomeConfig{}
 		if l.Theme != ThemeSystem {
 			hc.Theme = l.Theme
+		}
+		if l.View != "" && l.View != ViewGrid {
+			hc.View = l.View
 		}
 	}
 	if hc.CreatedAt == "" {

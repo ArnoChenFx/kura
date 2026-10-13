@@ -60,7 +60,7 @@ func (a *App) View(c *myui.Context) {
 			a.viewMainHeader(c)
 			a.viewFilterBar(c)
 			a.viewErrorBanner(c)
-			a.viewGrid(c, rows)
+			a.viewSkills(c, rows)
 			a.viewStatusBar(c)
 		})
 		if sel != nil {
@@ -343,7 +343,57 @@ func (a *App) viewFilterBar(c *myui.Context) {
 		myui.Segmented(c, &a.filter,
 			"全部 "+itoa(en+dis), "启用 "+itoa(en), "停用 "+itoa(dis), "回收站 "+itoa(trash)).
 			Shrink(0)
+		myui.Box(c).Width(t.Space(1))
+		a.viewModeSwitch(c)
 	})
+}
+
+// viewModes 是排列模式开关的各个分段，顺序即分段顺序。
+var viewModes = []struct {
+	mode  string
+	label string
+	icon  *myui.SVG
+}{
+	{store.ViewGrid, "卡片网格", iconGrid},
+	{store.ViewList, "列表", iconRows},
+}
+
+// viewIndex 返回排列模式在 viewModes 里的位置，不认识的当作卡片网格。
+func viewIndex(mode string) int {
+	for i, m := range viewModes {
+		if m.mode == mode {
+			return i
+		}
+	}
+	return 0
+}
+
+// viewModeSwitch 是筛选栏右端的排列开关：两个图标分段（卡片网格 / 列表），
+// 选中的分段浮起，写法同 viewThemeSwitch。分段的点击在构建结束或查询响应时
+// 才写进 sel，所以靠 Changed 在同一次构建里取到新选择再交给 SetViewAsync
+// （幂等）；sel 每次构建都从 viewMode 重新推出。Shrink(0)：窄窗口里筛选栏
+// 换行时它不被挤扁。
+func (a *App) viewModeSwitch(c *myui.Context) {
+	t := c.Theme()
+	sel := viewIndex(a.viewMode)
+	seg := myui.SegmentedBase(c, &sel, len(viewModes))
+	track := seg.Track.Label("排列").Padding(t.Space(0.5)).Gap(t.Space(0.5)).
+		Radius(t.Radius).Background(a.pal.card).Border(1, a.pal.line).Shrink(0).Children(func() {
+		for i, m := range viewModes {
+			b := seg.Segment(i).Label(m.label).Tooltip(m.label).
+				Padding(t.Space(1.5), t.Space(2)).Radius(t.Radius - 2).TextColor(t.TextMuted)
+			switch {
+			case i == sel:
+				b.Background(t.SurfacePressed).TextColor(t.Text)
+			case b.Hovered():
+				b.Background(t.SurfaceHover).TextColor(t.Text)
+			}
+			b.Children(func() { myui.Icon(c, m.icon).FontSize(t.FontSize + 1) })
+		}
+	})
+	if track.Changed() {
+		a.SetViewAsync(viewModes[sel].mode)
+	}
 }
 
 // viewErrorBanner 是全局错误横幅：目录缺失或扫描失败时出现在卡片上方。
@@ -358,6 +408,130 @@ func (a *App) viewErrorBanner(c *myui.Context) {
 		Children(func() {
 			myui.Text(c, a.loadErr).SingleLine().TextColor(t.Danger)
 		})
+}
+
+// viewSkills 按排列模式画技能区：卡片网格（默认）或两行列表。两种排列共用
+// 同一份筛选后的 rows 与选中状态（selName），切换模式不丢选中。
+func (a *App) viewSkills(c *myui.Context, rows []*store.Skill) {
+	if a.viewMode == store.ViewList {
+		a.viewList(c, rows)
+		return
+	}
+	a.viewGrid(c, rows)
+}
+
+// viewList 是两行列表：每个技能一行（viewRow），整体可滚动。选中直接以
+// selName 为准，不引入网格的下标选中状态。没有技能时复用网格的空态。
+func (a *App) viewList(c *myui.Context, rows []*store.Skill) {
+	if len(rows) == 0 {
+		a.viewGridEmpty(c)
+		return
+	}
+	t := c.Theme()
+	myui.Scroll(c).Grow(1).FillWidth().Children(func() {
+		myui.Column(c).FillWidth().Gap(t.Space(1.5)).
+			Padding(0, t.Space(5), t.Space(3), t.Space(5)).Children(func() {
+			for _, s := range rows {
+				a.viewRow(c, s, s.Name == a.selName)
+			}
+		})
+	})
+}
+
+// viewRow 是列表里的一个技能，占两行：
+//
+//	[头像] 名字 · 来源 …… [标签] [开关 / 恢复 / 转圈]
+//	       描述（单行，超出省略）
+//
+// 行为与卡片一致：点击选中、右键先选中再弹同一份菜单；停用与回收站的名字
+// 变淡，回收站加删除线并把开关换成「恢复」。行自己画选中与悬停（同一圈边框）。
+func (a *App) viewRow(c *myui.Context, s *store.Skill, selected bool) {
+	t := c.Theme()
+	busy := a.isBusy(s.Name)
+	dim := s.State != store.StateEnabled
+	row := myui.ButtonBase(c).Key(s.Name).FillWidth().Justify(myui.Start).
+		Padding(t.Space(2.5), t.Space(3)).Radius(t.Radius + 2)
+	bg, border := a.pal.card, a.pal.line
+	switch {
+	case selected:
+		bg, border = a.pal.cardSel, t.Accent
+	case row.Hovered():
+		bg, border = a.pal.cardHover, a.pal.lineHover
+	}
+	row.Background(bg).Border(1, border)
+	// 右键先选中这一行：菜单作用的就是右栏正显示的技能（同卡片，放在菜单的
+	// 构建函数里）。
+	row.ContextMenu(func(m *myui.Menu) {
+		if a.selName != s.Name {
+			a.selName = s.Name
+			c.Invalidate()
+		}
+		a.cardMenu(c, m, s)
+	})
+	row.Children(func() {
+		myui.Column(c).Grow(1).MinWidth(0).Gap(t.Space(1.5)).Children(func() {
+			// 第 1 行：头像、名字、来源、标签 + 右侧控件。
+			myui.Row(c).FillWidth().Gap(t.Space(3)).AlignItems(myui.Center).Children(func() {
+				avatar(c, a.pal, s.Name, t.Space(7), dim)
+				name := myui.Text(c, s.Name).SingleLine().FontWeight(600).MinWidth(0)
+				if dim {
+					name.TextColor(t.TextMuted)
+				}
+				if s.State == store.StateTrashed {
+					name.Strikethrough()
+				}
+				myui.Row(c).Grow(1).MinWidth(0).Gap(t.Space(1)).AlignItems(myui.Center).Children(func() {
+					myui.Icon(c, sourceIcon(s)).TextColor(t.TextMuted).FontSize(t.FontSize - 2).Shrink(0)
+					myui.Text(c, cardSource(s)).SingleLine().MinWidth(0).
+						FontSize(t.FontSize - 2).TextColor(t.TextMuted)
+				})
+				// 标签放在控件左侧，不挤压名字：只在有话要说时出现。
+				if a.updates[s.Name] {
+					pill(c, "有更新", t.Accent)
+				}
+				switch s.State {
+				case store.StateDisabled:
+					pill(c, "已停用", t.Warning)
+				case store.StateTrashed:
+					pill(c, "回收站", t.Danger)
+				}
+				if s.MetaErr != "" {
+					pill(c, "元数据损坏", t.Danger)
+				} else if !s.HasSKILLMD && s.State != store.StateTrashed {
+					pill(c, "缺少 SKILL.md", t.Warning)
+				}
+				switch {
+				case busy:
+					myui.Spinner(c)
+				case s.State == store.StateTrashed:
+					ghostButton(c, iconRestore, "恢复", false, func() { a.RestoreAsync(s.Name) })
+				default:
+					// 同卡片：Changed 返回 true 的这次构建里，on 已是目标状态。
+					on := s.State == store.StateEnabled
+					sw := kuraSwitch(c, &on, a.pal.toggle).Label(s.Name + " 开关")
+					if sw.Changed() {
+						a.ToggleAsync(s.Name, on)
+					}
+				}
+			})
+			// 第 2 行：描述，单行省略；左缩进与名字对齐（头像宽 + 间距）。
+			desc, color := s.Description, t.TextMuted
+			if desc == "" {
+				desc, color = "没有描述", t.TextMuted.Alpha(0.6)
+			}
+			// 缩进用占位盒子而不是外边距：FillWidth 加外边距会比父容器宽出缩进，
+			// 省略号就画到行边框之外。
+			myui.Row(c).FillWidth().Children(func() {
+				myui.Box(c).Width(t.Space(10)).Shrink(0)
+				myui.Text(c, desc).SingleLine().FontSize(t.FontSize - 1).TextColor(color).
+					Grow(1).MinWidth(0)
+			})
+		})
+	})
+	if row.Clicked() && a.selName != s.Name {
+		a.selName = s.Name
+		c.Invalidate()
+	}
 }
 
 // viewGrid 是技能卡片网格：按宽度自动换列，只构建可见的行。
