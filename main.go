@@ -23,14 +23,18 @@ func main() {
 		log.Fatal(err)
 	}
 	app := kuraui.NewApp(cfg)
+	// 外观偏好（~/.kura/config.json 的 theme）在 App.Run 之前同步给 MyGo
+	// （MyGo 允许这样用已存的偏好），原生标题栏与系统菜单从第一帧起就是
+	// 所选的外观。
+	app.SyncTheme()
 
 	mygo.App.WhenReady(func() {
 		win := mygo.NewWindow(mygo.WindowOptions{
 			Title:     "kura",
-			Width:     980,
-			Height:    640,
-			MinWidth:  720,
-			MinHeight: 460,
+			Width:     1200,
+			Height:    760,
+			MinWidth:  880,
+			MinHeight: 520,
 			// 记住上次窗口位置与大小。
 			StateKey: "main",
 			// The window shows the interface MyGo draws, not a web page.

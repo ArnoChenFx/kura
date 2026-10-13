@@ -143,7 +143,8 @@ func newFlagSet(name string, stderr io.Writer, g *globalFlags, pre *globalFlags)
 
 // resolveConfig 把 flag 与环境变量合成为 store.Config。
 // 优先级：flag > 环境变量 > 默认值；root/home 都转为绝对路径，
-// 保证 JSON 输出中的路径稳定且与工作目录无关。
+// 保证 JSON 输出中的路径稳定且与工作目录无关。root 是界面里添加过的
+// 目录时，使用该目录在 Library 里的私有状态位置。
 func resolveConfig(g *globalFlags) (*store.Config, error) {
 	def, err := store.DefaultConfig()
 	if err != nil {
@@ -157,7 +158,15 @@ func resolveConfig(g *globalFlags) (*store.Config, error) {
 	if abs, err := filepath.Abs(home); err == nil {
 		home = abs
 	}
-	return store.NewConfig(root, home)
+	base, err := store.NewConfig(def.Root, home)
+	if err != nil {
+		return nil, err
+	}
+	// 界面里追加的根目录有各自的 disabled/trash/snapshots（Library 决定），
+	// 命令行用 --root 指向它时必须落到同一处。config.json 损坏不影响命令行：
+	// LoadLibrary 仍返回只含默认根目录的列表，此时沿用原有布局。
+	lib, _ := store.LoadLibrary(base)
+	return lib.Config(root), nil
 }
 
 // firstNonEmpty 返回第一个非空字符串（全空返回空串）。
@@ -212,7 +221,8 @@ const usageText = `kura —— agent skills 管理器（无界面命令行）
                        从回收站恢复；--stamp 省略时取最新一次
   import-meta [--dry-run] [--lock PATH]
                        依据根目录同级的 .skill-lock.json 补写缺失的
-                       .kura-meta.json；--dry-run 只分析不写文件
+                       .kura-meta.json；--dry-run 只分析不写文件；
+                       只适用于默认目录，界面里追加的目录会被拒绝（退出码 1）
   add --local PATH [--name N]
                        从本地目录安装技能
   add --github owner/repo [--sub-path P] [--ref R] [--name N]

@@ -60,19 +60,6 @@ func stateBadge(c *myui.Context, s store.State) {
 	})
 }
 
-// countChip 是头部的一枚计数：状态点 + 「状态 数量」一个文本节点。
-// 单节点让无障碍与测试都能读到完整的「已启用 3」；颜色统一用弱化色，
-// 状态由色点表达。
-func countChip(c *myui.Context, s store.State, n int) {
-	t := c.Theme()
-	myui.Row(c).Shrink(0).AlignItems(myui.Center).Gap(t.Space(1.5)).
-		Children(func() {
-			stateDot(c, s)
-			myui.Text(c, stateText(s)+" "+itoa(n)).SingleLine().
-				FontSize(t.FontSize - 1).TextColor(t.TextMuted)
-		})
-}
-
 // itoa 把小整数转成字符串（计数、±行数都在用）。
 func itoa(n int) string {
 	if n == 0 {
@@ -161,25 +148,11 @@ func shortCommit(s string) string {
 // 对齐、与值的第一行对齐；wrap 允许长值换行。
 func metaField(c *myui.Context, k, v string, wrap bool) {
 	myui.Field(c, k, func() {
-		t := myui.Text(c, v)
+		t := myui.Text(c, v).TextColor(c.Theme().Text)
 		if !wrap {
 			t = t.SingleLine()
 		}
 	})
-}
-
-// rowCaption 生成列表行第二行的文案：来源 + 补充说明（缺 SKILL.md /
-// 元数据损坏），用统一的 TextMuted 弱化色。元数据损坏时来源是推断值，
-// 不再并列展示以免自相矛盾。
-func rowCaption(s *store.Skill) string {
-	if s.MetaErr != "" {
-		return "元数据损坏"
-	}
-	cap := sourceText(s)
-	if !s.HasSKILLMD && s.State != store.StateTrashed {
-		cap += " · 缺少 SKILL.md"
-	}
-	return cap
 }
 
 // diffStatusText 把文件差异状态翻译成短标签。
@@ -221,18 +194,69 @@ func sectionHeader(c *myui.Context, title string) {
 // 输入框，中文界面里不合适；因此照它的结构用公开 API 自建：同样的
 // Surface 底、1px 边框、圆角与文字光标，另加 Escape 清空。
 // 返回外层元素，调用方用 Grow/MaxWidth 控制宽度。
-func searchBox(c *myui.Context, query *string) myui.Element {
+func searchBox(c *myui.Context, query *string, bg myui.Color) myui.Element {
 	t := c.Theme()
 	row := myui.Row(c).AlignItems(myui.Center).
 		Gap(t.Space(1.5)).Padding(t.Space(1.5), t.Space(2.5)).
-		Radius(t.Radius).Background(t.Surface).Border(1, t.Border).
+		Radius(t.Radius).Background(bg).Border(1, t.Border).
 		Cursor(myui.CursorText)
 	row.Children(func() {
 		myui.Icon(c, iconSearch).TextColor(t.TextMuted)
 		in := myui.TextInput(c, query).Grow(1).MinWidth(t.Space(15)).
-			Placeholder("搜索技能").Label("搜索技能")
+			Placeholder("搜索技能").Label("搜索技能").
+			// 外框由 row 画：输入框自身不再画边框与底色，避免框中套框。
+			Border(0, myui.Color{}).Background(myui.Color{}).Padding(0)
 		// 焦点在输入框里时 Escape 清空（与 SearchField 的行为一致）。
 		in.OnShortcut(0, myui.KeyEscape, func() { *query = "" })
 	})
 	return row
+}
+
+// sourceIcon 返回卡片底行的来源图标。
+func sourceIcon(s *store.Skill) *myui.SVG {
+	if s.Meta == nil {
+		return iconUnknown
+	}
+	switch s.Meta.Source.Type {
+	case store.SourceGitHub:
+		return iconGitHub
+	case store.SourceLocal:
+		return iconLocal
+	}
+	return iconUnknown
+}
+
+// pill 是卡片右下角的小标签：浅色底 + 同色文字。
+func pill(c *myui.Context, text string, color myui.Color) {
+	t := c.Theme()
+	myui.Box(c).Shrink(0).Padding(t.Space(0.25), t.Space(1.5)).Radius(t.Radius).
+		Background(color.Alpha(0.12)).Children(func() {
+		myui.Text(c, text).SingleLine().FontSize(t.FontSize - 2).TextColor(color)
+	})
+}
+
+// shortTime 把 RFC3339 时间截到分钟（2026-02-02 13:34），解析不了时原样返回。
+func shortTime(s string) string {
+	if len(s) >= 16 && s[10] == 'T' {
+		return s[:10] + " " + s[11:16]
+	}
+	return s
+}
+
+// cardSource 是卡片名字下的一行来源：GitHub 显示 owner/repo，本地显示
+// 「本地」。插件名等细节留给详情栏。
+func cardSource(s *store.Skill) string {
+	if s.Meta == nil {
+		if s.MetaErr != "" {
+			return "元数据损坏"
+		}
+		return "无元数据"
+	}
+	src := sourceText(s)
+	if s.Meta.Source.Type == store.SourceGitHub {
+		if r, _, _ := parseRepo(s.Meta.Source.URL); r != "" {
+			src = r
+		}
+	}
+	return src
 }

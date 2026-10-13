@@ -69,11 +69,13 @@ func (c *Config) Add(opts *AddOptions) (*Result, error) {
 	} else {
 		srcDir, src, cleanup, err = c.resolveGitHub(opts)
 	}
-	if err != nil {
-		return nil, err
-	}
+	// resolveGitHub 在 clone 失败时也返回 cleanup：先登记清理，再看错误，
+	// 否则每次失败都会遗留一个 kura-clone-* 临时目录。
 	if cleanup != nil {
 		defer cleanup()
+	}
+	if err != nil {
+		return nil, err
 	}
 	return c.installDir(srcDir, src, opts.Name)
 }

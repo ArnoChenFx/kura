@@ -23,6 +23,10 @@ jobs:
         # Windows runner 默认是 PowerShell，统一用 bash 保证脚本可移植。
         shell: bash
     steps:
+      # Windows runner 的 git 默认 core.autocrlf=true，检出的 .go 文件带 CRLF，
+      # gofmt -l 会把每个文件都当成未格式化。必须在检出之前关掉换行转换。
+      - name: 关闭换行转换
+        run: git config --global core.autocrlf false
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:

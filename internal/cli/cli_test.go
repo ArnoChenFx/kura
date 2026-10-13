@@ -371,6 +371,58 @@ func TestImportMetaDryRun(t *testing.T) {
 	}
 }
 
+// TestImportMetaRefusesAppendedRoot 验证：.skill-lock.json 只描述默认根目录，
+// --root 指向界面里追加的目录时，import-meta（含 --dry-run 与显式 --lock）
+// 退出 1，不写任何元数据；错误说明原因，--json 时错误走 stderr 的 JSON。
+func TestImportMetaRefusesAppendedRoot(t *testing.T) {
+	e := newEnv(t)
+	e.writeSkill("locked")
+	lock := `{"version":3,"skills":{"locked":{"source":"owner/repo","sourceType":"github","sourceUrl":"https://github.com/owner/repo.git","skillPath":"skills/locked","installedAt":"2026-01-01T00:00:00Z","updatedAt":"2026-01-01T00:00:00Z"}}}`
+	lockPath := filepath.Join(filepath.Dir(e.root), ".skill-lock.json")
+	if err := os.WriteFile(lockPath, []byte(lock), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	base, err := store.DefaultConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	lib, err := store.LoadLibrary(&store.Config{Root: base.Root, Home: e.home})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(e.root, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := lib.AddRoot(e.root); err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{
+		{"import-meta"},
+		{"import-meta", "--dry-run"},
+		{"import-meta", "--lock", lockPath},
+	} {
+		if code := e.run(args...); code != ExitError {
+			t.Errorf("%v 对追加的目录应退出 1, got %d", args, code)
+		}
+		if !strings.Contains(e.stderr.String(), "只适用于默认目录") || !strings.Contains(e.stderr.String(), e.root) {
+			t.Errorf("%v 的错误应说明原因并带上目录，stderr=%q", args, e.stderr.String())
+		}
+		if e.stdout.Len() != 0 {
+			t.Errorf("%v 被拒绝时不应有输出，stdout=%q", args, e.stdout.String())
+		}
+	}
+	if code := e.run("--json", "import-meta"); code != ExitError {
+		t.Errorf("--json 同样应退出 1, got %d", code)
+	}
+	var errOut map[string]any
+	if err := json.Unmarshal(e.stderr.Bytes(), &errOut); err != nil || errOut["error"] == nil {
+		t.Errorf("--json 的错误应是 stderr 上的 JSON：%v, %q", err, e.stderr.String())
+	}
+	if _, err := os.Stat(filepath.Join(e.root, "locked", store.MetaFileName)); !os.IsNotExist(err) {
+		t.Error("被拒绝的导入不能写元数据文件")
+	}
+}
+
 func TestDoctorCleanAndDrift(t *testing.T) {
 	// 干净根目录：退出码 0，problems 为空数组。
 	e := newEnv(t)
@@ -759,5 +811,33 @@ func TestUpdateCheckAllSkipsBrokenSkill(t *testing.T) {
 	// 用法错误：--check 既无 NAME 又无 --all → 退出 2。
 	if code := e.run("update", "--check"); code != ExitUsage {
 		t.Errorf("--check 缺参数应退出 2, got %d", code)
+	}
+}
+
+// TestRootFromLibraryUsesItsScope 验证：--root 指向界面里添加过的目录时，
+// disable 落到该目录在 Library 里的私有 disabled，而不是共用的 disabled。
+func TestRootFromLibraryUsesItsScope(t *testing.T) {
+	e := newEnv(t)
+	e.writeSkill("demo")
+	base, err := store.DefaultConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	lib, err := store.LoadLibrary(&store.Config{Root: base.Root, Home: e.home})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := lib.AddRoot(e.root); err != nil {
+		t.Fatal(err)
+	}
+	if code := e.run("disable", "demo"); code != ExitOK {
+		t.Fatalf("disable 失败: %s", e.stderr.String())
+	}
+	want := filepath.Join(e.home, store.RootsDir, store.RootID(e.root), "disabled", "demo")
+	if _, err := os.Stat(want); err != nil {
+		t.Errorf("技能应移入 %s: %v", want, err)
+	}
+	if _, err := os.Stat(filepath.Join(e.home, "disabled", "demo")); err == nil {
+		t.Error("不应移入共用的 disabled")
 	}
 }

@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 )
 
 // newTestConfig 建立隔离的临时环境：root + home 都在 t.TempDir() 下。
@@ -431,6 +432,7 @@ func TestAddLocal(t *testing.T) {
 }
 
 func TestAddGitHub(t *testing.T) {
+	isolatedGitEnv(t)
 	c := newTestConfig(t)
 	// 用本地 bare 仓库模拟 github clone:把 owner/repo 指到 file:// URL 不可行,
 	// 因此借 git 的 insteadOf 重写 URL。
@@ -484,7 +486,31 @@ func TestAddGitHub(t *testing.T) {
 	}
 }
 
+// TestAddGitHubFailureLeavesNoTempDir 验证 git clone 失败时不遗留
+// kura-clone-* 临时目录。PATH 指向空目录，git 必然找不到：既不联网，也不依赖
+// 本机的 git 配置；临时目录指到 t.TempDir() 里以便检查。
+func TestAddGitHubFailureLeavesNoTempDir(t *testing.T) {
+	c := newTestConfig(t)
+	tmp := t.TempDir()
+	t.Setenv("TMPDIR", tmp) // Unix 的 os.TempDir
+	t.Setenv("TMP", tmp)    // Windows 的 os.TempDir
+	t.Setenv("TEMP", tmp)
+	t.Setenv("PATH", t.TempDir())
+
+	if _, err := c.Add(&AddOptions{Repo: "owner/repo"}); err == nil {
+		t.Fatal("找不到 git 时 Add 应报错")
+	}
+	entries, err := os.ReadDir(tmp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		t.Errorf("clone 失败后不应遗留临时目录: %s", e.Name())
+	}
+}
+
 func TestUpdate(t *testing.T) {
+	isolatedGitEnv(t)
 	c := newTestConfig(t)
 	// 准备 git 仓库与 bare 镜像 + insteadOf 重写(同 TestAddGitHub)。
 	repo := initGitRepo(t, "up-skill", "v1")
@@ -523,13 +549,16 @@ func TestUpdate(t *testing.T) {
 	os.WriteFile(filepath.Join(repo, "skills", "up-skill", "SKILL.md"), []byte("---\nname: up-skill\n---\nv2"), 0o644)
 	cd(repo, "add", ".")
 	cd(repo, "commit", "-q", "-m", "v2")
-	run("push", "-q", repo+"/.git", "HEAD:refs/heads/main")
-	run("--git-dir", bare, "rev-parse", "HEAD")
 
 	// bare 仓库是快照,clone 的 insteadOf 指向它,但 bare 不会自动同步 v2。
-	// 重新镜像一次 v2。
+	// 重新镜像一次 v2。（这里不能再 push：run 在测试进程的当前目录，也就是
+	// 真实仓库里执行，CI 的浅克隆会因 shallow update not allowed 失败。）
 	os.RemoveAll(bare)
 	run("clone", "-q", "--bare", repo, bare)
+
+	// updatedAt 精确到秒：等过一个整秒，保证「前进」可观测（快机器上
+	// 安装与更新可能落在同一秒）。
+	time.Sleep(time.Until(time.Now().Truncate(time.Second).Add(time.Second)))
 
 	// Update。
 	r, err := c.Update("up-skill")

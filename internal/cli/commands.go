@@ -268,6 +268,8 @@ type importMetaResult struct {
 // cmdImportMeta 实现 `kura import-meta [--dry-run] [--lock PATH]`。
 // lock 默认取根目录同级的 .skill-lock.json（REQUIREMENTS.md 约定），
 // --lock 可显式覆盖。真实的用户 ~/.agents 上的导入必须加 --dry-run。
+// .skill-lock.json 只描述默认根目录：--root 指向界面里追加的目录时与界面
+// 一样拒绝（含 --dry-run 与 --lock），退出码 1。
 func cmdImportMeta(args []string, stdout, stderr io.Writer, pre *globalFlags) int {
 	g := &globalFlags{}
 	fs := newFlagSet("import-meta", stderr, g, pre)
@@ -283,6 +285,9 @@ func cmdImportMeta(args []string, stdout, stderr io.Writer, pre *globalFlags) in
 	c, err := resolveConfig(g)
 	if err != nil {
 		return printError(g, stderr, "%v", err)
+	}
+	if !c.CanImportMeta() {
+		return printError(g, stderr, "import-meta 失败: %v: %s", store.ErrImportDefaultOnly, c.Root)
 	}
 	lp := *lockPath
 	if lp == "" {

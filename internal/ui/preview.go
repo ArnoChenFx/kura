@@ -30,6 +30,8 @@ type skillReviewEntry struct {
 // reviewState 是评审面板（Modal）的数据：一个技能的预览，或全部检查汇总。
 type reviewState struct {
 	open bool
+	// cfg 是检查时所在的目录；应用更新只作用于它。
+	cfg *store.Config
 	// skill 是评审针对的技能名；全部检查时为空串。
 	skill string
 	// all 表示全部检查汇总模式。
@@ -55,17 +57,22 @@ func (a *App) CheckAsync(name string) {
 	}
 	a.checking = name
 	a.status, a.statusErr = "正在检查更新 "+name+"…", false
+	cfg, gen := a.cfg, a.gen
 	a.spawn(func() {
-		p, err := a.cfg.PreviewUpdate(name)
+		p, err := cfg.PreviewUpdate(name)
 		a.publish(func() {
 			a.checking = ""
+			if gen != a.gen {
+				return // 期间切换了目录，结果作废
+			}
 			if err != nil {
 				a.status, a.statusErr = fmt.Sprintf("检查 %s 失败: %v", name, err), true
 				return
 			}
 			// 有无变化都打开面板：面板内显式提示「与上游一致」，比只靠
 			// 状态行更清楚（无变化时应用按钮禁用）。
-			a.review = reviewState{open: true, skill: name, preview: p}
+			a.review = reviewState{open: true, cfg: cfg, skill: name, preview: p}
+			a.updates[name] = p.HasChanges()
 			a.status, a.statusErr = checkSummary(name, p), false
 		})
 	})
@@ -80,9 +87,10 @@ func (a *App) CheckAllAsync() {
 	}
 	a.checkingAll = true
 	a.status, a.statusErr = "正在检查全部更新…", false
+	cfg, gen := a.cfg, a.gen
 	a.spawn(func() {
 		// 只扫根目录；扫描失败等价于没有可检查的技能。
-		skills, err := a.cfg.Scan()
+		skills, err := cfg.Scan()
 		entries := make([]skillReviewEntry, 0, len(skills))
 		var scanErr string
 		if err != nil {
@@ -93,7 +101,7 @@ func (a *App) CheckAllAsync() {
 				entries = append(entries, skillReviewEntry{skill: s.Name, err: "根目录扫描失败: " + scanErr})
 				continue
 			}
-			p, perr := a.cfg.PreviewUpdate(s.Name)
+			p, perr := cfg.PreviewUpdate(s.Name)
 			if perr != nil {
 				entries = append(entries, skillReviewEntry{skill: s.Name, err: perr.Error()})
 				continue
@@ -103,7 +111,13 @@ func (a *App) CheckAllAsync() {
 		sort.Slice(entries, func(i, j int) bool { return entries[i].skill < entries[j].skill })
 		a.publish(func() {
 			a.checkingAll = false
-			a.review = reviewState{open: true, all: true, entries: entries}
+			if gen != a.gen {
+				return // 期间切换了目录，结果作废
+			}
+			a.review = reviewState{open: true, cfg: cfg, all: true, entries: entries}
+			for _, e := range entries {
+				a.updates[e.skill] = e.preview != nil && e.preview.HasChanges()
+			}
 			a.status, a.statusErr = fmt.Sprintf("已检查 %d 个技能", len(entries)), false
 		})
 	})
@@ -131,19 +145,28 @@ func (a *App) ApplyAsync() {
 		return
 	}
 	r.applyBusy = true
+	cfg, gen := r.cfg, a.gen
+	if cfg == nil {
+		cfg = a.cfg
+	}
 	a.status, a.statusErr = "正在更新 "+strings.Join(names, "、")+"…", false
 	a.spawn(func() {
 		var firstErr error
 		for _, name := range names {
-			if _, err := a.cfg.Update(name); err != nil && firstErr == nil {
+			if _, err := cfg.Update(name); err != nil && firstErr == nil {
 				firstErr = err
 			}
 		}
-		skills, scanErr := a.cfg.ScanAll()
+		skills, scanErr := cfg.ScanAll()
 		a.publish(func() {
 			r.applyBusy = false
 			r.open = false // 更新完成后关闭评审面板
-			a.applyScan(skills, scanErr)
+			if gen == a.gen {
+				a.applyScan(skills, scanErr)
+				for _, n := range names {
+					delete(a.updates, n)
+				}
+			}
 			if firstErr != nil {
 				a.status, a.statusErr = "更新失败: "+firstErr.Error(), true
 				return
