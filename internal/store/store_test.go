@@ -432,6 +432,7 @@ func TestAddLocal(t *testing.T) {
 }
 
 func TestAddGitHub(t *testing.T) {
+	isolatedGitEnv(t)
 	c := newTestConfig(t)
 	// 用本地 bare 仓库模拟 github clone:把 owner/repo 指到 file:// URL 不可行,
 	// 因此借 git 的 insteadOf 重写 URL。
@@ -509,6 +510,7 @@ func TestAddGitHubFailureLeavesNoTempDir(t *testing.T) {
 }
 
 func TestUpdate(t *testing.T) {
+	isolatedGitEnv(t)
 	c := newTestConfig(t)
 	// 准备 git 仓库与 bare 镜像 + insteadOf 重写(同 TestAddGitHub)。
 	repo := initGitRepo(t, "up-skill", "v1")
@@ -547,11 +549,10 @@ func TestUpdate(t *testing.T) {
 	os.WriteFile(filepath.Join(repo, "skills", "up-skill", "SKILL.md"), []byte("---\nname: up-skill\n---\nv2"), 0o644)
 	cd(repo, "add", ".")
 	cd(repo, "commit", "-q", "-m", "v2")
-	run("push", "-q", repo+"/.git", "HEAD:refs/heads/main")
-	run("--git-dir", bare, "rev-parse", "HEAD")
 
 	// bare 仓库是快照,clone 的 insteadOf 指向它,但 bare 不会自动同步 v2。
-	// 重新镜像一次 v2。
+	// 重新镜像一次 v2。（这里不能再 push：run 在测试进程的当前目录，也就是
+	// 真实仓库里执行，CI 的浅克隆会因 shallow update not allowed 失败。）
 	os.RemoveAll(bare)
 	run("clone", "-q", "--bare", repo, bare)
 
