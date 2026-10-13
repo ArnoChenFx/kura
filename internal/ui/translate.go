@@ -9,14 +9,15 @@ package ui
 //   - 目标语言是全局一个（设置里选），不是每个技能单独选。
 //   - 渲染路径只读缓存；网络请求只经 TranslateAsync 进后台 goroutine。
 //
-// 翻译策略（取舍）：只翻译「当前选中的技能」的描述——它在右栏详情与中栏
-// 它自己的那张卡片（或列表行）里各出现一次，共用同一次请求。其余卡片在
-// 译文模式下继续显示原文，不为整页几十张卡片一次性打爆翻译 API；切换选中
-// 后新选中的技能才发起翻译，已翻过的命中缓存、不再请求。全文页（SKILL.md
-// 正文）本次不翻译。
+// 翻译策略（取舍）：只翻译「当前选中的技能」——描述在右栏详情与中栏它自己的
+// 那张卡片（或列表行）里各出现一次，共用同一次请求；「全文」页在选中后逐段翻译
+// 整份 SKILL.md（见 TranslateDocAsync）。其余卡片在译文模式下继续显示原文，不为
+// 整页几十张卡片一次性打爆翻译 API；切换选中后新选中的技能才发起翻译，已翻过的
+// 命中缓存、不再请求。
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -33,6 +34,19 @@ const (
 	translateDetailPrefix = "detail:"
 	translateDescSuffix   = ":description"
 )
+
+// docChunkRunes 是全文翻译每段的大致上限（字符数）：切分只在空行处进行，超过
+// 上限的单个块整块发送（见 store.SplitForTranslation）。
+const docChunkRunes = 1800
+
+// 全文译文的 key：每个技能一份，形如 "doc:<技能名>:full"。
+const (
+	translateDocPrefix = "doc:"
+	translateDocSuffix = ":full"
+)
+
+// docTransKey 是技能全文译文的 key。
+func docTransKey(name string) string { return translateDocPrefix + name + translateDocSuffix }
 
 // cardDescKey / detailDescKey 是技能描述在卡片与详情里的翻译 key。
 func cardDescKey(name string) string   { return translateCardPrefix + name + translateDescSuffix }
@@ -228,4 +242,58 @@ func redactSecret(msg, secret string) string {
 		return msg
 	}
 	return strings.ReplaceAll(msg, secret, "***")
+}
+
+// ensureDocTranslation 为技能 name 的全文发起翻译（若需要）：译文模式开着、翻译
+// API 已就绪、全文非空，且缓存里还没有它。begin 保证同一原文只发一次，与
+// ensureTranslations 同一做法：它是受缓存占位保护的任务，不是渲染路径上的副作用。
+func (a *App) ensureDocTranslation(name, src string) {
+	if !a.trans.on || !a.settings.Ready() || strings.TrimSpace(src) == "" {
+		return
+	}
+	a.TranslateDocAsync(docTransKey(name), src)
+}
+
+// TranslateDocAsync 在后台把整份 SKILL.md（src）按段翻译，结果写进 key，全文页读它。
+//
+//   - 发起前先在 UI 线程 begin 占位 pending：同一 key 同一原文只发一次。
+//   - 段与段按顺序请求，同一个翻译接口不并发去打；每段有自己的 translateTimeout。
+//     任何一段失败整份记为失败，错误里注明第几段；译文按空行拼回，结构不变。
+//   - 与 TranslateAsync 一样：结果经 publish 回到 UI 线程写缓存，配置变了（epoch
+//     不同）的旧结果直接丢弃，错误里的 API key 先抹掉。
+func (a *App) TranslateDocAsync(key, src string) {
+	chunks := store.SplitForTranslation(src, docChunkRunes)
+	if len(chunks) == 0 || !a.trans.begin(key, src) {
+		return
+	}
+	fn, epoch, secret := a.translate, a.trans.epoch, a.settings.APIKey
+	a.spawn(func() {
+		var (
+			parts  []string
+			errMsg string
+		)
+		if fn == nil {
+			errMsg = store.ErrNotConfigured.Error()
+		}
+		for i := 0; errMsg == "" && i < len(chunks); i++ {
+			ctx, cancel := context.WithTimeout(context.Background(), translateTimeout)
+			out, err := fn(ctx, chunks[i])
+			cancel()
+			switch {
+			case err != nil:
+				errMsg = fmt.Sprintf("第 %d/%d 段：%s", i+1, len(chunks), redactSecret(err.Error(), secret))
+			case strings.TrimSpace(out) == "":
+				errMsg = fmt.Sprintf("第 %d/%d 段：翻译结果为空", i+1, len(chunks))
+			default:
+				parts = append(parts, out)
+			}
+		}
+		dst := strings.Join(parts, "\n\n")
+		a.publish(func() {
+			if epoch != a.trans.epoch {
+				return // 翻译配置已变，这份旧结果不要
+			}
+			a.trans.finish(key, src, dst, errMsg)
+		})
+	})
 }

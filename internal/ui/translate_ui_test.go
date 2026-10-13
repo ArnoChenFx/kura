@@ -234,6 +234,11 @@ func TestTranslateDoesNotTouchSkillDir(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(cfg.SkillPath("alpha"), store.MetaFileName), data, 0o644); err != nil {
 		t.Fatal(err)
 	}
+	// SKILL.md 放一句独一无二的正文：全文翻译失败时它仍须原样显示。
+	body := "---\nname: alpha\ndescription: Reads PDF files.\n---\n\n# alpha\n\n这是原文段落，译文失败时要保留。\n"
+	if err := os.WriteFile(filepath.Join(cfg.SkillPath("alpha"), "SKILL.md"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	a.ReloadAsync()
 	a.settle()
 	tt.Frame()
@@ -256,9 +261,12 @@ func TestTranslateDoesNotTouchSkillDir(t *testing.T) {
 	a.settle()
 	tt.Frame()
 	click(t, a, tt, "alpha")
-	detClickTab(t, a, tt, detailTabFull) // 译文模式下打开全文：只显示原文
-	if !detHasText(tt, "全文暂不翻译") {
-		t.Errorf("译文模式下的全文页应说明不翻译，文本 %v", tt.Texts())
+	detClickTab(t, a, tt, detailTabFull) // 译文模式下打开全文：翻译失败，说明原因并保留原文
+	if !detHasText(tt, "全文翻译失败") {
+		t.Errorf("全文译文失败时应说明原因，文本 %v", tt.Texts())
+	}
+	if !detHasText(tt, "这是原文段落") {
+		t.Errorf("全文译文失败时应仍显示原文，文本 %v", tt.Texts())
 	}
 	if f.calls == 0 {
 		t.Fatal("测试没有真的触发翻译，断言无意义")

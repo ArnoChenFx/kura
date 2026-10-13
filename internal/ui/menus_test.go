@@ -123,9 +123,9 @@ func TestCardMenuItemsFollowState(t *testing.T) {
 	}
 	tt.CloseMenu()
 
-	// 回收站里的：没有「打开 SKILL.md」，只有恢复。
+	// 回收站里的：没有「打开 SKILL.md」，只有恢复与永久删除（中间用分隔线隔开）。
 	click(t, a, tt, "回收站 1")
-	want := []string{"打开文件夹", "在文件夹中显示", "复制路径", "-", "恢复到技能目录"}
+	want := []string{"打开文件夹", "在文件夹中显示", "复制路径", "-", "恢复到技能目录", "-", "永久删除…"}
 	if got := openMenu(t, a, tt, "trashed-one"); !reflect.DeepEqual(got, want) {
 		t.Errorf("回收站里的菜单 = %q，想要 %q", got, want)
 	}

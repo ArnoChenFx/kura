@@ -4,13 +4,16 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/ArnoChenFx/kura/internal/store"
+	"github.com/ArnoChenFx/kura/resources"
 	myui "github.com/egoist/mygo/ui"
 )
 
-// 三栏的固定宽度：左栏放目录名与徽标，右栏放详情字段；中栏占满剩余。
+// 三栏的宽度（DIP）：左栏放目录名与徽标，右栏放详情字段；中栏占满剩余。
+// rootsWidth 与 detailWidth 是默认值，两侧的分割线拖动时在下面的范围里改变。
 const (
 	rootsWidth  = 224
 	detailWidth = 320
@@ -23,6 +26,30 @@ const (
 	// c.TitleBar() 返回零，高度取这个兑底，顶栏不塌。
 	titleBarMinHeight = 40
 )
+
+// 分割线的命中宽度，以及两侧栏宽的拖动范围（DIP）：左栏 168–420，详情栏
+// 260–560。中栏至少留 mainMinW，窄窗口里两侧的拖动会先让位（见 widthLimits）。
+const (
+	gripHit    = 8
+	rootsMinW  = 168
+	rootsMaxW  = 420
+	detailMinW = 260
+	detailMaxW = 560
+	mainMinW   = 300
+)
+
+// appIcon 是标题栏里的应用图标（resources/icon.png，经 resources 包嵌入）。
+var appIcon = mustDecodeBitmap(resources.IconPNG)
+
+// mustDecodeBitmap 解码内嵌的位图资源。资源损坏会让进程启动时直接 panic，
+// 与 icons.go 的 MustParseSVG 一样当作编译期式的校验。
+func mustDecodeBitmap(data []byte) *myui.Bitmap {
+	bm, err := myui.DecodeBitmap(data)
+	if err != nil {
+		panic("ui: 应用图标解码失败: " + err.Error())
+	}
+	return bm
+}
 
 // View 构建 kura 主窗口的一帧，顶部自绘标题栏 + 三栏结构：
 //
@@ -56,9 +83,13 @@ func (a *App) View(c *myui.Context) {
 
 	a.viewTitlebar(c)
 	// 三栏占满标题栏以下的剩余高度；标题栏自身不参与收缩（见 viewTitlebar）。
-	myui.Row(c).Grow(1).MinHeight(0).AlignItems(myui.Stretch).Children(func() {
+	// 左右两条分割线拖动改变两侧栏宽，中栏占剩余（见 viewGrip）。bodyW 在构建
+	// 结束后记下本帧的总宽，下一帧据此夹住拖动范围。
+	rootsHi, detailHi := a.widthLimits(sel != nil)
+	body := myui.Row(c).Key("body").Grow(1).MinHeight(0).AlignItems(myui.Stretch)
+	body.Children(func() {
 		a.viewRoots(c)
-		myui.Divider(c)
+		a.viewGrip(c, &a.rootsW, 1, rootsMinW, rootsHi)
 		myui.Column(c).Grow(1).MinWidth(0).FillHeight().Background(a.pal.canvas).Children(func() {
 			a.viewMainHeader(c)
 			a.viewFilterBar(c)
@@ -67,17 +98,26 @@ func (a *App) View(c *myui.Context) {
 			a.viewStatusBar(c)
 		})
 		if sel != nil {
-			myui.Divider(c)
+			a.viewGrip(c, &a.detailW, -1, detailMinW, detailHi)
 			a.viewDetail(c, sel)
 		}
 	})
+	a.bodyW = body.Bounds().W
 
-	// 「移入回收站」确认框；最后一个按钮是默认按钮（回车触发），
+	// 「移入回收站」与「永久删除」共用一个确认框；最后一个按钮是默认按钮（回车触发），
 	// Escape 或点按钮后 *open 置 false。
-	if n := myui.AlertDialog(c, &a.confirm.open, "移入回收站？",
-		"技能 "+a.confirm.name+" 将从技能目录移入 kura 回收站，可随时恢复；移动前会自动写入内容快照。",
-		"取消", "确认移入"); n == 1 {
-		a.RemoveAsync(a.confirm.name)
+	title, message, ok := "移入回收站？",
+		"技能 "+a.confirm.name+" 将从技能目录移入 kura 回收站，可随时恢复；移动前会自动写入内容快照。", "确认移入"
+	if a.confirm.purge {
+		title, ok = "永久删除？", "永久删除"
+		message = "技能 " + a.confirm.name + " 将从回收站永久删除，无法恢复。删除前会先写入一份内容快照，快照保留在 kura 的数据目录里。"
+	}
+	if n := myui.AlertDialog(c, &a.confirm.open, title, message, "取消", ok); n == 1 {
+		if a.confirm.purge {
+			a.PurgeAsync(a.confirm.name)
+		} else {
+			a.RemoveAsync(a.confirm.name)
+		}
 	}
 
 	// 更新评审面板（检查更新/全部检查的结果 + 应用/取消）。
@@ -102,36 +142,76 @@ func (a *App) viewTitlebar(c *myui.Context) {
 	bar := c.TitleBar()
 	myui.Row(c).FillWidth().Shrink(0).Height(max(bar.Height, titleBarMinHeight)).
 		Padding(0, bar.Right+12, 0, bar.Left+12).Background(a.pal.sidebar).
-		AlignItems(myui.Center).Gap(t.Space(2.5)).DragWindow().Children(func() {
-		// 标识：强调色方块里的 K，与左栏品牌块同一做法。
-		myui.Box(c).Size(t.Space(6), t.Space(6)).Radius(t.Radius - 2).Background(t.Accent).
-			Center().Children(func() {
-			myui.Text(c, "K").Bold().FontSize(t.FontSize - 1).TextColor(t.AccentText)
-		})
+		AlignItems(myui.Center).Gap(t.Space(2)).DragWindow().Children(func() {
+		// 标识：项目里的应用图标（四周透明，直接放进顶栏）。
+		myui.Image(c, appIcon).Size(t.Space(6), t.Space(6))
 		myui.Text(c, "kura").Bold().SingleLine()
 	})
 }
 
-// viewRoots 是左栏：品牌、技能目录列表（每项带在用技能数）与底部的
-// 「添加文件夹」。默认目录总在第一个。底色与中栏相同，只靠右侧的分隔线
-// 区分；选中项用浅一档的底色。
+// widthLimits 返回两侧栏宽的拖动上限（DIP）。窗口宽度减去中栏的最小宽度与两条
+// 分割线，再减去另一侧栏的当前宽度：这样拖宽一侧时，中栏不会被挤没。详情栏
+// 隐藏时左栏可以用掉全部余量。bodyW 为 0（首帧，还没有上一帧的宽度）时只用
+// 固定上限。
+func (a *App) widthLimits(detailShown bool) (rootsHi, detailHi float32) {
+	rootsHi, detailHi = rootsMaxW, detailMaxW
+	if a.bodyW <= 0 {
+		return rootsHi, detailHi
+	}
+	spare := a.bodyW - mainMinW - 2*gripHit
+	rootsHi = min(rootsHi, spare)
+	if detailShown {
+		rootsHi = min(rootsHi, spare-a.detailW)
+		detailHi = min(detailHi, spare-a.rootsW)
+	}
+	return rootsHi, detailHi
+}
+
+// viewGrip 是两栏之间的分割线：中间一条 1px 的线，两侧共 gripHit 宽的区域用来
+// 拖动，悬停或拖动时线变成强调色。size 指向它调整的那一栏的宽度；dir 为 +1
+// 表示那一栏在分割线左侧（向右拖变宽），-1 表示在右侧（向左拖变宽）。拖动量经
+// dragWidth 夹进 [lo, hi]。宽度变了就请求重绘。
+func (a *App) viewGrip(c *myui.Context, size *float32, dir float32, lo, hi float32) {
+	t := c.Theme()
+	g := myui.Box(c).Width(gripHit).FillHeight().Shrink(0).Cursor(myui.CursorResizeEW)
+	dx, _, held := g.Dragged()
+	if held && dx != 0 {
+		if next := dragWidth(*size, dir*dx, lo, hi); next != *size {
+			*size = next
+			c.Invalidate()
+		}
+	}
+	line := a.pal.line
+	if held || g.Hovered() {
+		line = t.Accent
+	}
+	g.Draw(func(p *myui.Painter, r myui.Rect) {
+		p.Fill(myui.Rect{X: r.X + (r.W-1)/2, Y: r.Y, W: 1, H: r.H}, line, 0)
+	})
+}
+
+// dragWidth 返回拖动 delta 之后的栏宽。变宽时不超过 hi，但已经比 hi 宽的栏不被
+// 收窄；变窄时不低于 lo，已经比 lo 窄的栏不被放宽。
+func dragWidth(cur, delta, lo, hi float32) float32 {
+	next := cur + delta
+	switch {
+	case delta > 0:
+		next = min(next, max(hi, cur))
+	case delta < 0:
+		next = max(next, min(lo, cur))
+	}
+	return next
+}
+
+// viewRoots 是左栏：技能目录列表（每项带在用技能数，追加的目录可以拖动排序，
+// 默认目录总在第一个）与底部的「添加文件夹」，再往下是 viewRootsFooter 的一行。
+// 底色与中栏相同，只靠右侧的分隔线区分；选中项用浅一档的底色。品牌标识在窗口
+// 顶栏里，这里不再重复。
 func (a *App) viewRoots(c *myui.Context) {
 	t := c.Theme()
-	myui.Column(c).Width(rootsWidth).Shrink(0).FillHeight().Background(a.pal.sidebar).Children(func() {
-		// 品牌：强调色方块里的 K + kura。
-		myui.Row(c).Padding(t.Space(4), t.Space(4), t.Space(3), t.Space(4)).
-			AlignItems(myui.Center).Gap(t.Space(2.5)).Children(func() {
-			myui.Box(c).Size(t.Space(7), t.Space(7)).Radius(t.Radius).Background(t.Accent).
-				Center().Children(func() {
-				myui.Text(c, "K").Bold().TextColor(t.AccentText)
-			})
-			myui.Column(c).Gap(0).Children(func() {
-				myui.Text(c, "kura").Bold().FontSize(t.FontSize + 2)
-				myui.Text(c, "技能管理").FontSize(t.FontSize - 2).TextColor(t.TextMuted)
-			})
-		})
+	myui.Column(c).Width(a.rootsW).Shrink(0).FillHeight().Background(a.pal.sidebar).Children(func() {
 		myui.Text(c, "技能目录").FontSize(t.FontSize-1).FontWeight(600).TextColor(t.TextMuted).
-			Padding(t.Space(2), t.Space(5), t.Space(1.5), t.Space(5))
+			Padding(t.Space(4), t.Space(5), t.Space(1.5), t.Space(5))
 		myui.Scroll(c).Grow(1).FillWidth().Children(func() {
 			myui.Column(c).FillWidth().Padding(0, t.Space(2.5)).Gap(t.Space(0.5)).Children(func() {
 				for i, root := range a.lib.Roots {
@@ -162,43 +242,7 @@ func (a *App) viewRoots(c *myui.Context) {
 			if ab.Clicked() {
 				a.AddRootAsync()
 			}
-			// 检查 kura 应用自身的更新（区别于技能级「检查更新」）：打开
-			// MyGo 的原生更新窗口。真实检查经 a.checkUpdates 钩子走
-			// selfupdate.CheckForUpdates，生产环境在 main.go 里注入；测试
-			// 注入假实现，绝不真的触发更新检查（未挂载更新插件会 panic）。
-			// 点击立刻在状态行给一句反馈；更新窗口由插件自己弹出。
-			cb := myui.ButtonBase(c).Label("检查更新").Tooltip("检查 kura 应用更新").
-				FillWidth().Disabled(a.checkingUpdate).
-				Justify(myui.Start).Gap(t.Space(2)).Padding(t.Space(2), t.Space(3)).
-				Radius(t.Radius).Border(1, t.Border).TextColor(a.pal.textMid)
-			if cb.Hovered() && !a.checkingUpdate {
-				cb.Background(t.SurfaceHover).TextColor(t.Text)
-			}
-			if a.checkingUpdate {
-				cb.Opacity(0.45)
-			}
-			cb.Children(func() {
-				myui.Icon(c, iconUpdate)
-				myui.Text(c, "检查更新")
-			})
-			if cb.Clicked() {
-				a.CheckAppUpdateAsync()
-			}
-			// 设置：翻译 API 与目标语言。与「添加文件夹」「检查更新」同一样式。
-			sb := myui.ButtonBase(c).Label("设置").Tooltip("翻译 API 与目标语言").
-				FillWidth().Justify(myui.Start).Gap(t.Space(2)).Padding(t.Space(2), t.Space(3)).
-				Radius(t.Radius).Border(1, t.Border).TextColor(a.pal.textMid)
-			if sb.Hovered() {
-				sb.Background(t.SurfaceHover).TextColor(t.Text)
-			}
-			sb.Children(func() {
-				myui.Icon(c, iconSettings)
-				myui.Text(c, "设置")
-			})
-			if sb.Clicked() {
-				a.OpenSettings()
-			}
-			a.viewThemeSwitch(c)
+			a.viewRootsFooter(c)
 		})
 	})
 }
@@ -223,39 +267,74 @@ func themeIndex(mode string) int {
 	return 0
 }
 
-// viewThemeSwitch 是左栏底部的外观开关：「外观」加三个图标分段（跟随系统
-// / 浅色 / 深色），选中的分段浮起。分段的点击在构建结束或查询响应时才写进
-// sel，所以要靠 Changed 在同一次构建里取到新选择，再交给 SetThemeAsync
-// （幂等，重复构建不会重复写盘）；sel 每次构建都从 themeMode 重新推出。
-func (a *App) viewThemeSwitch(c *myui.Context) {
+// viewRootsFooter 是左栏最底下的一行：外观开关靠左，「检查更新」「设置」两个图标
+// 按钮靠右。「检查更新」检查的是 kura 应用自身（区别于技能级的「检查更新」）：点击后
+// 立刻在状态行给一句反馈，更新窗口由 MyGo 插件弹出；经 checkUpdates 钩子走
+// selfupdate.CheckForUpdates，测试里注入假实现，绝不触发真实检查。
+func (a *App) viewRootsFooter(c *myui.Context) {
 	t := c.Theme()
-	sel := themeIndex(a.themeMode)
-	myui.Row(c).FillWidth().AlignItems(myui.Center).Padding(0, t.Space(1)).Children(func() {
-		myui.Text(c, "外观").SingleLine().FontSize(t.FontSize - 1).TextColor(t.TextMuted)
+	myui.Row(c).FillWidth().AlignItems(myui.Center).Gap(t.Space(1)).Children(func() {
+		a.viewThemeSwitch(c)
 		myui.Spacer(c)
-		seg := myui.SegmentedBase(c, &sel, len(themeModes))
-		track := seg.Track.Label("外观").Padding(t.Space(0.5)).Gap(t.Space(0.5)).
-			Radius(t.Radius).Background(a.pal.card).Border(1, a.pal.line).Children(func() {
-			for i, m := range themeModes {
-				b := seg.Segment(i).Label(m.label).Tooltip(m.label).
-					Padding(t.Space(1.25), t.Space(2)).Radius(t.Radius - 2).TextColor(t.TextMuted)
-				switch {
-				case i == sel:
-					b.Background(t.SurfacePressed).TextColor(t.Text)
-				case b.Hovered():
-					b.Background(t.SurfaceHover).TextColor(t.Text)
-				}
-				b.Children(func() { myui.Icon(c, m.icon).FontSize(t.FontSize + 1) })
-			}
-		})
-		if track.Changed() {
-			a.SetThemeAsync(themeModes[sel].mode)
-		}
+		railButton(c, iconUpdate, "检查更新", "检查 kura 应用更新", a.checkingUpdate, a.CheckAppUpdateAsync)
+		railButton(c, iconSettings, "设置", "翻译 API 与目标语言", false, a.OpenSettings)
 	})
 }
 
-// rootItem 是左栏里的一个技能目录：图标 + 名字 + 在用技能数。选中项用
-// 浅一档的底色，未选中项悬停时才有底色；点击后在下一帧开头切换目录。
+// railButton 是左栏底部的图标按钮：无底色，悬停时才出现浅色底，与 ghostButton
+// 同一套样式。label 是按钮的名字（无障碍与测试查找用），tip 是悬停提示，可以
+// 比名字更具体。
+func railButton(c *myui.Context, icon *myui.SVG, label, tip string, disabled bool, onClick func()) {
+	t := c.Theme()
+	b := myui.ButtonBase(c).Label(label).Tooltip(tip).Disabled(disabled).
+		Padding(t.Space(1.75)).Radius(t.Radius).TextColor(t.TextMuted)
+	if b.Hovered() && !disabled {
+		b.Background(t.SurfaceHover).TextColor(t.Text)
+	}
+	if disabled {
+		b.Opacity(0.45)
+	}
+	b.Children(func() { myui.Icon(c, icon).FontSize(t.FontSize + 2) })
+	if b.Clicked() {
+		onClick()
+	}
+}
+
+// viewThemeSwitch 是左栏底部的外观开关：三个图标分段（跟随系统 / 浅色 / 深色），
+// 选中的分段浮起。分段的点击在构建结束或查询响应时才写进 sel，所以要靠 Changed
+// 在同一次构建里取到新选择，再交给 SetThemeAsync（幂等，重复构建不会重复写盘）；
+// sel 每次构建都从 themeMode 重新推出。布局由 viewRootsFooter 负责。
+func (a *App) viewThemeSwitch(c *myui.Context) {
+	t := c.Theme()
+	sel := themeIndex(a.themeMode)
+	seg := myui.SegmentedBase(c, &sel, len(themeModes))
+	track := seg.Track.Label("外观").Padding(t.Space(0.5)).Gap(t.Space(0.5)).
+		Radius(t.Radius).Background(a.pal.card).Border(1, a.pal.line).Shrink(0).Children(func() {
+		for i, m := range themeModes {
+			b := seg.Segment(i).Label(m.label).Tooltip(m.label).
+				Padding(t.Space(1.25), t.Space(2)).Radius(t.Radius - 2).TextColor(t.TextMuted)
+			switch {
+			case i == sel:
+				b.Background(t.SurfacePressed).TextColor(t.Text)
+			case b.Hovered():
+				b.Background(t.SurfaceHover).TextColor(t.Text)
+			}
+			b.Children(func() { myui.Icon(c, m.icon).FontSize(t.FontSize + 1) })
+		}
+	})
+	if track.Changed() {
+		a.SetThemeAsync(themeModes[sel].mode)
+	}
+}
+
+// rootRef 是拖动排序时携带的目录路径。Drag 把它交给被放下的那一行，Drop 只接收
+// 这个类型，不会误收别的拖放数据。
+type rootRef string
+
+// rootItem 是左栏里的一个技能目录：图标 + 名字 + 在用技能数。选中项用浅一档的
+// 底色，未选中项悬停时才有底色；点击后在下一帧开头切换目录。追加的目录可以拖动
+// 排序：拖到另一个目录上，就占据那个位置（默认目录固定第一个，既不能拖也不能
+// 放）。拖动时的落点边框亮起强调色。
 func (a *App) rootItem(c *myui.Context, root string, isDefault bool) {
 	t := c.Theme()
 	b := myui.ButtonBase(c).Key(root).Label(rootLabel(root)).Tooltip(root).
@@ -266,6 +345,15 @@ func (a *App) rootItem(c *myui.Context, root string, isDefault bool) {
 		b.Background(a.pal.sel).TextColor(t.Text)
 	case b.Hovered():
 		b.Background(t.SurfaceHover).TextColor(t.Text)
+	}
+	if !isDefault {
+		b.Drag(rootRef(root))
+		if _, over := myui.DragOver[rootRef](b); over {
+			b.Border(1, t.Accent)
+		}
+		if from, ok := myui.Drop[rootRef](b); ok && string(from) != root {
+			a.ReorderRootAsync(string(from), slices.Index(a.lib.Roots, root))
+		}
 	}
 	b.Children(func() {
 		icon := iconFolder
@@ -740,6 +828,10 @@ func (a *App) cardMenu(c *myui.Context, m *myui.Menu, s *store.Skill) {
 		if m.Item("恢复到技能目录").Disabled(busy).Chosen() {
 			a.RestoreAsync(s.Name)
 		}
+		m.Separator()
+		if m.Item("永久删除…").Disabled(busy).Chosen() {
+			a.confirm = confirmState{open: true, name: s.Name, purge: true}
+		}
 	}
 }
 
@@ -755,7 +847,7 @@ func (a *App) viewDetail(c *myui.Context, s *store.Skill) {
 		a.detailSel = s.Name
 		a.detailTab = 0
 	}
-	myui.Column(c).Width(detailWidth).Shrink(0).FillHeight().Background(a.pal.canvas).Children(func() {
+	myui.Column(c).Width(a.detailW).Shrink(0).FillHeight().Background(a.pal.canvas).Children(func() {
 		myui.Scroll(c).Grow(1).FillWidth().Children(func() {
 			myui.Column(c).FillWidth().Padding(t.Space(4), t.Space(5)).Gap(t.Space(4)).Children(func() {
 				myui.Row(c).FillWidth().Gap(t.Space(3)).AlignItems(myui.Start).Children(func() {
@@ -822,9 +914,9 @@ func (a *App) viewDetailOverview(c *myui.Context, s *store.Skill) {
 }
 
 // viewTranslateBar 是详情头部下方的「原文 / 译文」开关条。目标语言是全局
-// 一个（设置里选），开关也是全局的：切到译文后，选中的技能的描述显示译文。
-// 译文模式但翻译 API 还没配好时，给出引导与「打开设置」入口，不发请求。
-// 全文页本次不翻译，译文模式下在这里说明。
+// 一个（设置里选），开关也是全局的：切到译文后，选中技能的描述与「全文」页的
+// SKILL.md 都显示译文（全文逐段翻译，见 viewFullTextBody）。译文模式但翻译 API
+// 还没配好时，给出引导与「打开设置」入口，不发请求。
 //
 // 分段控件的点击在构建结束或查询响应时才写进 sel，所以靠 Changed 在同一次
 // 构建里取到新选择再交给 SetTranslateOn；sel 每次构建都从 trans.on 推出。
@@ -833,7 +925,7 @@ func (a *App) viewTranslateBar(c *myui.Context) {
 	myui.Column(c).FillWidth().Gap(t.Space(1.5)).Children(func() {
 		myui.Row(c).FillWidth().AlignItems(myui.Center).Gap(t.Space(2)).Children(func() {
 			myui.Icon(c, iconTranslate).TextColor(t.TextMuted).FontSize(t.FontSize)
-			myui.Text(c, "翻译描述").SingleLine().FontSize(t.FontSize - 1).TextColor(t.TextMuted)
+			myui.Text(c, "翻译").SingleLine().FontSize(t.FontSize - 1).TextColor(t.TextMuted)
 			myui.Spacer(c)
 			sel := 0
 			if a.trans.on {
@@ -859,9 +951,6 @@ func (a *App) viewTranslateBar(c *myui.Context) {
 					})
 				})
 			})
-		}
-		if a.detailTab != 0 {
-			myui.Text(c, "全文暂不翻译，显示的是原文").FontSize(t.FontSize - 1).TextColor(t.TextMuted)
 		}
 	})
 }
@@ -896,12 +985,11 @@ const fullTextLoading = "正在读取 SKILL.md…"
 
 // viewDetailFullText 是全文页：渲染技能的 SKILL.md。
 //
-// 正文在后台读取（startFullTextLoad 经 spawn 进 goroutine，不在 UI 线程
-// 做磁盘 I/O），读出后按技能名缓存进 a.skillDocs：切 tab、来回切技能
-// 不必反复读盘；扫描后缓存整体失效（applyScan，更新/恢复等操作都会触发
-// 重扫），届时 docGen 递增，还在路上的旧读盘结果不再回写。加载中显示
-// 提示；读失败或没有 SKILL.md（回收站里的技能可能没有）显示明确原因，
-// 绝不留白，绝不 panic。
+// 正文在后台读取（startFullTextLoad 经 spawn 进 goroutine，不在 UI 线程做磁盘
+// I/O），读出后按技能名缓存进 a.skillDocs：切 tab、来回切技能不必反复读盘；扫描
+// 后缓存整体失效（applyScan），docGen 递增让还在路上的旧读盘结果作废。加载中
+// 显示提示；读失败或没有 SKILL.md（回收站里的技能可能没有）显示明确原因，绝不
+// 留白，绝不 panic。译文模式下正文由 viewFullTextBody 决定显示原文还是译文。
 func (a *App) viewDetailFullText(c *myui.Context, s *store.Skill) {
 	a.startFullTextLoad(s)
 	doc := a.skillDocs[s.Name]
@@ -912,7 +1000,37 @@ func (a *App) viewDetailFullText(c *myui.Context, s *store.Skill) {
 		myui.Text(c, doc.err).TextColor(c.Theme().Danger)
 	default:
 		// 渲染进外层已有的 Scroll，宽度铺满（renderMarkdown 只管内容列）。
-		renderMarkdown(c, doc.src)
+		a.viewFullTextBody(c, s, doc.src)
+	}
+}
+
+// viewFullTextBody 渲染全文正文。原文模式直接渲染 SKILL.md。译文模式下：译文还在
+// 路上时先显示原文、顶上一行「翻译全文中…」，译文到了替换成译文；失败时说明原因，
+// 仍显示原文。翻译只读缓存，发起请求只经 ensureDocTranslation（受缓存占位保护，
+// 同一原文只发一次）。翻译 API 未配好时不发请求，显示原文（引导在开关条里）。
+func (a *App) viewFullTextBody(c *myui.Context, s *store.Skill, src string) {
+	t := c.Theme()
+	if !a.trans.on || !a.settings.Ready() || strings.TrimSpace(src) == "" {
+		renderMarkdown(c, src)
+		return
+	}
+	a.ensureDocTranslation(s.Name, src)
+	e, ok := a.trans.get(docTransKey(s.Name), src)
+	switch {
+	case !ok || e.pending:
+		myui.Row(c).Gap(t.Space(1.5)).AlignItems(myui.Center).Children(func() {
+			myui.Spinner(c)
+			myui.Text(c, "翻译全文中…").FontSize(t.FontSize - 1).TextColor(t.TextMuted)
+		})
+		renderMarkdown(c, src)
+	case e.err != "":
+		myui.Text(c, "全文翻译失败："+e.err+"（切回原文再切到译文可重试）").MaxLines(4).
+			FontSize(t.FontSize - 1).TextColor(t.Danger)
+		renderMarkdown(c, src)
+	default:
+		myui.Text(c, "译文 · "+a.settings.LangLabel()+" · 仅界面显示，不改动技能文件").
+			FontSize(t.FontSize - 2).TextColor(t.TextMuted)
+		renderMarkdown(c, e.dst)
 	}
 }
 
@@ -1078,6 +1196,20 @@ func (a *App) viewDetailActions(c *myui.Context, s *store.Skill, busy bool) {
 			})
 			if rb.Clicked() {
 				a.RestoreAsync(s.Name)
+			}
+			// 永久删除：危险色的文字按钮，靠右放；走确认框，删除前 store 先快照。
+			myui.Spacer(c)
+			pb := myui.ButtonBase(c).Label("详情:永久删除").Tooltip("永久删除回收站里的技能").
+				Padding(t.Space(1.75), t.Space(2.5)).Radius(t.Radius).TextColor(t.Danger)
+			if pb.Hovered() {
+				pb.Background(t.Danger.Alpha(0.1))
+			}
+			pb.Children(func() {
+				myui.Icon(c, iconTrash).FontSize(t.FontSize + 1)
+				myui.Text(c, "永久删除")
+			})
+			if pb.Clicked() {
+				a.confirm = confirmState{open: true, name: s.Name, purge: true}
 			}
 		}
 	})

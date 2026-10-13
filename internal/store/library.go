@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -116,13 +117,21 @@ func LoadLibrary(base *Config) (*Library, error) {
 	if v, verr := NormalizeView(hc.View); verr == nil {
 		l.View = v
 	}
-	for _, r := range hc.Roots {
+	l.Roots = mergeRoots(base.Root, hc.Roots)
+	return l, nil
+}
+
+// mergeRoots 返回默认目录加上 saved 里的追加目录：去掉空串与重复项，默认
+// 目录总在第一个（即使 saved 里也写了它）。
+func mergeRoots(def string, saved []string) []string {
+	l := &Library{Roots: []string{filepath.Clean(def)}}
+	for _, r := range saved {
 		if r == "" || l.index(r) >= 0 {
 			continue
 		}
 		l.Roots = append(l.Roots, filepath.Clean(r))
 	}
-	return l, nil
+	return l.Roots
 }
 
 // Default 返回默认根目录。
@@ -186,6 +195,104 @@ func (l *Library) RemoveRoot(root string) error {
 	}
 	l.Roots = next
 	return nil
+}
+
+// MoveRoot 把 root 挪到列表里的第 to 个位置（从 0 数）并保存，只改列表顺序。
+// 默认目录固定在第一个：它不能移动（ErrDefaultRoot），其他目录也不能挪到
+// 第一个位置；root 不在列表里返回 ErrUnknownRoot，to 越界返回普通错误。
+func (l *Library) MoveRoot(root string, to int) error {
+	i := l.index(root)
+	switch {
+	case i < 0:
+		return fmt.Errorf("%w: %s", ErrUnknownRoot, root)
+	case i == 0 || to == 0:
+		return ErrDefaultRoot
+	case to < 0 || to >= len(l.Roots):
+		return fmt.Errorf("store: 位置 %d 超出列表范围", to)
+	}
+	next := append([]string(nil), l.Roots...)
+	next = slices.Delete(next, i, i+1)
+	next = slices.Insert(next, to, l.Roots[i])
+	if err := l.save(next); err != nil {
+		return err
+	}
+	l.Roots = next
+	return nil
+}
+
+// DiscoverAgentRoots 把本机已有的 agent 技能目录（见 AgentSkillDirs）直接加入
+// 列表并写回 config.json，不逐个确认。每个路径只考虑一次：考虑过的路径记入
+// discovered，之后用户即使从列表移除了它，下次也不会再加回来。已在列表里、
+// 或与列表里某个目录指向同一处（符号链接、与默认目录相同）的路径只记入
+// discovered，不重复加入。返回本次新加入的目录；没有新的路径时不写盘。
+//
+// 读—改—写以 config.json 为准（不用内存里的副本），并持 configMu；config.json
+// 损坏时返回错误且不写盘，不覆盖用户手改的内容。
+func (l *Library) DiscoverAgentRoots(home string) ([]string, error) {
+	candidates := AgentSkillDirs(home)
+	configMu.Lock()
+	defer configMu.Unlock()
+	c := &Config{Root: l.Roots[0], Home: l.Home}
+	hc, _, err := LoadHomeConfig(c)
+	if err != nil {
+		return nil, err
+	}
+	roots := mergeRoots(l.Roots[0], hc.Roots)
+	considered := make(map[string]bool, len(hc.Discovered))
+	for _, p := range hc.Discovered {
+		considered[rootKey(p)] = true
+	}
+	var added []string
+	changed := false
+	for _, dir := range candidates {
+		if considered[rootKey(dir)] {
+			continue
+		}
+		considered[rootKey(dir)] = true
+		hc.Discovered = append(hc.Discovered, dir)
+		changed = true
+		if sameDir(dir, roots) {
+			continue
+		}
+		roots = append(roots, dir)
+		added = append(added, dir)
+	}
+	if !changed {
+		return nil, nil
+	}
+	hc.Roots = roots
+	if hc.CreatedAt == "" {
+		hc.CreatedAt = time.Now().UTC().Format(time.RFC3339)
+	}
+	if err := SaveHomeConfig(c, hc); err != nil {
+		return nil, err
+	}
+	l.Roots = roots
+	return added, nil
+}
+
+// sameDir 报告 dir 是否已经是 roots 里的某个目录：路径相同，或解析符号链接
+// 后指向同一处。
+func sameDir(dir string, roots []string) bool {
+	target := realPath(dir)
+	for _, r := range roots {
+		if rootKey(r) == rootKey(dir) || realPath(r) == target {
+			return true
+		}
+	}
+	return false
+}
+
+// realPath 返回解析符号链接之后的规范化绝对路径；解析失败（路径不存在等）时
+// 退回 rootKey(p)。
+func realPath(p string) string {
+	if target, err := filepath.EvalSymlinks(p); err == nil {
+		if abs, err := filepath.Abs(target); err == nil {
+			return rootKey(abs)
+		}
+		return rootKey(target)
+	}
+	return rootKey(p)
 }
 
 // SetTheme 把外观偏好写进 config.json（其余内容原样保留）。mode 不是

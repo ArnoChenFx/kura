@@ -21,6 +21,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"unicode/utf8"
 )
 
 // errSnippetMax 是非 2xx 时错误信息里携带的响应体最大字节数。截断是为了
@@ -178,4 +179,92 @@ func snippetOf(data []byte) string {
 		out += "…（已截断）"
 	}
 	return out
+}
+
+// SplitForTranslation 把长文本（技能的 SKILL.md 全文）切成若干段，每段尽量不超过
+// maxRunes 个字符，供调用方逐段调用 Translate：一份文档往往远超一次请求能处理
+// 的长度。切分只发生在空行处，且绝不切开围栏代码块（``` 或 ~~~ 之间的内容整块
+// 留在同一段），所以每段都是完整的 markdown 块，译文按空行拼回去结构不变。
+// 单个块本身超过上限时整块保留，不硬切。空白文本返回 nil。
+func SplitForTranslation(text string, maxRunes int) []string {
+	if maxRunes <= 0 {
+		maxRunes = 1
+	}
+	var (
+		out     []string
+		cur     []string
+		curRune int
+	)
+	flush := func() {
+		if len(cur) > 0 {
+			out = append(out, strings.Join(cur, "\n\n"))
+			cur, curRune = nil, 0
+		}
+	}
+	for _, block := range markdownBlocks(text) {
+		n := utf8.RuneCountInString(block)
+		if curRune > 0 && curRune+n > maxRunes {
+			flush()
+		}
+		cur = append(cur, block)
+		curRune += n
+	}
+	flush()
+	return out
+}
+
+// markdownBlocks 按空行把 text 切成块，围栏代码块内的空行不算分界。每块去掉
+// 首尾的空行；全是空白的块不返回。
+func markdownBlocks(text string) []string {
+	var (
+		blocks []string
+		cur    []string
+		fence  string // 当前所在围栏的标记（如 "```"），不在代码块里时为空
+	)
+	emit := func() {
+		// 去掉首尾空行后整块保留（缩进与代码内容都原样）。
+		start, end := 0, len(cur)
+		for start < end && strings.TrimSpace(cur[start]) == "" {
+			start++
+		}
+		for end > start && strings.TrimSpace(cur[end-1]) == "" {
+			end--
+		}
+		if start < end {
+			blocks = append(blocks, strings.Join(cur[start:end], "\n"))
+		}
+		cur = cur[:0]
+	}
+	for _, line := range strings.Split(text, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if fence != "" {
+			// 闭合围栏：同样的标记字符，长度不短于开围栏，行上不再有别的内容。
+			if strings.HasPrefix(trimmed, fence) && strings.Trim(trimmed, fence[:1]) == "" {
+				fence = ""
+			}
+			cur = append(cur, line)
+			continue
+		}
+		if trimmed == "" {
+			emit()
+			continue
+		}
+		if m := fenceMarker(trimmed); m != "" {
+			fence = m
+		}
+		cur = append(cur, line)
+	}
+	emit()
+	return blocks
+}
+
+// fenceMarker 返回行首的围栏标记（至少三个 ` 或 ~），不是围栏时返回空串。
+func fenceMarker(trimmed string) string {
+	for _, ch := range []string{"`", "~"} {
+		if strings.HasPrefix(trimmed, strings.Repeat(ch, 3)) {
+			n := len(trimmed) - len(strings.TrimLeft(trimmed, ch))
+			return strings.Repeat(ch, n)
+		}
+	}
+	return ""
 }

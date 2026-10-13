@@ -128,6 +128,50 @@ func (c *Config) Restore(name, stampName string) (*Result, error) {
 	return &Result{ID: name, State: StateEnabled, Dir: dst}, nil
 }
 
+// Purge 把回收站里的技能 name 永久删除（它的全部时间戳副本）。删除前每份副本
+// 都先快照到 snapshots/<name>/<stamp>：移入回收站时已有同名快照的沿用，不覆盖；
+// 快照任何一份失败都不删除，并清掉写到一半的快照。快照本身不删，符合「破坏性
+// 操作前先快照」的约定。回收站里没有该技能时返回 ErrUnknownSkill。
+func (c *Config) Purge(name string) (*Result, error) {
+	trashDir := filepath.Join(c.TrashRoot(), name)
+	if !fileExists(trashDir) {
+		return nil, fmt.Errorf("store: %w: %s（回收站中不存在）", ErrUnknownSkill, name)
+	}
+	entries, err := os.ReadDir(trashDir)
+	if err != nil {
+		return nil, fmt.Errorf("store: 读取回收站中的 %s 失败: %w", name, err)
+	}
+	if err := c.ensureDirs(); err != nil {
+		return nil, err
+	}
+	var snapDir string
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		src := filepath.Join(trashDir, e.Name())
+		dst := c.SnapshotPath(name, e.Name())
+		info, err := os.Stat(dst)
+		switch {
+		case err == nil && info.IsDir():
+			// 移入回收站时已写下的同名快照与副本内容一致，沿用它。
+		case err == nil:
+			return nil, fmt.Errorf("store: 快照位置 %s 被文件占用，未删除 %s", dst, name)
+		default:
+			if err := copyDir(src, dst); err != nil {
+				// dst 之前不存在，这里只清掉写到一半的部分副本。
+				os.RemoveAll(dst)
+				return nil, fmt.Errorf("store: 永久删除前快照 %s 失败，未删除: %w", name, err)
+			}
+		}
+		snapDir = dst
+	}
+	if err := os.RemoveAll(trashDir); err != nil {
+		return nil, fmt.Errorf("store: 永久删除 %s 失败: %w", name, err)
+	}
+	return &Result{ID: name, SnapshotDir: snapDir}, nil
+}
+
 // latestSubdir 返回 dir 下按名字排序最大的子目录名（时间戳目录名可排序）。
 func latestSubdir(dir string) (string, error) {
 	entries, err := os.ReadDir(dir)
