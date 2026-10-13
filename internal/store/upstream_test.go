@@ -7,10 +7,12 @@ import (
 	"crypto/rand"
 	"errors"
 	"io/fs"
+	"net"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -39,18 +41,6 @@ func twoSkillRepo(t *testing.T, c *Config, alias string) (string, *gitMirror) {
 	installFromGitHub(t, c, alias, "a")
 	installFromGitHub(t, c, alias, "b")
 	return repo, m
-}
-
-// writeRepoFile 在仓库工作树里写一个文件（rel 为 / 分隔）。
-func writeRepoFile(t *testing.T, repo, rel, content string) {
-	t.Helper()
-	p := filepath.Join(repo, filepath.FromSlash(rel))
-	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
-		t.Fatal(err)
-	}
 }
 
 // 安装记录的 commit 与树哈希就是上游的值，且只检出技能子目录。
@@ -375,5 +365,235 @@ func TestRepoKeyNormalizesURL(t *testing.T) {
 	}
 	if newRepoKey("https://github.com/o/r.git", "dev") == a {
 		t.Error("不同 ref 不应同 key")
+	}
+}
+
+// plainRepo 在 base/repo 建一个 git 仓库，文件由 files 表（slash 相对路径 → 内容）驱动。
+func plainRepo(t *testing.T, base string, files map[string]string) string {
+	t.Helper()
+	repo := filepath.Join(base, "repo")
+	for rel, content := range files {
+		writeRepoFile(t, repo, rel, content)
+	}
+	gitCmd(t, repo, "init", "-q")
+	gitCmd(t, repo, "config", "user.email", "t@t")
+	gitCmd(t, repo, "config", "user.name", "t")
+	gitCmd(t, repo, "add", ".")
+	gitCmd(t, repo, "commit", "-q", "-m", "init")
+	return repo
+}
+
+// 不给子目录安装：先只检出发现要用的文件，选定技能后再检出它的整个目录，
+// 元数据记下子目录与树哈希，技能目录里没有仓库里的其他东西。
+func TestAddDiscoveryThenSkillCheckout(t *testing.T) {
+	isolatedGitEnv(t)
+	c := newTestConfig(t)
+	repo := plainRepo(t, t.TempDir(), map[string]string{
+		"skills/alpha/SKILL.md":       "---\nname: alpha\n---\n\nalpha\n",
+		"skills/alpha/refs/extra.md":  "extra\n",
+		"skills/alpha/scripts/run.sh": "echo hi\n",
+		"docs/unrelated.md":           "unrelated\n",
+		"assets/data.bin":             "data\n",
+	})
+	newMirror(t, repo, "disc1")
+
+	r, err := c.Add(&AddOptions{Repo: "owner/disc1"})
+	if err != nil {
+		t.Fatalf("Add 失败: %v", err)
+	}
+	for _, rel := range []string{"SKILL.md", "refs/extra.md", "scripts/run.sh"} {
+		if !fileExists(filepath.Join(r.Dir, filepath.FromSlash(rel))) {
+			t.Errorf("技能目录应有 %s", rel)
+		}
+	}
+	for _, rel := range []string{"docs", "assets", ".git"} {
+		if fileExists(filepath.Join(r.Dir, rel)) {
+			t.Errorf("技能目录里不应有 %s", rel)
+		}
+	}
+	m := readMeta(r.Dir).Meta
+	if m.Source.SubPath != "skills/alpha" {
+		t.Errorf("SubPath 应为 skills/alpha, got %q", m.Source.SubPath)
+	}
+	if want := previewGitOut(t, repo, "rev-parse", "HEAD:skills/alpha"); m.Source.Tree != want {
+		t.Errorf("tree 应为 %s, got %q", want, m.Source.Tree)
+	}
+	if want := previewGitOut(t, repo, "rev-parse", "HEAD"); m.Source.Commit != want {
+		t.Errorf("commit 应为 %s, got %q", want, m.Source.Commit)
+	}
+}
+
+// 插件清单只放在仓库根的 .claude-plugin/plugin.json：只检出发现用的文件时
+// 也要读得到它，并且清单排除了草稿目录。
+func TestAddDiscoveryReadsManifest(t *testing.T) {
+	isolatedGitEnv(t)
+	c := newTestConfig(t)
+	repo := plainRepo(t, t.TempDir(), map[string]string{
+		"skills/published/alpha/SKILL.md": "---\nname: alpha\n---\n\nalpha\n",
+		"skills/draft/beta/SKILL.md":      "---\nname: beta\n---\n\nbeta\n",
+		".claude-plugin/plugin.json":      `{"skills":["./skills/published/alpha"]}`,
+	})
+	newMirror(t, repo, "disc2")
+	r, err := c.Add(&AddOptions{Repo: "owner/disc2"})
+	if err != nil {
+		t.Fatalf("清单只声明了一个技能，应直接安装它: %v", err)
+	}
+	if filepath.Base(r.Dir) != "alpha" {
+		t.Errorf("应安装 alpha, got %s", r.Dir)
+	}
+
+	// 多个候选时列出候选，不安装任何东西。
+	c2 := newTestConfig(t)
+	repo2 := plainRepo(t, t.TempDir(), map[string]string{
+		"skills/one/SKILL.md": "---\nname: one\n---\n",
+		"skills/two/SKILL.md": "---\nname: two\n---\n",
+	})
+	newMirror(t, repo2, "disc3")
+	_, err = c2.Add(&AddOptions{Repo: "owner/disc3"})
+	var ce *CandidatesError
+	if !errors.As(err, &ce) || len(ce.Paths) != 2 {
+		t.Fatalf("应返回两个候选, got %v", err)
+	}
+	cands, err := c2.DiscoverRepoSkills("owner/disc3", "")
+	if err != nil || len(cands) != 2 {
+		t.Errorf("DiscoverRepoSkills 应列出 2 个候选: %v %v", cands, err)
+	}
+}
+
+// 发现阶段也不下载技能无关的大文件：只取 SKILL.md 和清单（通过 file:// 走真实部分 clone）。
+func TestDiscoveryCheckoutSkipsUnrelatedBlobs(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("file:// URL 的路径写法因平台而异，只在 Unix 上验证")
+	}
+	isolatedGitEnv(t)
+	big := make([]byte, 2<<20)
+	if _, err := rand.Read(big); err != nil {
+		t.Fatal(err)
+	}
+	repo := plainRepo(t, t.TempDir(), map[string]string{
+		"skills/one/SKILL.md": "---\nname: one\n---\n",
+		"skills/two/SKILL.md": "---\nname: two\n---\n",
+		"assets/big.bin":      string(big),
+	})
+	bare := filepath.Join(t.TempDir(), "bare.git")
+	gitCmd(t, "", "clone", "-q", "--bare", repo, bare)
+	gitCmd(t, bare, "config", "uploadpack.allowFilter", "true")
+	key := "url.file://" + bare + ".insteadOf"
+	gitCmd(t, "", "config", "--global", key, "https://github.com/owner/disc4.git")
+	t.Cleanup(func() { gitCmd(t, "", "config", "--global", "--unset", key) })
+
+	c := newTestConfig(t)
+	u, _, err := c.resolveGitHub(&AddOptions{Repo: "owner/disc4"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer u.Close()
+	dr, err := DiscoverSkills(u.dir)
+	if err != nil || len(dr.Paths) != 2 {
+		t.Fatalf("应发现两个技能: %+v %v", dr, err)
+	}
+	if size := dirSize(t, filepath.Join(u.dir, ".git")); size > 512<<10 {
+		t.Errorf("发现阶段不应下载无关的大文件，.git 有 %d 字节", size)
+	}
+	if fileExists(filepath.Join(u.dir, "assets")) {
+		t.Error("发现阶段不应检出 assets")
+	}
+}
+
+// 路径里有空格和稀疏检出/gitignore 的特殊字符：只检出这个目录本身，
+// 不会把名字匹配通配符的兄弟目录也带出来；树哈希按字面路径取。
+func TestUpstreamSpecialCharPaths(t *testing.T) {
+	isolatedGitEnv(t)
+	const weird = "skills/we[ird] #name!x"
+	repo := plainRepo(t, t.TempDir(), map[string]string{
+		weird + "/SKILL.md":           "weird\n",
+		weird + "/refs/a.md":          "a\n",
+		"skills/wei #name!x/SKILL.md": "sibling matched by an unescaped [ird]\n",
+		"skills/plain/SKILL.md":       "plain\n",
+	})
+	newMirror(t, repo, "weird1")
+	u, err := cloneUpstream("https://github.com/owner/weird1.git", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer u.Close()
+	want := previewGitOut(t, repo, "rev-parse", "HEAD:"+weird)
+	if got, err := u.Tree(weird); err != nil || got != want {
+		t.Fatalf("Tree(%q) = %q, %v; want %s", weird, got, err, want)
+	}
+	if err := u.Checkout([]string{weird}); err != nil {
+		t.Fatal(err)
+	}
+	if !fileExists(filepath.Join(u.Dir(weird), "refs", "a.md")) {
+		t.Error("应检出特殊字符目录里的文件")
+	}
+	for _, other := range []string{"skills/wei #name!x", "skills/plain"} {
+		if fileExists(filepath.Join(u.dir, filepath.FromSlash(other))) {
+			t.Errorf("不应检出 %s", other)
+		}
+	}
+}
+
+// git 命令卡住（服务器接受连接却不响应）时按超时返回 ErrGitTimeout，而不是一直挂着。
+func TestGitTimeoutAgainstStalledServer(t *testing.T) {
+	isolatedGitEnv(t)
+	t.Setenv("no_proxy", "*")
+	t.Setenv("NO_PROXY", "*")
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Skipf("无法监听本地端口: %v", err)
+	}
+	defer ln.Close()
+	var conns []net.Conn
+	var mu sync.Mutex
+	go func() {
+		for {
+			c, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			mu.Lock()
+			conns = append(conns, c) // 接受后不读不写，模拟卡死的网络
+			mu.Unlock()
+		}
+	}()
+	defer func() {
+		mu.Lock()
+		defer mu.Unlock()
+		for _, c := range conns {
+			c.Close()
+		}
+	}()
+	oldLs, oldClone, oldWait := lsRemoteTimeout, cloneTimeout, gitWaitDelay
+	lsRemoteTimeout, cloneTimeout, gitWaitDelay = 500*time.Millisecond, 500*time.Millisecond, 300*time.Millisecond
+	t.Cleanup(func() { lsRemoteTimeout, cloneTimeout, gitWaitDelay = oldLs, oldClone, oldWait })
+
+	url := "http://" + ln.Addr().String() + "/stalled.git"
+	start := time.Now()
+	if _, err := remoteHead(url, ""); !errors.Is(err, ErrGitTimeout) {
+		t.Errorf("ls-remote 卡住应返回 ErrGitTimeout, got %v", err)
+	}
+	if _, err := cloneUpstream(url, ""); !errors.Is(err, ErrGitTimeout) {
+		t.Errorf("clone 卡住应返回 ErrGitTimeout, got %v", err)
+	}
+	// 两次调用各 0.5s 超时 + 0.3s 宽限；给慢 CI 留足余量，但远小于 lowSpeedTime 的 30s。
+	if elapsed := time.Since(start); elapsed > 20*time.Second {
+		t.Errorf("超时应在限定时间附近返回, 实际用了 %s", elapsed)
+	}
+}
+
+// 路径里的换行会在稀疏检出模式文件里注入额外的一行（例如 /*，把整个仓库检出来），
+// Trees 与 Checkout 都要在碰 git 之前拒绝它。
+func TestNewlinePathsAreRejected(t *testing.T) {
+	u := &upstream{dir: t.TempDir()}
+	const evil = "skills/x\n/*"
+	if _, err := u.Tree(evil); err == nil {
+		t.Error("Tree 应拒绝带换行的路径")
+	}
+	if err := u.Checkout([]string{"skills/ok", evil}); err == nil {
+		t.Error("Checkout 应拒绝带换行的路径")
+	}
+	if fileExists(filepath.Join(u.dir, ".git", "info", "sparse-checkout")) {
+		t.Error("被拒绝的 Checkout 不应写出稀疏检出文件")
 	}
 }

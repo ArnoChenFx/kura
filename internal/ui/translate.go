@@ -1,0 +1,231 @@
+package ui
+
+// 技能文本翻译的界面侧：内存缓存 + 进行中/失败标记 + 后台任务。
+//
+// 边界（硬约束）：
+//   - 翻译只用于界面显示。本文件与翻译相关的一切代码都不写技能目录：不改
+//     SKILL.md、不写 .kura-meta.json、不碰技能根目录；译文也不落任何缓存
+//     文件，只活在进程内存里（translateState.items），退出即丢。
+//   - 目标语言是全局一个（设置里选），不是每个技能单独选。
+//   - 渲染路径只读缓存；网络请求只经 TranslateAsync 进后台 goroutine。
+//
+// 翻译策略（取舍）：只翻译「当前选中的技能」的描述——它在右栏详情与中栏
+// 它自己的那张卡片（或列表行）里各出现一次，共用同一次请求。其余卡片在
+// 译文模式下继续显示原文，不为整页几十张卡片一次性打爆翻译 API；切换选中
+// 后新选中的技能才发起翻译，已翻过的命中缓存、不再请求。全文页（SKILL.md
+// 正文）本次不翻译。
+
+import (
+	"context"
+	"strings"
+	"time"
+
+	"github.com/ArnoChenFx/kura/internal/store"
+)
+
+// translateTimeout 是一次翻译请求的总时限（含连接、等待模型与读响应）。
+const translateTimeout = 30 * time.Second
+
+// 译文的 key 前缀：同一技能同一字段每次都算出同一个 key，来回切换才能命中
+// 缓存。卡片（含列表行）与详情各一个 key，但选中技能的两处共用一次请求。
+const (
+	translateCardPrefix   = "card:"
+	translateDetailPrefix = "detail:"
+	translateDescSuffix   = ":description"
+)
+
+// cardDescKey / detailDescKey 是技能描述在卡片与详情里的翻译 key。
+func cardDescKey(name string) string   { return translateCardPrefix + name + translateDescSuffix }
+func detailDescKey(name string) string { return translateDetailPrefix + name + translateDescSuffix }
+
+// translateEntry 是一个文本的翻译状态：pending / err / dst 三者互斥
+// （pending 为真时另两项为空；失败时 err 非空、dst 为空；成功时 dst 非空）。
+// src 是发起翻译时的原文：技能的描述后来变了（更新、手改）时，原文对不上，
+// 旧译文就不再采用，也不会拿它冒充新原文的译文。
+type translateEntry struct {
+	pending bool
+	err     string
+	dst     string
+	src     string
+}
+
+// translateState 保存每段文本的翻译结果（键：调用方给的稳定 key，如
+// "card:<技能名>:description" 或 "detail:<技能名>:description"）以及
+// 全局的「显示原文/译文」开关。
+//
+// 并发：translateState 只在 UI 线程读写，不加锁——begin 在构建/动作里调用，
+// finish 经 App.publish 回到 UI 线程调用，lookup / text 在构建时调用。后台
+// goroutine 绝不直接碰它（它们只拿到文本与结果，由 publish 的闭包回写）。
+type translateState struct {
+	on    bool                      // true = 显示译文
+	items map[string]translateEntry // 键 → 翻译状态
+	// epoch 随 reset 递增：翻译配置（接口、密钥、模型、目标语言）变了，
+	// 旧配置下还在路上的请求结果不能写进新缓存（见 App.TranslateAsync）。
+	epoch int
+}
+
+// newTranslateState 创建空的翻译状态（默认显示原文）。
+func newTranslateState() *translateState {
+	return &translateState{items: map[string]translateEntry{}}
+}
+
+// get 取 key 对应、且原文与 src 一致的条目。
+func (s *translateState) get(key, src string) (translateEntry, bool) {
+	e, ok := s.items[key]
+	if !ok || e.src != src {
+		return translateEntry{}, false
+	}
+	return e, true
+}
+
+// lookup 返回 key 的译文；没有、正在翻译或失败时 ok 为 false。
+func (s *translateState) lookup(key string) (dst string, ok bool) {
+	e, found := s.items[key]
+	if !found || e.dst == "" {
+		return "", false
+	}
+	return e.dst, true
+}
+
+// text 返回界面应显示的文本：译文可用（且原文没变）时返回译文，否则返回
+// 原文 src，保证界面永不留白。是否处于译文模式由调用方判断（见 App.descText）。
+func (s *translateState) text(key, src string) string {
+	if e, ok := s.get(key, src); ok && e.dst != "" {
+		return e.dst
+	}
+	return src
+}
+
+// begin 为 key 占位 pending，返回是否真的开始：该 key 对同一原文已有条目
+// （进行中 / 已完成 / 已失败）时返回 false，同一 key 同一原文只发一次，
+// 失败也不会在每一帧里自动重试（重试见 clearErrors）。
+func (s *translateState) begin(key, src string) bool {
+	if _, ok := s.get(key, src); ok {
+		return false
+	}
+	s.items[key] = translateEntry{pending: true, src: src}
+	return true
+}
+
+// finish 记下 key 的翻译结果：err 非空记失败（译文清空），否则记 dst。
+// 原文以 begin 时的为准：条目已被 reset 清掉或换成别的原文时不写，
+// 避免迟到的结果污染缓存。
+func (s *translateState) finish(key, src, dst, err string) {
+	e, ok := s.items[key]
+	if !ok || e.src != src || !e.pending {
+		return
+	}
+	if err != "" {
+		s.items[key] = translateEntry{err: err, src: src}
+		return
+	}
+	s.items[key] = translateEntry{dst: dst, src: src}
+}
+
+// clearErrors 丢掉所有失败条目：用户再次切到译文时借此重试失败的文本，
+// 不碰成功的译文与进行中的请求。
+func (s *translateState) clearErrors() {
+	for k, e := range s.items {
+		if e.err != "" {
+			delete(s.items, k)
+		}
+	}
+}
+
+// reset 清空缓存并让所有在途结果作废：翻译配置变了，旧译文不再适用。
+func (s *translateState) reset() {
+	s.items = map[string]translateEntry{}
+	s.epoch++
+}
+
+// descText 返回技能描述在界面上应显示的文本：译文模式下用缓存的译文（拿
+// 不到就退回原文），否则原文。prefix 区分位置（translateCardPrefix /
+// translateDetailPrefix）。只读缓存，绝不发请求。
+func (a *App) descText(prefix string, s *store.Skill) string {
+	if !a.trans.on || strings.TrimSpace(s.Description) == "" {
+		return s.Description
+	}
+	return a.trans.text(prefix+s.Name+translateDescSuffix, s.Description)
+}
+
+// SetTranslateOn 切换「原文 / 译文」。切到译文时重试之前失败的文本，并立刻
+// 为选中的技能发起翻译（设置未就绪时不发，界面给引导）。只改内存状态与
+// 发起后台任务，不写磁盘。
+func (a *App) SetTranslateOn(on bool) {
+	if a.trans.on == on {
+		return
+	}
+	a.trans.on = on
+	if on {
+		a.trans.clearErrors()
+		a.ensureTranslations(a.selected())
+	}
+}
+
+// ensureTranslations 为选中的技能发起描述翻译（若需要）：译文模式开着、
+// 翻译 API 已就绪、描述非空、且缓存里还没有它。每次构建都可以调用——
+// begin 保证同一原文只发一次，所以它不是「渲染路径上的副作用」，而是
+// 受缓存占位保护的任务（与 startFullTextLoad 同一做法）。
+func (a *App) ensureTranslations(s *store.Skill) {
+	if s == nil || !a.trans.on || !a.settings.Ready() || strings.TrimSpace(s.Description) == "" {
+		return
+	}
+	a.TranslateAsync(detailDescKey(s.Name), s.Description, cardDescKey(s.Name))
+}
+
+// TranslateAsync 在后台翻译 text，把结果写进 key（以及 alias 里的各个 key，
+// 它们共用这一次请求）。
+//
+//   - 发起前先在 UI 线程 begin 占位 pending：同一 key 同一原文只发一次。
+//   - 请求带 translateTimeout 的超时，走注入的 a.translate（测试换成假实现，
+//     绝不联网）；goroutine 里不碰任何 UI 状态。
+//   - 结果经 a.publish 回到 UI 线程写缓存，下一帧读到；配置变了
+//     （epoch 不同）的旧结果直接丢弃。
+//   - 失败只把错误文本记进条目供界面显示；错误里若出现 API key，先抹掉
+//     （store 层本就不会带上它，这里再兜一层）。
+func (a *App) TranslateAsync(key, text string, alias ...string) {
+	var keys []string
+	for _, k := range append([]string{key}, alias...) {
+		if a.trans.begin(k, text) {
+			keys = append(keys, k)
+		}
+	}
+	if len(keys) == 0 {
+		return
+	}
+	fn, epoch, secret := a.translate, a.trans.epoch, a.settings.APIKey
+	a.spawn(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), translateTimeout)
+		defer cancel()
+		var (
+			dst    string
+			errMsg string
+		)
+		if fn == nil {
+			errMsg = store.ErrNotConfigured.Error()
+		} else if out, err := fn(ctx, text); err != nil {
+			errMsg = redactSecret(err.Error(), secret)
+		} else if strings.TrimSpace(out) == "" {
+			errMsg = "翻译结果为空"
+		} else {
+			dst = out
+		}
+		a.publish(func() {
+			if epoch != a.trans.epoch {
+				return // 翻译配置已变，这份旧结果不要
+			}
+			for _, k := range keys {
+				a.trans.finish(k, text, dst, errMsg)
+			}
+		})
+	})
+}
+
+// redactSecret 把 msg 里出现的 secret 换成 ***。secret 为空时原样返回。
+func redactSecret(msg, secret string) string {
+	secret = strings.TrimSpace(secret)
+	if secret == "" {
+		return msg
+	}
+	return strings.ReplaceAll(msg, secret, "***")
+}

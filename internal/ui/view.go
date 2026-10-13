@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -17,9 +18,13 @@ const (
 	// 决定列数，列宽在最小宽度之上平分剩余空间。
 	cardMinWidth = 248
 	cardHeight   = 140
+	// titleBarMinHeight 是自绘标题栏的高度（DIP），与 main.go 里
+	// WindowOptions.TitleBarHeight 保持一致：全屏时窗口按钮藏起来、
+	// c.TitleBar() 返回零，高度取这个兑底，顶栏不塌。
+	titleBarMinHeight = 40
 )
 
-// View 构建 kura 主窗口的一帧，三栏结构：
+// View 构建 kura 主窗口的一帧，顶部自绘标题栏 + 三栏结构：
 //
 //	┌──────────┬──────────────────────────────┬────────────┐
 //	│ kura     │ 目录名 · 路径    刷新 检查 导入 │ 详情（选中   │
@@ -45,15 +50,20 @@ func (a *App) View(c *myui.Context) {
 	rows := a.visible()
 	a.syncSelection(rows)
 	sel := a.selected()
+	// 译文模式下为选中的技能发起描述翻译（受缓存占位保护，同一原文只发一次；
+	// 请求在后台，这里只读状态，见 translate.go）。
+	a.ensureTranslations(sel)
 
-	myui.Row(c).Fill().AlignItems(myui.Stretch).Children(func() {
+	a.viewTitlebar(c)
+	// 三栏占满标题栏以下的剩余高度；标题栏自身不参与收缩（见 viewTitlebar）。
+	myui.Row(c).Grow(1).MinHeight(0).AlignItems(myui.Stretch).Children(func() {
 		a.viewRoots(c)
 		myui.Divider(c)
 		myui.Column(c).Grow(1).MinWidth(0).FillHeight().Background(a.pal.canvas).Children(func() {
 			a.viewMainHeader(c)
 			a.viewFilterBar(c)
 			a.viewErrorBanner(c)
-			a.viewGrid(c, rows)
+			a.viewSkills(c, rows)
 			a.viewStatusBar(c)
 		})
 		if sel != nil {
@@ -75,6 +85,31 @@ func (a *App) View(c *myui.Context) {
 
 	// 安装技能弹窗。
 	a.viewInstallModal(c)
+
+	// 设置弹窗（翻译 API 与目标语言）。
+	a.viewSettingsModal(c)
+}
+
+// viewTitlebar 是自绘标题栏：跨整个窗口宽度的一条顶栏，放在三栏之上。
+// 窗口用 mygo.TitleBarHidden 隐藏了系统标题栏但保留右上角的窗口按钮，按钮
+// 占掉的区域经 c.TitleBar() 拿到（Height 是顶部那条带的高度，Right 是从右
+// 边缘算的宽度），内边距避开它，让标题文字不被按钮压住；全屏时窗口按钮
+// 藏起来、c.TitleBar() 返回零，高度取 titleBarMinHeight 兜底，顶栏不塌。
+// 整条 DragWindow()：拖动它移动窗口，双击等于标题栏的双击（最大化/还原）。
+// 按钮不放在这里——可交互的元素会吃掉拖动手势，所以标题栏只放标识与名字。
+func (a *App) viewTitlebar(c *myui.Context) {
+	t := c.Theme()
+	bar := c.TitleBar()
+	myui.Row(c).FillWidth().Shrink(0).Height(max(bar.Height, titleBarMinHeight)).
+		Padding(0, bar.Right+12, 0, bar.Left+12).Background(a.pal.sidebar).
+		AlignItems(myui.Center).Gap(t.Space(2.5)).DragWindow().Children(func() {
+		// 标识：强调色方块里的 K，与左栏品牌块同一做法。
+		myui.Box(c).Size(t.Space(6), t.Space(6)).Radius(t.Radius - 2).Background(t.Accent).
+			Center().Children(func() {
+			myui.Text(c, "K").Bold().FontSize(t.FontSize - 1).TextColor(t.AccentText)
+		})
+		myui.Text(c, "kura").Bold().SingleLine()
+	})
 }
 
 // viewRoots 是左栏：品牌、技能目录列表（每项带在用技能数）与底部的
@@ -108,6 +143,10 @@ func (a *App) viewRoots(c *myui.Context) {
 			myui.Text(c, "目录列表读取失败："+a.libErr).MaxLines(3).
 				FontSize(t.FontSize-2).TextColor(t.Danger).Padding(t.Space(1), t.Space(4))
 		}
+		if a.settingsErr != "" {
+			myui.Text(c, "设置读取失败："+a.settingsErr).MaxLines(3).
+				FontSize(t.FontSize-2).TextColor(t.Danger).Padding(t.Space(1), t.Space(4))
+		}
 		myui.Column(c).FillWidth().Padding(t.Space(2), t.Space(3), t.Space(3), t.Space(3)).
 			Gap(t.Space(3)).Children(func() {
 			ab := myui.ButtonBase(c).Label("添加文件夹").FillWidth().Disabled(a.adding).
@@ -122,6 +161,42 @@ func (a *App) viewRoots(c *myui.Context) {
 			})
 			if ab.Clicked() {
 				a.AddRootAsync()
+			}
+			// 检查 kura 应用自身的更新（区别于技能级「检查更新」）：打开
+			// MyGo 的原生更新窗口。真实检查经 a.checkUpdates 钩子走
+			// selfupdate.CheckForUpdates，生产环境在 main.go 里注入；测试
+			// 注入假实现，绝不真的触发更新检查（未挂载更新插件会 panic）。
+			// 点击立刻在状态行给一句反馈；更新窗口由插件自己弹出。
+			cb := myui.ButtonBase(c).Label("检查更新").Tooltip("检查 kura 应用更新").
+				FillWidth().Disabled(a.checkingUpdate).
+				Justify(myui.Start).Gap(t.Space(2)).Padding(t.Space(2), t.Space(3)).
+				Radius(t.Radius).Border(1, t.Border).TextColor(a.pal.textMid)
+			if cb.Hovered() && !a.checkingUpdate {
+				cb.Background(t.SurfaceHover).TextColor(t.Text)
+			}
+			if a.checkingUpdate {
+				cb.Opacity(0.45)
+			}
+			cb.Children(func() {
+				myui.Icon(c, iconUpdate)
+				myui.Text(c, "检查更新")
+			})
+			if cb.Clicked() {
+				a.CheckAppUpdateAsync()
+			}
+			// 设置：翻译 API 与目标语言。与「添加文件夹」「检查更新」同一样式。
+			sb := myui.ButtonBase(c).Label("设置").Tooltip("翻译 API 与目标语言").
+				FillWidth().Justify(myui.Start).Gap(t.Space(2)).Padding(t.Space(2), t.Space(3)).
+				Radius(t.Radius).Border(1, t.Border).TextColor(a.pal.textMid)
+			if sb.Hovered() {
+				sb.Background(t.SurfaceHover).TextColor(t.Text)
+			}
+			sb.Children(func() {
+				myui.Icon(c, iconSettings)
+				myui.Text(c, "设置")
+			})
+			if sb.Clicked() {
+				a.OpenSettings()
 			}
 			a.viewThemeSwitch(c)
 		})
@@ -292,7 +367,57 @@ func (a *App) viewFilterBar(c *myui.Context) {
 		myui.Segmented(c, &a.filter,
 			"全部 "+itoa(en+dis), "启用 "+itoa(en), "停用 "+itoa(dis), "回收站 "+itoa(trash)).
 			Shrink(0)
+		myui.Box(c).Width(t.Space(1))
+		a.viewModeSwitch(c)
 	})
+}
+
+// viewModes 是排列模式开关的各个分段，顺序即分段顺序。
+var viewModes = []struct {
+	mode  string
+	label string
+	icon  *myui.SVG
+}{
+	{store.ViewGrid, "卡片网格", iconGrid},
+	{store.ViewList, "列表", iconRows},
+}
+
+// viewIndex 返回排列模式在 viewModes 里的位置，不认识的当作卡片网格。
+func viewIndex(mode string) int {
+	for i, m := range viewModes {
+		if m.mode == mode {
+			return i
+		}
+	}
+	return 0
+}
+
+// viewModeSwitch 是筛选栏右端的排列开关：两个图标分段（卡片网格 / 列表），
+// 选中的分段浮起，写法同 viewThemeSwitch。分段的点击在构建结束或查询响应时
+// 才写进 sel，所以靠 Changed 在同一次构建里取到新选择再交给 SetViewAsync
+// （幂等）；sel 每次构建都从 viewMode 重新推出。Shrink(0)：窄窗口里筛选栏
+// 换行时它不被挤扁。
+func (a *App) viewModeSwitch(c *myui.Context) {
+	t := c.Theme()
+	sel := viewIndex(a.viewMode)
+	seg := myui.SegmentedBase(c, &sel, len(viewModes))
+	track := seg.Track.Label("排列").Padding(t.Space(0.5)).Gap(t.Space(0.5)).
+		Radius(t.Radius).Background(a.pal.card).Border(1, a.pal.line).Shrink(0).Children(func() {
+		for i, m := range viewModes {
+			b := seg.Segment(i).Label(m.label).Tooltip(m.label).
+				Padding(t.Space(1.5), t.Space(2)).Radius(t.Radius - 2).TextColor(t.TextMuted)
+			switch {
+			case i == sel:
+				b.Background(t.SurfacePressed).TextColor(t.Text)
+			case b.Hovered():
+				b.Background(t.SurfaceHover).TextColor(t.Text)
+			}
+			b.Children(func() { myui.Icon(c, m.icon).FontSize(t.FontSize + 1) })
+		}
+	})
+	if track.Changed() {
+		a.SetViewAsync(viewModes[sel].mode)
+	}
 }
 
 // viewErrorBanner 是全局错误横幅：目录缺失或扫描失败时出现在卡片上方。
@@ -307,6 +432,130 @@ func (a *App) viewErrorBanner(c *myui.Context) {
 		Children(func() {
 			myui.Text(c, a.loadErr).SingleLine().TextColor(t.Danger)
 		})
+}
+
+// viewSkills 按排列模式画技能区：卡片网格（默认）或两行列表。两种排列共用
+// 同一份筛选后的 rows 与选中状态（selName），切换模式不丢选中。
+func (a *App) viewSkills(c *myui.Context, rows []*store.Skill) {
+	if a.viewMode == store.ViewList {
+		a.viewList(c, rows)
+		return
+	}
+	a.viewGrid(c, rows)
+}
+
+// viewList 是两行列表：每个技能一行（viewRow），整体可滚动。选中直接以
+// selName 为准，不引入网格的下标选中状态。没有技能时复用网格的空态。
+func (a *App) viewList(c *myui.Context, rows []*store.Skill) {
+	if len(rows) == 0 {
+		a.viewGridEmpty(c)
+		return
+	}
+	t := c.Theme()
+	myui.Scroll(c).Grow(1).FillWidth().Children(func() {
+		myui.Column(c).FillWidth().Gap(t.Space(1.5)).
+			Padding(0, t.Space(5), t.Space(3), t.Space(5)).Children(func() {
+			for _, s := range rows {
+				a.viewRow(c, s, s.Name == a.selName)
+			}
+		})
+	})
+}
+
+// viewRow 是列表里的一个技能，占两行：
+//
+//	[头像] 名字 · 来源 …… [标签] [开关 / 恢复 / 转圈]
+//	       描述（单行，超出省略）
+//
+// 行为与卡片一致：点击选中、右键先选中再弹同一份菜单；停用与回收站的名字
+// 变淡，回收站加删除线并把开关换成「恢复」。行自己画选中与悬停（同一圈边框）。
+func (a *App) viewRow(c *myui.Context, s *store.Skill, selected bool) {
+	t := c.Theme()
+	busy := a.isBusy(s.Name)
+	dim := s.State != store.StateEnabled
+	row := myui.ButtonBase(c).Key(s.Name).FillWidth().Justify(myui.Start).
+		Padding(t.Space(2.5), t.Space(3)).Radius(t.Radius + 2)
+	bg, border := a.pal.card, a.pal.line
+	switch {
+	case selected:
+		bg, border = a.pal.cardSel, t.Accent
+	case row.Hovered():
+		bg, border = a.pal.cardHover, a.pal.lineHover
+	}
+	row.Background(bg).Border(1, border)
+	// 右键先选中这一行：菜单作用的就是右栏正显示的技能（同卡片，放在菜单的
+	// 构建函数里）。
+	row.ContextMenu(func(m *myui.Menu) {
+		if a.selName != s.Name {
+			a.selName = s.Name
+			c.Invalidate()
+		}
+		a.cardMenu(c, m, s)
+	})
+	row.Children(func() {
+		myui.Column(c).Grow(1).MinWidth(0).Gap(t.Space(1.5)).Children(func() {
+			// 第 1 行：头像、名字、来源、标签 + 右侧控件。
+			myui.Row(c).FillWidth().Gap(t.Space(3)).AlignItems(myui.Center).Children(func() {
+				avatar(c, a.pal, s.Name, t.Space(7), dim)
+				name := myui.Text(c, s.Name).SingleLine().FontWeight(600).MinWidth(0)
+				if dim {
+					name.TextColor(t.TextMuted)
+				}
+				if s.State == store.StateTrashed {
+					name.Strikethrough()
+				}
+				myui.Row(c).Grow(1).MinWidth(0).Gap(t.Space(1)).AlignItems(myui.Center).Children(func() {
+					myui.Icon(c, sourceIcon(s)).TextColor(t.TextMuted).FontSize(t.FontSize - 2).Shrink(0)
+					myui.Text(c, cardSource(s)).SingleLine().MinWidth(0).
+						FontSize(t.FontSize - 2).TextColor(t.TextMuted)
+				})
+				// 标签放在控件左侧，不挤压名字：只在有话要说时出现。
+				if a.updates[s.Name] {
+					pill(c, "有更新", t.Accent)
+				}
+				switch s.State {
+				case store.StateDisabled:
+					pill(c, "已停用", t.Warning)
+				case store.StateTrashed:
+					pill(c, "回收站", t.Danger)
+				}
+				if s.MetaErr != "" {
+					pill(c, "元数据损坏", t.Danger)
+				} else if !s.HasSKILLMD && s.State != store.StateTrashed {
+					pill(c, "缺少 SKILL.md", t.Warning)
+				}
+				switch {
+				case busy:
+					myui.Spinner(c)
+				case s.State == store.StateTrashed:
+					ghostButton(c, iconRestore, "恢复", false, func() { a.RestoreAsync(s.Name) })
+				default:
+					// 同卡片：Changed 返回 true 的这次构建里，on 已是目标状态。
+					on := s.State == store.StateEnabled
+					sw := kuraSwitch(c, &on, a.pal.toggle).Label(s.Name + " 开关")
+					if sw.Changed() {
+						a.ToggleAsync(s.Name, on)
+					}
+				}
+			})
+			// 第 2 行：描述，单行省略；左缩进与名字对齐（头像宽 + 间距）。
+			desc, color := a.descText(translateCardPrefix, s), t.TextMuted
+			if desc == "" {
+				desc, color = "没有描述", t.TextMuted.Alpha(0.6)
+			}
+			// 缩进用占位盒子而不是外边距：FillWidth 加外边距会比父容器宽出缩进，
+			// 省略号就画到行边框之外。
+			myui.Row(c).FillWidth().Children(func() {
+				myui.Box(c).Width(t.Space(10)).Shrink(0)
+				myui.Text(c, desc).SingleLine().FontSize(t.FontSize - 1).TextColor(color).
+					Grow(1).MinWidth(0)
+			})
+		})
+	})
+	if row.Clicked() && a.selName != s.Name {
+		a.selName = s.Name
+		c.Invalidate()
+	}
 }
 
 // viewGrid 是技能卡片网格：按宽度自动换列，只构建可见的行。
@@ -420,7 +669,8 @@ func (a *App) viewCard(c *myui.Context, s *store.Skill, selected bool) {
 				}
 			}
 		})
-		desc, color := s.Description, t.TextMuted
+		// 译文模式下，选中技能的卡片显示译文（其余卡片仍是原文，见 translate.go）。
+		desc, color := a.descText(translateCardPrefix, s), t.TextMuted
 		if desc == "" {
 			desc, color = "没有描述", t.TextMuted.Alpha(0.6)
 		}
@@ -493,11 +743,18 @@ func (a *App) cardMenu(c *myui.Context, m *myui.Menu, s *store.Skill) {
 	}
 }
 
-// viewDetail 是右栏：所选技能的详情。头部是头像、名字与状态；正文是描述
-// 与分组的信息块（来源、元数据、位置）；底部固定操作栏。
+// viewDetail 是右栏：所选技能的详情。头部是头像、名字与状态；下面是
+// 「概览 / 全文」tab：概览是描述与分组的信息块（来源、元数据、位置），
+// 全文是渲染出的 SKILL.md（后台读取，见 detailBody）；底部固定操作栏。
 func (a *App) viewDetail(c *myui.Context, s *store.Skill) {
 	t := c.Theme()
 	busy := a.isBusy(s.Name)
+	// 换技能时把 tab 重置回概览（detailSel 记录 tab 属于哪个技能），
+	// 避免看到上一个技能的全文。
+	if a.detailSel != s.Name {
+		a.detailSel = s.Name
+		a.detailTab = 0
+	}
 	myui.Column(c).Width(detailWidth).Shrink(0).FillHeight().Background(a.pal.canvas).Children(func() {
 		myui.Scroll(c).Grow(1).FillWidth().Children(func() {
 			myui.Column(c).FillWidth().Padding(t.Space(4), t.Space(5)).Gap(t.Space(4)).Children(func() {
@@ -517,16 +774,11 @@ func (a *App) viewDetail(c *myui.Context, s *store.Skill) {
 					})
 					ghostButton(c, iconClose, "关闭详情", false, func() { a.selName = "" })
 				})
-				if s.Description != "" {
-					myui.Text(c, s.Description).TextColor(t.Text.Alpha(0.85))
-				}
-				if !s.HasSKILLMD && s.State != store.StateTrashed {
-					myui.Text(c, "缺少 SKILL.md").TextColor(t.Warning)
-				}
-				a.detailGroup(c, "元数据", func() { a.viewDetailMeta(c, s) })
-				a.detailGroup(c, "位置", func() {
-					myui.Text(c, s.Dir).FontSize(t.FontSize - 1).TextColor(t.TextMuted)
-				})
+				a.viewTranslateBar(c)
+				// 概览/全文 tab：绑定 a.detailTab。点选在下一次构建生效，
+				// 两个页面都按 a.detailTab 分支，本帧内的切换下一帧生效。
+				myui.Tabs(c, &a.detailTab, detailTabOverview, detailTabFull).FillWidth()
+				a.detailBody(c, s)
 			})
 		})
 		myui.Divider(c)
@@ -536,13 +788,194 @@ func (a *App) viewDetail(c *myui.Context, s *store.Skill) {
 	})
 }
 
+// detailTabLabels 是详情 tab 的两个标签（下标即 detailTab 的取值）。
+const (
+	detailTabOverview = "概览"
+	detailTabFull     = "全文"
+)
+
+// detailBody 按 detailTab 渲染详情正文：概览页是原有的描述与信息块，
+// 全文页是后台读出并渲染的 SKILL.md。
+func (a *App) detailBody(c *myui.Context, s *store.Skill) {
+	if a.detailTab != 0 {
+		a.viewDetailFullText(c, s)
+		return
+	}
+	a.viewDetailOverview(c, s)
+}
+
+// viewDetailOverview 是概览页：描述、缺 SKILL.md 提示、元数据与位置。
+// 这两组信息加 Selectable（理由见 detailGroup）。
+func (a *App) viewDetailOverview(c *myui.Context, s *store.Skill) {
+	t := c.Theme()
+	if s.Description != "" {
+		myui.Text(c, a.descText(translateDetailPrefix, s)).TextColor(t.Text.Alpha(0.85))
+		a.viewTranslateNote(c, s)
+	}
+	if !s.HasSKILLMD && s.State != store.StateTrashed {
+		myui.Text(c, "缺少 SKILL.md").TextColor(t.Warning)
+	}
+	a.detailGroup(c, "元数据", true, func() { a.viewDetailMeta(c, s) })
+	a.detailGroup(c, "位置", true, func() {
+		myui.Text(c, s.Dir).FontSize(t.FontSize - 1).TextColor(t.TextMuted)
+	})
+}
+
+// viewTranslateBar 是详情头部下方的「原文 / 译文」开关条。目标语言是全局
+// 一个（设置里选），开关也是全局的：切到译文后，选中的技能的描述显示译文。
+// 译文模式但翻译 API 还没配好时，给出引导与「打开设置」入口，不发请求。
+// 全文页本次不翻译，译文模式下在这里说明。
+//
+// 分段控件的点击在构建结束或查询响应时才写进 sel，所以靠 Changed 在同一次
+// 构建里取到新选择再交给 SetTranslateOn；sel 每次构建都从 trans.on 推出。
+func (a *App) viewTranslateBar(c *myui.Context) {
+	t := c.Theme()
+	myui.Column(c).FillWidth().Gap(t.Space(1.5)).Children(func() {
+		myui.Row(c).FillWidth().AlignItems(myui.Center).Gap(t.Space(2)).Children(func() {
+			myui.Icon(c, iconTranslate).TextColor(t.TextMuted).FontSize(t.FontSize)
+			myui.Text(c, "翻译描述").SingleLine().FontSize(t.FontSize - 1).TextColor(t.TextMuted)
+			myui.Spacer(c)
+			sel := 0
+			if a.trans.on {
+				sel = 1
+			}
+			if myui.Segmented(c, &sel, "原文", "译文").Label("显示语言").Shrink(0).Changed() {
+				a.SetTranslateOn(sel == 1)
+				c.Invalidate()
+			}
+		})
+		if !a.trans.on {
+			return
+		}
+		if !a.settings.Ready() {
+			myui.Box(c).FillWidth().Padding(t.Space(2), t.Space(3)).Radius(t.Radius).
+				Background(t.Warning.Alpha(0.10)).Border(1, t.Warning.Alpha(0.4)).Children(func() {
+				myui.Column(c).FillWidth().Gap(t.Space(1.5)).Children(func() {
+					myui.Text(c, "先在设置里填翻译 API").TextColor(t.Warning)
+					myui.Row(c).FillWidth().Children(func() {
+						if myui.Button(c, "打开设置").Clicked() {
+							a.OpenSettings()
+						}
+					})
+				})
+			})
+		}
+		if a.detailTab != 0 {
+			myui.Text(c, "全文暂不翻译，显示的是原文").FontSize(t.FontSize - 1).TextColor(t.TextMuted)
+		}
+	})
+}
+
+// viewTranslateNote 是概览页描述下方的一行小字：译文模式下说明翻译的状态
+// （翻译中 / 失败原因 / 当前译文的语言）。失败时原文仍在上方，不被遮挡。
+// 翻译 API 未配置时不说话（引导在开关条里）。
+func (a *App) viewTranslateNote(c *myui.Context, s *store.Skill) {
+	if !a.trans.on || !a.settings.Ready() {
+		return
+	}
+	t := c.Theme()
+	e, ok := a.trans.get(detailDescKey(s.Name), s.Description)
+	switch {
+	case !ok || e.pending:
+		myui.Row(c).Gap(t.Space(1.5)).AlignItems(myui.Center).Children(func() {
+			myui.Spinner(c)
+			myui.Text(c, "翻译中…").FontSize(t.FontSize - 1).TextColor(t.TextMuted)
+		})
+	case e.err != "":
+		myui.Text(c, "翻译失败："+e.err+"（切回原文再切到译文可重试）").MaxLines(4).
+			FontSize(t.FontSize - 1).TextColor(t.Danger)
+	default:
+		myui.Text(c, "译文 · "+a.settings.LangLabel()+" · 仅界面显示，不改动技能文件").
+			FontSize(t.FontSize - 2).TextColor(t.TextMuted)
+	}
+}
+
+// fullTextLoading 是 skillDocs 里的「正在读」占位值：占位与失败都走
+// err 字段，加载中的提示不染危险色。
+const fullTextLoading = "正在读取 SKILL.md…"
+
+// viewDetailFullText 是全文页：渲染技能的 SKILL.md。
+//
+// 正文在后台读取（startFullTextLoad 经 spawn 进 goroutine，不在 UI 线程
+// 做磁盘 I/O），读出后按技能名缓存进 a.skillDocs：切 tab、来回切技能
+// 不必反复读盘；扫描后缓存整体失效（applyScan，更新/恢复等操作都会触发
+// 重扫），届时 docGen 递增，还在路上的旧读盘结果不再回写。加载中显示
+// 提示；读失败或没有 SKILL.md（回收站里的技能可能没有）显示明确原因，
+// 绝不留白，绝不 panic。
+func (a *App) viewDetailFullText(c *myui.Context, s *store.Skill) {
+	a.startFullTextLoad(s)
+	doc := a.skillDocs[s.Name]
+	switch {
+	case doc.err == fullTextLoading:
+		myui.Text(c, fullTextLoading).TextColor(c.Theme().TextMuted)
+	case doc.err != "":
+		myui.Text(c, doc.err).TextColor(c.Theme().Danger)
+	default:
+		// 渲染进外层已有的 Scroll，宽度铺满（renderMarkdown 只管内容列）。
+		renderMarkdown(c, doc.src)
+	}
+}
+
+// fullTextDoc 是一个技能的 SKILL.md 读盘结果：src 是源文本，err 是提示
+// 文案（含加载中占位与失败原因），两者不会同时有值。
+type fullTextDoc struct {
+	src string
+	err string
+}
+
+// startFullTextLoad 确保技能的 SKILL.md 有一份缓存：没有就去后台读
+// （key 是技能名：同名技能只可能处于启用/停用/回收站之一，名字是稳定
+// 键）。任务发出前先占位「正在读取」，避免重复发任务；读结果回写前检查
+// docGen，扫描已刷新过缓存的任务直接丢弃。startFullTextLoad 只在
+// viewDetailFullText（UI 线程）里调用。
+func (a *App) startFullTextLoad(s *store.Skill) {
+	if a.skillDocs == nil {
+		a.skillDocs = map[string]fullTextDoc{}
+	}
+	if _, ok := a.skillDocs[s.Name]; ok {
+		return
+	}
+	a.skillDocs[s.Name] = fullTextDoc{err: fullTextLoading}
+	name, dir, hasMD, gen := s.Name, s.Dir, s.HasSKILLMD, a.docGen
+	a.spawn(func() {
+		doc := fullTextDoc{err: "没有 SKILL.md 可显示"}
+		if hasMD {
+			data, err := os.ReadFile(filepath.Join(dir, "SKILL.md"))
+			if err != nil {
+				doc = fullTextDoc{err: "读取 SKILL.md 失败：" + err.Error()}
+			} else {
+				doc = fullTextDoc{src: string(data)}
+			}
+		}
+		a.publish(func() {
+			if gen != a.docGen {
+				// 读取期间扫过描（缓存已重置），这份旧结果不要。
+				return
+			}
+			if a.skillDocs == nil {
+				a.skillDocs = map[string]fullTextDoc{}
+			}
+			a.skillDocs[name] = doc
+		})
+	})
+}
+
 // detailGroup 是详情里的一个信息块：小标题 + 比底色浅一档的圆角框。
-func (a *App) detailGroup(c *myui.Context, title string, fn func()) {
+// selectable 为 true 时内层容器加 Selectable：组内文字可拖选、双击选词、
+// Ctrl+C 拷贝（MyGo 容器上的 Selectable 让内部 Text/RichText 共享一次
+// 选择）。只给「元数据」「位置」这两组开：组里现在没有控件，将来若有
+// 按钮/输入框，必须给它们 .Unselectable()，否则控件交互和选择打架；
+// 其余组（如即将出现的详情正文）保持普通，不为加选择改变排版。
+func (a *App) detailGroup(c *myui.Context, title string, selectable bool, fn func()) {
 	t := c.Theme()
 	myui.Column(c).FillWidth().Gap(t.Space(1.5)).Children(func() {
 		sectionHeader(c, title)
-		myui.Column(c).FillWidth().Padding(t.Space(3)).Gap(t.Space(1.5)).
-			Radius(t.Radius).Background(a.pal.card).Border(1, a.pal.line).Children(fn)
+		inner := myui.Column(c).FillWidth().Padding(t.Space(3)).Gap(t.Space(1.5)).
+			Radius(t.Radius).Background(a.pal.card).Border(1, a.pal.line)
+		if selectable {
+			inner.Selectable()
+		}
+		inner.Children(fn)
 	})
 }
 
@@ -562,28 +995,30 @@ func (a *App) viewDetailMeta(c *myui.Context, s *store.Skill) {
 	// 标签用弱化色，值在 metaField 里单独设为正文色，主次分明。
 	myui.Column(c).FillWidth().TextColor(t.TextMuted).Children(func() {
 		myui.Form(c, func() {
-			metaField(c, "来源", sourceURLText(m), true)
+			// 来源行：GitHub 渲染成可点击链接（metaFieldLink，在系统浏览器
+			// 打开），本地保持可选中的普通文本（Link 只认 URL，不收路径）。
+			metaFieldLink(c, m)
 			if m.Source.Type == store.SourceGitHub {
 				if m.Source.Ref != "" {
-					metaField(c, "Ref", m.Source.Ref, false)
+					metaField(c, "Ref", m.Source.Ref, false, nil)
 				}
 				if m.Source.SubPath != "" {
-					metaField(c, "SubPath", m.Source.SubPath, true)
+					metaField(c, "SubPath", m.Source.SubPath, true, nil)
 				}
 				if m.Source.Commit != "" {
-					metaField(c, "Commit", shortCommit(m.Source.Commit), false)
+					metaField(c, "Commit", shortCommit(m.Source.Commit), false, nil)
 				}
 			}
 			if m.PluginName != "" {
-				metaField(c, "Plugin", m.PluginName, false)
+				metaField(c, "Plugin", m.PluginName, false, nil)
 			}
 			if m.InstalledAt != "" {
-				metaField(c, "安装", shortTime(m.InstalledAt), false)
+				metaField(c, "安装", shortTime(m.InstalledAt), false, nil)
 			}
 			if m.UpdatedAt != "" {
-				metaField(c, "更新", shortTime(m.UpdatedAt), false)
+				metaField(c, "更新", shortTime(m.UpdatedAt), false, nil)
 			}
-			metaField(c, "哈希", shortHash(m.ContentHash), false)
+			metaField(c, "哈希", shortHash(m.ContentHash), false, nil)
 		})
 	})
 }

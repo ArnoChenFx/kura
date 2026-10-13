@@ -8,6 +8,7 @@
 package ui
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -50,6 +51,13 @@ type App struct {
 	reveal    func(path string)
 	setSource func(mode string)
 
+	// checkUpdates 打开 MyGo 的原生更新窗口、检查 kura 应用自身的更新
+	// （生产实现是 selfupdate.CheckForUpdates，由 main.go 在窗口就绪后
+	// 注入；依赖更新插件已被挂载，未挂载时调用会 panic）。默认 nil：
+	// NewApp 不填——测试直接建 App，绝不能真的触发更新检查；只有
+	// main.go 里 SetWindow 之后才接线。nil 时按钮点下只在状态行报告。
+	checkUpdates func()
+
 	skills  []*store.Skill  // 当前目录的全部技能（启用 + 停用 + 回收站）
 	query   string          // 搜索词
 	filter  int             // 状态筛选：filterAll/filterEnabled/filterDisabled/filterTrashed
@@ -60,21 +68,50 @@ type App struct {
 	grid    myui.GridState  // 卡片网格的滚动与选择状态
 	updates map[string]bool // 最近一次检查发现有更新的技能（当前目录）
 
-	busy        map[string]bool // 正在执行操作的技能（busyKey）
-	checking    string          // 正在预览更新的技能名（空为无）
-	checkingAll bool            // 正在全部检查
-	scanning    bool            // 正在重新扫描
-	loadErr     string          // 扫描/环境错误（如根目录不存在）
-	status      string          // 底部状态行的文字
-	statusErr   bool            // 状态行是否为错误
-	confirm     confirmState    // 待确认的删除操作
-	install     installState    // 安装技能弹窗
-	pal         palette         // 本帧的表面色（由 themeMode 决定浅色/深色）
-	skin        *skin           // 本帧的皮肤；卡片网格用它的 cell 主题
-	themeMode   string          // 外观偏好：store.ThemeSystem / ThemeLight / ThemeDark
-	themeSeq    atomic.Int64    // 外观切换的序号：后台任务只执行最新一次
-	themeMu     sync.Mutex      // 串行化同步原生外观与写 config.json
-	review      reviewState     // 更新评审面板（Modal）
+	// 详情栏的「概览/全文」tab：detailTab 是当前选中的下标（0=概览，
+	// 1=全文），detailSel 记录 tab 属于哪个技能：viewDetail 发现换人时
+	// 把 detailTab 重置回 0，避免看到上一个技能的全文。
+	detailTab int
+	detailSel string
+	// skillDocs 缓存每个技能读出的 SKILL.md（键：技能名）：切 tab、来回
+	// 切技能不必反复读盘；扫描后失效（applyScan），更新/改文件后的下一帧
+	// 会重新读。docGen 随失效递增，后台读盘任务只回写同一代的缓存。
+	skillDocs map[string]fullTextDoc
+	docGen    int
+
+	busy           map[string]bool // 正在执行操作的技能（busyKey）
+	checking       string          // 正在预览更新的技能名（空为无）
+	checkingAll    bool            // 正在全部检查
+	checkingUpdate bool            // 正在检查 kura 应用自身的更新（按钮防抖）
+	scanning       bool            // 正在重新扫描
+	loadErr        string          // 扫描/环境错误（如根目录不存在）
+	status         string          // 底部状态行的文字
+	statusErr      bool            // 状态行是否为错误
+	confirm        confirmState    // 待确认的删除操作
+	install        installState    // 安装技能弹窗
+	pal            palette         // 本帧的表面色（由 themeMode 决定浅色/深色）
+	skin           *skin           // 本帧的皮肤；卡片网格用它的 cell 主题
+	themeMode      string          // 外观偏好：store.ThemeSystem / ThemeLight / ThemeDark
+	themeSeq       atomic.Int64    // 外观切换的序号：后台任务只执行最新一次
+	themeMu        sync.Mutex      // 串行化同步原生外观与写 config.json
+	viewMode       string          // 技能区排列模式：store.ViewGrid / store.ViewList
+	viewSeq        atomic.Int64    // 排列模式切换的序号：后台任务只执行最新一次
+	review         reviewState     // 更新评审面板（Modal）
+
+	// 翻译设置与译文（翻译只用于界面显示，绝不写技能目录，见 translate.go）。
+	// settings 是 ~/.kura/settings.json 的内存副本：只在 UI 线程写，写时持
+	// settingsMu；生产的 translate 闭包在后台 goroutine 里读它，持读锁。
+	settings        store.Settings
+	settingsLoaded  bool          // 设置读取成功（文件不存在也算，得到零值）
+	settingsErr     string        // 读取 settings.json 的错误（JSON 损坏等）
+	settingsMu      sync.RWMutex  // 保护 settings 在 UI 线程写与后台读之间的一致
+	settingsSeq     atomic.Int64  // 保存设置的序号：后台任务只写最新一次
+	settingsWriteMu sync.Mutex    // 串行化写 settings.json
+	settingsUI      settingsState // 设置弹窗
+	trans           *translateState
+	// translate 调用翻译 API；生产实现走 (a.settings).Translate。测试注入假
+	// 实现，绝不联网。只在后台 goroutine 里调用（会阻塞）。
+	translate func(ctx context.Context, text string) (string, error)
 
 	// spawn 在后台运行 fn：生产环境为 go fn()。
 	spawn func(func())
@@ -104,6 +141,25 @@ func NewApp(cfg *store.Config) *App {
 	a.cfg = cfg
 	a.rootSel = lib.Default()
 	a.themeMode = lib.Theme
+	a.viewMode = lib.View
+	if a.viewMode == "" {
+		a.viewMode = store.ViewGrid
+	}
+	// 翻译设置：读取失败不致命（只报告），界面照常可用。
+	if st, _, err := store.LoadSettings(cfg); err != nil {
+		a.settingsErr = err.Error()
+	} else {
+		a.settings, a.settingsLoaded = *st, true
+	}
+	a.trans = newTranslateState()
+	a.translate = func(ctx context.Context, text string) (string, error) {
+		// 读的是最新的 a.settings（保存设置后立即生效）；拷贝一份再调用，
+		// 请求期间不持锁。
+		a.settingsMu.RLock()
+		cur := a.settings
+		a.settingsMu.RUnlock()
+		return cur.Translate(ctx, text)
+	}
 	a.grid.Selected = &a.selIdx
 	a.grid.Key = func(i int) any {
 		if i < len(a.shown) {
@@ -158,6 +214,12 @@ func (a *App) publish(fn func()) {
 	a.mu.Unlock()
 	u(fn)
 }
+
+// SetCheckUpdates 注入「检查 kura 应用更新」的生产实现（main.go 在窗口
+// 就绪后调用：app.SetCheckUpdates(selfupdate.CheckForUpdates)）。只允许
+// 生产路径接线；NewApp 与测试都不填，钩子保持 nil，按钮点下只在状态行
+// 报告「更新功能未就绪」，绝不触发真实的更新检查。
+func (a *App) SetCheckUpdates(fn func()) { a.checkUpdates = fn }
 
 // SetLockPath 指定导入元数据时读取的 .skill-lock.json 路径；
 // 为空时由 store 使用默认的 ~/.agents/.skill-lock.json。
@@ -272,6 +334,10 @@ func (a *App) applyScan(skills []*store.Skill, err error) {
 		}
 	}
 	a.rootCounts[a.cfg.Root] = n
+	// SKILL.md 可能被更新/恢复等操作改写（磁盘上的内容已变），缓存全部
+	// 失效，全文页下一帧重新读；docGen 递增让还在路上的旧读盘结果作废。
+	a.skillDocs = nil
+	a.docGen++
 }
 
 // publishAfterWork 在后台任务完成后重新扫描 cfg 并发布结果。key 是 busyKey；
@@ -475,7 +541,7 @@ func (a *App) RemoveRootAsync(root string) {
 
 // libCopy 复制目录列表交给后台修改，成功后再在 UI 线程换上。
 func (a *App) libCopy() *store.Library {
-	return &store.Library{Home: a.lib.Home, Roots: append([]string(nil), a.lib.Roots...), Theme: a.themeMode}
+	return &store.Library{Home: a.lib.Home, Roots: append([]string(nil), a.lib.Roots...), Theme: a.themeMode, View: a.viewMode}
 }
 
 // OpenPathAsync 用系统默认方式打开 path：文件夹用文件管理器，SKILL.md 用
@@ -497,6 +563,26 @@ func (a *App) RevealAsync(path string) {
 // 就是对的外观。在 mygo.App.Run 之前调用（MyGo 允许这样用已存的偏好）；
 // 界面本身不依赖它：皮肤由 themeMode 决定。
 func (a *App) SyncTheme() { a.setSource(a.themeMode) }
+
+// CheckAppUpdateAsync 响应「检查更新」按钮：立刻在状态行给一句反馈
+// （更新检查与窗口都由 MyGo 更新插件异步完成，点击后界面不能毫无反应），
+// 然后经 checkUpdates 钩子打开原生更新窗口。钩子在后台调用（它立即
+// 返回、不阻塞，但走后台与其它慢调用一致）；测试注入假实现计数调用。
+func (a *App) CheckAppUpdateAsync() {
+	if a.checkingUpdate {
+		return
+	}
+	if a.checkUpdates == nil {
+		a.status, a.statusErr = "更新功能未就绪（开发构建未挂载更新插件）", true
+		return
+	}
+	a.checkingUpdate = true
+	a.status, a.statusErr = "正在检查 kura 更新…", false
+	a.spawn(func() {
+		a.checkUpdates()
+		a.publish(func() { a.checkingUpdate = false })
+	})
+}
 
 // SetThemeAsync 切换外观为 mode（store.ThemeSystem / ThemeLight / ThemeDark）。
 // 界面立刻换皮肤——皮肤由 themeMode 决定，下一帧生效；同步原生外观与写
@@ -523,6 +609,35 @@ func (a *App) SetThemeAsync(mode string) {
 		a.setSource(mode)
 		if err := lib.SetTheme(mode); err != nil {
 			a.publish(func() { a.status, a.statusErr = "外观偏好没能保存："+err.Error(), true })
+		}
+	})
+}
+
+// SetViewAsync 切换技能区的排列模式为 mode（store.ViewGrid / store.ViewList）。
+// 界面立刻换排列——下一帧由 viewMode 决定；写 config.json 在后台做，写盘失败
+// 只在状态行报告，不回滚已换的排列。与 SetThemeAsync 一样：相同的模式直接
+// 返回（幂等，重复构建不会重复写盘），连续切换只有最新一次会执行。
+func (a *App) SetViewAsync(mode string) {
+	mode, err := store.NormalizeView(mode)
+	if err != nil {
+		a.status, a.statusErr = err.Error(), true
+		return
+	}
+	if mode == a.viewMode {
+		return
+	}
+	a.viewMode = mode
+	seq := a.viewSeq.Add(1)
+	lib := a.libCopy()
+	a.spawn(func() {
+		// 与外观共用同一把锁：两者都是 config.json 的「读—改—写」，串行执行。
+		a.themeMu.Lock()
+		defer a.themeMu.Unlock()
+		if a.viewSeq.Load() != seq {
+			return
+		}
+		if err := lib.SetView(mode); err != nil {
+			a.publish(func() { a.status, a.statusErr = "排列模式没能保存："+err.Error(), true })
 		}
 	})
 }

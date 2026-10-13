@@ -18,12 +18,12 @@
 ## store：PreviewUpdate
 
 - 签名：`(*Config).PreviewUpdate(name) (*UpdatePreview, error)`；
-- github 来源复用 Update 的 `refetchGitHub`（浅 clone 进 os.MkdirTemp 并清理），
-  local 来源直接只读来源目录；
+- github 来源经 `upstream`（`upstream.go`：只取树的浅 clone + 稀疏检出，临时目录用完即删；
+  同一仓库的技能共用一次，批量入口 `PreviewUpdates`），local 来源直接只读来源目录；
 - 产出：每文件 `added/removed/changed` + 文件级新旧 sha256 + 目录级
   `OldHash/NewHash`（与 `Meta.ContentHash` 同口径，NewHash 额外排除 `.git`，
   因此与 Update 完成后的 `HashDir` 结果一致——有跨函数测试锁定该契约）；
-- 上游 commit 通过 `gitHeadStaging`（clone 目录内 rev-parse）取得；
+- 上游 commit 取自 `upstream.Commit`（clone 后在临时目录内 rev-parse HEAD）；
 - 只读保证：不写快照、不动技能目录、不改元数据（有逐字节指纹测试锁定）。
 
 已知取舍：

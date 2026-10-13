@@ -40,6 +40,15 @@ func Install() {
 	mygo.Use(native.Plugin)
 }
 
+// CheckForUpdates 打开 MyGo 的原生更新窗口、检查 kura 应用自身的更新，
+// 供界面与菜单之外的新入口（如左下角的「检查更新」按钮）复用：UI 包只
+// 依赖这一个函数，不直接 import updater 插件。只是转发：立即返回，检查
+// 在后台进行，窗口由插件打开；必须已挂载更新插件（Install，main.go 里
+// App.Run 之前），未挂载时调用会 panic，所以测试里不调它。
+func CheckForUpdates() {
+	updater.CheckForUpdates()
+}
+
 // appMenuLabel 是应用菜单的名字；Windows/Linux 的菜单栏第一项也用它。
 const appMenuLabel = "kura"
 

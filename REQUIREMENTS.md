@@ -94,10 +94,11 @@ hashes, cheapest first, and stops as soon as it can decide:
 Skills from the same repository (same URL and ref) share one `ls-remote`, one
 clone and one sparse checkout, both when checking and when applying updates. A
 `local` source is compared file by file directly. Every git command has a
-timeout and never prompts for credentials. Steps 1 and 2 compare upstream against
-what was installed, so a locally edited skill is not reported as "has update";
-the check flags it as locally modified instead (applying an update overwrites the
-edits, after a snapshot).
+timeout, aborts a stalled transfer (below 1 KB/s for 30 s) and never prompts for
+credentials. Steps 1 and 2 compare upstream against what was installed, so a
+locally edited skill is not reported as "has update"; the check flags it as
+locally modified instead (applying an update overwrites the edits, after a
+snapshot).
 
 ## kura's own directories
 

@@ -20,7 +20,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -32,6 +31,8 @@ var (
 	lsRemoteTimeout = 30 * time.Second
 	cloneTimeout    = 10 * time.Minute
 	checkoutTimeout = 10 * time.Minute
+	// gitWaitDelay 是超时杀掉 git 后，再等它的子进程放开输出管道的宽限时间。
+	gitWaitDelay = 5 * time.Second
 )
 
 // stallArgs 让 git 的 HTTP(S) 传输在速率低于 1 KB/s 且持续 30 秒时中止：
@@ -50,10 +51,14 @@ var ErrGitTimeout = errors.New("store: git 操作超时")
 func gitOutput(timeout time.Duration, dir, stdin string, args ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "git", append(append([]string{}, stallArgs...), args...)...)
+	// gitCommandContext 是各平台启动 git 的唯一入口（Windows 上负责不弹黑窗）。
+	cmd := gitCommandContext(ctx, append(append([]string{}, stallArgs...), args...)...)
 	cmd.Dir = dir
 	// 没有凭据时直接失败，而不是等待一个永远不会有人回答的提示。
 	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+	// 超时杀掉 git 后，它派生的子进程（git-remote-https 等）可能还握着输出管道；
+	// WaitDelay 到点强制关闭管道，保证超时一定能返回。
+	cmd.WaitDelay = gitWaitDelay
 	if stdin != "" {
 		cmd.Stdin = strings.NewReader(stdin)
 	}
@@ -243,27 +248,45 @@ func (u *upstream) Tree(subPath string) (string, error) {
 
 // Checkout 把 subPaths 对应的目录检出到工作区，其余路径不检出、文件内容
 // 也不下载（稀疏检出 + 部分 clone 按需取对象）。任一 subPath 为空表示
-// 技能就是仓库根，此时检出整个仓库。
+// 技能就是仓库根，此时检出整个仓库。可以重复调用，每次以新的目录集为准。
 func (u *upstream) Checkout(subPaths []string) error {
-	full := false
 	var patterns strings.Builder
 	for _, p := range subPaths {
 		sub := cleanSubPath(p)
 		if sub == "" {
-			full = true
-			break
+			return u.applySparse("/*\n")
+		}
+		// 模式文件按行分隔：路径里的换行会注入额外的模式（比如把整个仓库检出来）。
+		if strings.ContainsAny(sub, "\n\r") {
+			return fmt.Errorf("store: 仓库内不存在目录 %s", p)
 		}
 		patterns.WriteString("/" + escapeSparse(sub) + "/\n")
 	}
-	if !full {
-		info := filepath.Join(u.dir, ".git", "info")
-		if err := os.MkdirAll(info, 0o755); err != nil {
-			return fmt.Errorf("store: 准备稀疏检出失败: %w", err)
-		}
-		if err := os.WriteFile(filepath.Join(info, "sparse-checkout"), []byte(patterns.String()), 0o644); err != nil {
-			return fmt.Errorf("store: 准备稀疏检出失败: %w", err)
-		}
-		if _, err := runGit(lsRemoteTimeout, u.dir, "config", "core.sparseCheckout", "true"); err != nil {
+	return u.applySparse(patterns.String())
+}
+
+// discoverySparse 是「发现仓库里有哪些技能」要用到的文件：任意层级的
+// SKILL.md，以及根目录的 .claude-plugin/plugin.json 清单。DiscoverSkills 只看
+// 这些文件，所以其余内容一概不下载。
+const discoverySparse = "SKILL.md\n/.claude-plugin/plugin.json\n"
+
+// CheckoutDiscovery 只检出 discoverySparse 描述的文件，供 DiscoverSkills 在
+// 临时目录上做发现；选定技能后再用 Checkout 检出它的目录。
+func (u *upstream) CheckoutDiscovery() error { return u.applySparse(discoverySparse) }
+
+// applySparse 把稀疏检出模式（gitignore 语法，每行一条）写进仓库并更新工作区。
+// 关闭稀疏检出不能只改配置（跳过标记会留在索引里），要整个仓库就写 /*。
+// 显式关掉 cone 模式：这里写的是逐条路径，不是 cone 的目录集合。
+func (u *upstream) applySparse(patterns string) error {
+	info := filepath.Join(u.dir, ".git", "info")
+	if err := os.MkdirAll(info, 0o755); err != nil {
+		return fmt.Errorf("store: 准备稀疏检出失败: %w", err)
+	}
+	if err := os.WriteFile(filepath.Join(info, "sparse-checkout"), []byte(patterns), 0o644); err != nil {
+		return fmt.Errorf("store: 准备稀疏检出失败: %w", err)
+	}
+	for _, kv := range [][2]string{{"core.sparseCheckout", "true"}, {"core.sparseCheckoutCone", "false"}} {
+		if _, err := runGit(lsRemoteTimeout, u.dir, "config", kv[0], kv[1]); err != nil {
 			return err
 		}
 	}
