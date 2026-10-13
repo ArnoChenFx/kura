@@ -161,7 +161,7 @@ func shortCommit(s string) string {
 // 对齐、与值的第一行对齐；wrap 允许长值换行。
 func metaField(c *myui.Context, k, v string, wrap bool) {
 	myui.Field(c, k, func() {
-		t := myui.Text(c, v)
+		t := myui.Text(c, v).TextColor(c.Theme().Text)
 		if !wrap {
 			t = t.SingleLine()
 		}

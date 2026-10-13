@@ -61,7 +61,6 @@ type App struct {
 	statusErr   bool            // 状态行是否为错误
 	confirm     confirmState    // 待确认的删除操作
 	install     installState    // 安装技能弹窗
-	scheme      *scheme         // 配色方案
 	pal         palette         // 本帧的表面色（随系统浅色/深色切换）
 	review      reviewState     // 更新评审面板（Modal）
 
@@ -90,7 +89,6 @@ func NewApp(cfg *store.Config) *App {
 		a.libErr = err.Error()
 	}
 	a.lib = lib
-	a.scheme = defaultScheme
 	a.cfg = cfg
 	a.rootSel = lib.Default()
 	a.grid.Selected = &a.selIdx

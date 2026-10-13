@@ -1,11 +1,9 @@
 package ui
 
-// kura 的配色方案。一套方案 = 浅色与深色两个「皮肤」，每个皮肤包含 MyGo
-// 主题（控件配色）、表面色（左栏/画布/卡片三档底色）与头像色板。
-//
-// 强调色（accent）只用在主按钮、选中态与品牌标识上；开关「开」的颜色
-// （toggle）与「有更新」标签的颜色（signal）单独设定，所以石墨方案里主按钮
-// 可以是近黑色，开关仍是醒目的绿色。
+// kura 的配色。取自参考截图的深色界面：近中性的深炭灰底（带一丝冷紫调）、
+// 比底色浅一档的卡片加 1px 细边框、三级灰度的文字，强调色是低饱和的雾蓝
+// 紫（periwinkle），只用在主按钮、选中边框与「有更新」这类小面积元素上；
+// 开关「开」用薄荷绿，对应「已启用」的状态色。浅色皮肤沿用同一套色相。
 
 import (
 	"hash/fnv"
@@ -17,30 +15,30 @@ import (
 // palette 是主题之外、kura 自己用的颜色。
 type palette struct {
 	sidebar myui.Color // 左栏底色
-	canvas  myui.Color // 中栏画布底色（卡片落在它上面）
-	card    myui.Color // 卡片、详情栏与搜索框的底色
-	line    myui.Color // 卡片描边
-	shadow  myui.Color // 卡片投影
+	canvas  myui.Color // 中栏与详情栏的底色
+	card    myui.Color // 卡片、详情分组与搜索框的底色（比底色浅一档）
+	line    myui.Color // 卡片与分隔线的描边
+	shadow  myui.Color // 卡片投影（深色皮肤里为透明）
+	sel     myui.Color // 左栏选中项的底色
+	textMid myui.Color // 左栏未选中项的文字（介于正文与弱化色之间）
 	toggle  myui.Color // 开关「开」的颜色
-	signal  myui.Color // 「有更新」等提示标签的颜色
-	// avatars 是头像色板：浅色皮肤用 600 档、深色皮肤用 400 档，
-	// 避免蓝紫色，和各方案的强调色互不抢戏。
+	// avatars 是头像色板：低饱和的暖色与青绿，刻意不含蓝紫，
+	// 不和强调色抢戏。
 	avatars []myui.Color
 }
 
-// skin 是一套方案在某个外观（浅/深）下的全部颜色。
+// skin 是某个外观（浅/深）下的全部颜色。
 type skin struct {
 	theme *myui.Theme
 	pal   palette
 }
 
-// scheme 是一套配色方案。
+// scheme 是浅色与深色两个皮肤。
 type scheme struct {
-	name        string
 	light, dark *skin
 }
 
-// apply 让本帧使用方案里与系统外观一致的皮肤，返回对应的表面色。
+// apply 让本帧使用与系统外观一致的皮肤，返回对应的表面色。
 func (s *scheme) apply(c *myui.Context) palette {
 	sk := s.light
 	if c.Theme().Dark {
@@ -53,15 +51,17 @@ func (s *scheme) apply(c *myui.Context) palette {
 // tone 是一个皮肤的颜色清单（十六进制），newSkin 把它换成主题与表面色。
 type tone struct {
 	accent, accentHover, accentPressed, accentText string
-	toggle, signal                                 string
-	bg, surface, surfaceHover, surfacePressed      string
-	border, text, muted                            string
-	sidebar, canvas, card, line                    string
-	shadow                                         myui.Color
-	avatars                                        []string
+	toggle                                         string
+	success, warning, danger                       string
+	// bg 是弹窗等「浮起」的面板色，和卡片同档。
+	bg, surface, surfaceHover, surfacePressed string
+	border, text, muted, textMid              string
+	sidebar, canvas, card, line, sel          string
+	shadow                                    myui.Color
+	avatars                                   []string
 }
 
-// newSkin 以 MyGo 的浅色/深色主题为底，按 k 替换颜色并放大圆角。
+// newSkin 以 MyGo 的浅色/深色主题为底，按 k 替换颜色并设定圆角。
 func newSkin(dark bool, k tone) *skin {
 	t := myui.LightTheme()
 	if dark {
@@ -73,6 +73,7 @@ func newSkin(dark bool, k tone) *skin {
 	t.Text, t.TextMuted = hx(k.text), hx(k.muted)
 	t.Accent, t.AccentHover, t.AccentPressed, t.AccentText =
 		hx(k.accent), hx(k.accentHover), hx(k.accentPressed), hx(k.accentText)
+	t.Success, t.Warning, t.Danger = hx(k.success), hx(k.warning), hx(k.danger)
 	t.Focus = hx(k.accent).Alpha(0.5)
 	t.Selection = hx(k.accent).Alpha(0.25)
 	t.Radius = 8
@@ -82,82 +83,35 @@ func newSkin(dark bool, k tone) *skin {
 		avatars[i] = hx(a)
 	}
 	return &skin{theme: t, pal: palette{
-		sidebar: hx(k.sidebar), canvas: hx(k.canvas), card: hx(k.card),
-		line: hx(k.line), shadow: k.shadow,
-		toggle: hx(k.toggle), signal: hx(k.signal), avatars: avatars,
+		sidebar: hx(k.sidebar), canvas: hx(k.canvas), card: hx(k.card), line: hx(k.line),
+		shadow: k.shadow, sel: hx(k.sel), textMid: hx(k.textMid), toggle: hx(k.toggle),
+		avatars: avatars,
 	}}
 }
 
-// 头像色板：teal/amber/rose/orange/slate/lime/pink/brown 八种色相，刻意不含
-// 蓝色与紫色，也只留一个绿色系（teal），不与绿色的开关混在一起。
-var (
-	avatarsLight = []string{"#0d9488", "#d97706", "#e11d48", "#ea580c", "#475569", "#65a30d", "#db2777", "#92400e"}
-	avatarsDark  = []string{"#2dd4bf", "#fbbf24", "#fb7185", "#fb923c", "#94a3b8", "#a3e635", "#f472b6", "#d4a373"}
-)
-
-// 三套候选方案。
-var (
-	// schemeForest 森林绿：清爽的绿色强调，底色带一点点绿调的灰。
-	schemeForest = &scheme{name: "forest",
-		light: newSkin(false, tone{
-			accent: "#15803d", accentHover: "#166534", accentPressed: "#14532d", accentText: "#ffffff",
-			toggle: "#16a34a", signal: "#15803d",
-			bg: "#ffffff", surface: "#f2f5f3", surfaceHover: "#e8eeea", surfacePressed: "#dde5e0",
-			border: "#dae2dd", text: "#171c19", muted: "#5d6862",
-			sidebar: "#eff3f0", canvas: "#f6f8f6", card: "#ffffff", line: "#e2e9e4",
-			shadow: myui.RGBA(16, 40, 28, 0.06), avatars: avatarsLight,
-		}),
-		dark: newSkin(true, tone{
-			accent: "#22c55e", accentHover: "#4ade80", accentPressed: "#16a34a", accentText: "#052e16",
-			toggle: "#22c55e", signal: "#4ade80",
-			bg: "#181c1a", surface: "#222825", surfaceHover: "#2b322e", surfacePressed: "#343c37",
-			border: "#313a35", text: "#ecf1ee", muted: "#9aa7a0",
-			sidebar: "#0f1311", canvas: "#141816", card: "#1b201d", line: "#2a312d",
-			shadow: myui.RGBA(0, 0, 0, 0.4), avatars: avatarsDark,
-		}),
-	}
-	// schemeClay 陶土橙：暖橙强调，底色是偏暖的奶白。
-	schemeClay = &scheme{name: "clay",
-		light: newSkin(false, tone{
-			accent: "#c2410c", accentHover: "#9a3412", accentPressed: "#7c2d12", accentText: "#ffffff",
-			toggle: "#ea580c", signal: "#c2410c",
-			bg: "#ffffff", surface: "#f5f2ec", surfaceHover: "#ece7de", surfacePressed: "#e2dcd1",
-			border: "#e0d9ce", text: "#201b16", muted: "#6f665b",
-			sidebar: "#f4f0ea", canvas: "#faf8f5", card: "#ffffff", line: "#e8e2d9",
-			shadow: myui.RGBA(60, 40, 20, 0.07), avatars: avatarsLight,
-		}),
-		dark: newSkin(true, tone{
-			accent: "#f97316", accentHover: "#fb923c", accentPressed: "#ea580c", accentText: "#1f0d03",
-			toggle: "#f97316", signal: "#fb923c",
-			bg: "#1d1a17", surface: "#282420", surfaceHover: "#322d28", surfacePressed: "#3c362f",
-			border: "#3a342d", text: "#f3eee8", muted: "#a39a8e",
-			sidebar: "#12100e", canvas: "#171512", card: "#201d19", line: "#302b25",
-			shadow: myui.RGBA(0, 0, 0, 0.4), avatars: avatarsDark,
-		}),
-	}
-	// schemeGraphite 石墨：中性灰黑，只有「状态」带颜色（开关绿、标签、头像）。
-	schemeGraphite = &scheme{name: "graphite",
-		light: newSkin(false, tone{
-			accent: "#27272a", accentHover: "#3f3f46", accentPressed: "#18181b", accentText: "#fafafa",
-			toggle: "#16a34a", signal: "#15803d",
-			bg: "#ffffff", surface: "#f5f5f5", surfaceHover: "#ebebeb", surfacePressed: "#e0e0e0",
-			border: "#e0e0e0", text: "#171717", muted: "#737373",
-			sidebar: "#f3f3f3", canvas: "#fafafa", card: "#ffffff", line: "#e8e8e8",
-			shadow: myui.RGBA(0, 0, 0, 0.05), avatars: avatarsLight,
-		}),
-		dark: newSkin(true, tone{
-			accent: "#e5e5e5", accentHover: "#fafafa", accentPressed: "#d4d4d4", accentText: "#171717",
-			toggle: "#22c55e", signal: "#4ade80",
-			bg: "#1a1a1a", surface: "#262626", surfaceHover: "#303030", surfacePressed: "#3a3a3a",
-			border: "#383838", text: "#f5f5f5", muted: "#a3a3a3",
-			sidebar: "#0f0f0f", canvas: "#141414", card: "#1c1c1c", line: "#2b2b2b",
-			shadow: myui.RGBA(0, 0, 0, 0.4), avatars: avatarsDark,
-		}),
-	}
-
-	// defaultScheme 是应用使用的方案。
-	defaultScheme = schemeGraphite
-)
+// kuraScheme 是应用的配色。
+var kuraScheme = &scheme{
+	light: newSkin(false, tone{
+		accent: "#525fa3", accentHover: "#46528f", accentPressed: "#3c477c", accentText: "#ffffff",
+		toggle:  "#36a874",
+		success: "#2f9e6a", warning: "#b7791f", danger: "#d64550",
+		bg: "#ffffff", surface: "#f0f0f4", surfaceHover: "#e7e7ed", surfacePressed: "#dddde5",
+		border: "#dedee4", text: "#1a1a1e", muted: "#6b6b75", textMid: "#45454d",
+		sidebar: "#f5f5f7", canvas: "#f5f5f7", card: "#ffffff", line: "#e2e2e8", sel: "#e9e9ef",
+		shadow:  myui.RGBA(20, 20, 40, 0.05),
+		avatars: []string{"#2a9d8f", "#c98a1b", "#d6455d", "#d9622b", "#5b6577", "#6f9a2a", "#c2418b", "#8a5a35"},
+	}),
+	dark: newSkin(true, tone{
+		accent: "#818bbf", accentHover: "#939cca", accentPressed: "#727bae", accentText: "#1a1a1e",
+		toggle:  "#62bf89",
+		success: "#6fd99b", warning: "#e5b567", danger: "#e5707a",
+		bg: "#232327", surface: "#232327", surfaceHover: "#2a2a2f", surfacePressed: "#303036",
+		border: "#333339", text: "#ededf1", muted: "#8b8b94", textMid: "#b9b9c1",
+		sidebar: "#1a1a1e", canvas: "#1a1a1e", card: "#232327", line: "#333339", sel: "#27272c",
+		shadow:  myui.RGBA(0, 0, 0, 0),
+		avatars: []string{"#6fcdbd", "#e5b567", "#e58f9b", "#e8a074", "#9ea8bd", "#b9d577", "#df93c4", "#cfa883"},
+	}),
+}
 
 // avatarColor 返回技能名在色板 pal 里对应的头像颜色，同名技能颜色稳定。
 func avatarColor(pal palette, name string) myui.Color {

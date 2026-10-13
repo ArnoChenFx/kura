@@ -159,7 +159,7 @@ func (a *App) viewInstallModal(c *myui.Context) {
 				if s.source == installLocal {
 					myui.Field(c, "文件夹", func() {
 						myui.Row(c).FillWidth().Gap(t.Space(2)).Children(func() {
-							myui.TextInput(c, &s.local).Grow(1).MinWidth(0).
+							myui.TextInput(c, &s.local).Background(a.pal.canvas).Grow(1).MinWidth(0).
 								Placeholder("包含 SKILL.md 的文件夹").Label("本地文件夹")
 							if myui.Button(c, "选择…").Disabled(s.picking).Clicked() {
 								a.PickInstallFolderAsync()
@@ -168,20 +168,20 @@ func (a *App) viewInstallModal(c *myui.Context) {
 					})
 				} else {
 					myui.Field(c, "仓库", func() {
-						myui.TextInput(c, &s.repo).FillWidth().
+						myui.TextInput(c, &s.repo).Background(a.pal.canvas).FillWidth().
 							Placeholder("owner/repo，或粘贴 GitHub 网址").Label("仓库")
 					})
 					myui.Field(c, "子目录", func() {
-						myui.TextInput(c, &s.subPath).FillWidth().
+						myui.TextInput(c, &s.subPath).Background(a.pal.canvas).FillWidth().
 							Placeholder("可选，如 skills/tdd").Label("子目录")
 					})
 					myui.Field(c, "分支/标签", func() {
-						myui.TextInput(c, &s.ref).FillWidth().
+						myui.TextInput(c, &s.ref).Background(a.pal.canvas).FillWidth().
 							Placeholder("可选，默认分支").Label("分支/标签")
 					})
 				}
 				myui.Field(c, "安装名称", func() {
-					myui.TextInput(c, &s.name).FillWidth().
+					myui.TextInput(c, &s.name).Background(a.pal.canvas).FillWidth().
 						Placeholder("可选，默认取来源文件夹名").Label("安装名称")
 				})
 			})

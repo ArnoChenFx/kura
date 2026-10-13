@@ -30,7 +30,7 @@ const (
 //	│ +添加文件夹│ 状态条                         │ 操作         │
 //	└──────────┴──────────────────────────────┴────────────┘
 func (a *App) View(c *myui.Context) {
-	a.pal = a.scheme.apply(c)
+	a.pal = kuraScheme.apply(c)
 	// 首帧触发一次后台初始扫描（磁盘 I/O 不在 UI 线程做）。
 	if !a.loaded {
 		a.loaded = true
@@ -77,11 +77,12 @@ func (a *App) View(c *myui.Context) {
 }
 
 // viewRoots 是左栏：品牌、技能目录列表（每项带在用技能数）与底部的
-// 「添加文件夹」。默认目录总在第一个。
+// 「添加文件夹」。默认目录总在第一个。底色与中栏相同，只靠右侧的分隔线
+// 区分；选中项用浅一档的底色。
 func (a *App) viewRoots(c *myui.Context) {
 	t := c.Theme()
 	myui.Column(c).Width(rootsWidth).Shrink(0).FillHeight().Background(a.pal.sidebar).Children(func() {
-		// 品牌：靛蓝方块里的 K + kura。
+		// 品牌：强调色方块里的 K + kura。
 		myui.Row(c).Padding(t.Space(4), t.Space(4), t.Space(3), t.Space(4)).
 			AlignItems(myui.Center).Gap(t.Space(2.5)).Children(func() {
 			myui.Box(c).Size(t.Space(7), t.Space(7)).Radius(t.Radius).Background(t.Accent).
@@ -93,28 +94,23 @@ func (a *App) viewRoots(c *myui.Context) {
 				myui.Text(c, "技能管理").FontSize(t.FontSize - 2).TextColor(t.TextMuted)
 			})
 		})
-		myui.Sidebar(c, &a.rootSel, func() {
-			myui.SidebarSection(c, "技能目录", nil, func() {
+		myui.Text(c, "技能目录").FontSize(t.FontSize-1).FontWeight(600).TextColor(t.TextMuted).
+			Padding(t.Space(2), t.Space(5), t.Space(1.5), t.Space(5))
+		myui.Scroll(c).Grow(1).FillWidth().Children(func() {
+			myui.Column(c).FillWidth().Padding(0, t.Space(2.5)).Gap(t.Space(0.5)).Children(func() {
 				for i, root := range a.lib.Roots {
-					icon := iconFolder
-					if i == 0 {
-						icon = iconHome
-					}
-					item := myui.SidebarItem(c, root, icon, rootLabel(root)).Tooltip(root)
-					if n, ok := a.rootCounts[root]; ok {
-						item.Children(func() { myui.Badge(c, itoa(n)) })
-					}
+					a.rootItem(c, root, i == 0)
 				}
 			})
-		}).Grow(1).FillWidth().Background(a.pal.sidebar)
+		})
 		if a.libErr != "" {
 			myui.Text(c, "目录列表读取失败："+a.libErr).MaxLines(3).
-				FontSize(t.FontSize-2).TextColor(t.Danger).Padding(0, t.Space(4))
+				FontSize(t.FontSize-2).TextColor(t.Danger).Padding(t.Space(1), t.Space(4))
 		}
 		myui.Box(c).FillWidth().Padding(t.Space(2), t.Space(3), t.Space(3), t.Space(3)).Children(func() {
 			ab := myui.ButtonBase(c).Label("添加文件夹").FillWidth().Disabled(a.adding).
 				Justify(myui.Start).Gap(t.Space(2)).Padding(t.Space(2), t.Space(3)).
-				Radius(t.Radius).Border(1, t.Border).TextColor(t.TextMuted)
+				Radius(t.Radius).Border(1, t.Border).TextColor(a.pal.textMid)
 			if ab.Hovered() {
 				ab.Background(t.SurfaceHover).TextColor(t.Text)
 			}
@@ -127,6 +123,35 @@ func (a *App) viewRoots(c *myui.Context) {
 			}
 		})
 	})
+}
+
+// rootItem 是左栏里的一个技能目录：图标 + 名字 + 在用技能数。选中项用
+// 浅一档的底色，未选中项悬停时才有底色；点击后在下一帧开头切换目录。
+func (a *App) rootItem(c *myui.Context, root string, isDefault bool) {
+	t := c.Theme()
+	b := myui.ButtonBase(c).Key(root).Label(rootLabel(root)).Tooltip(root).
+		FillWidth().Justify(myui.Start).Gap(t.Space(2.5)).
+		Padding(t.Space(1.75), t.Space(2.5)).Radius(t.Radius - 2).TextColor(a.pal.textMid)
+	switch {
+	case root == a.rootSel:
+		b.Background(a.pal.sel).TextColor(t.Text)
+	case b.Hovered():
+		b.Background(t.SurfaceHover).TextColor(t.Text)
+	}
+	b.Children(func() {
+		icon := iconFolder
+		if isDefault {
+			icon = iconHome
+		}
+		myui.Icon(c, icon).FontSize(16)
+		myui.Text(c, rootLabel(root)).SingleLine().Grow(1).MinWidth(0)
+		if n, ok := a.rootCounts[root]; ok {
+			myui.Text(c, itoa(n)).SingleLine().FontSize(t.FontSize - 1).TextColor(t.TextMuted)
+		}
+	})
+	if b.Clicked() {
+		a.rootSel = root
+	}
 }
 
 // rootLabel 是目录在左栏里的名字：最后两级路径（如 .agents/skills），
@@ -300,7 +325,7 @@ func (a *App) viewCard(c *myui.Context, s *store.Skill, selected bool) {
 		myui.Text(c, desc).MaxLines(2).FontSize(t.FontSize - 1).TextColor(color).Grow(1)
 		myui.Row(c).FillWidth().Gap(t.Space(1.5)).AlignItems(myui.Center).Children(func() {
 			if a.updates[s.Name] {
-				pill(c, "有更新", a.pal.signal)
+				pill(c, "有更新", t.Accent)
 			}
 			switch s.State {
 			case store.StateDisabled:
@@ -322,7 +347,7 @@ func (a *App) viewCard(c *myui.Context, s *store.Skill, selected bool) {
 func (a *App) viewDetail(c *myui.Context, s *store.Skill) {
 	t := c.Theme()
 	busy := a.isBusy(s.Name)
-	myui.Column(c).Width(detailWidth).Shrink(0).FillHeight().Background(a.pal.card).Children(func() {
+	myui.Column(c).Width(detailWidth).Shrink(0).FillHeight().Background(a.pal.canvas).Children(func() {
 		myui.Scroll(c).Grow(1).FillWidth().Children(func() {
 			myui.Column(c).FillWidth().Padding(t.Space(4), t.Space(5)).Gap(t.Space(4)).Children(func() {
 				myui.Row(c).FillWidth().Gap(t.Space(3)).AlignItems(myui.Start).Children(func() {
@@ -335,7 +360,7 @@ func (a *App) viewDetail(c *myui.Context, s *store.Skill) {
 						myui.Row(c).Gap(t.Space(2)).AlignItems(myui.Center).Children(func() {
 							stateBadge(c, s.State)
 							if a.updates[s.Name] {
-								pill(c, "有更新", a.pal.signal)
+								pill(c, "有更新", t.Accent)
 							}
 						})
 					})
@@ -360,13 +385,13 @@ func (a *App) viewDetail(c *myui.Context, s *store.Skill) {
 	})
 }
 
-// detailGroup 是详情里的一个信息块：小标题 + 浅底圆角框。
+// detailGroup 是详情里的一个信息块：小标题 + 比底色浅一档的圆角框。
 func (a *App) detailGroup(c *myui.Context, title string, fn func()) {
 	t := c.Theme()
 	myui.Column(c).FillWidth().Gap(t.Space(1.5)).Children(func() {
 		sectionHeader(c, title)
 		myui.Column(c).FillWidth().Padding(t.Space(3)).Gap(t.Space(1.5)).
-			Radius(t.Radius).Background(a.pal.canvas).Border(1, a.pal.line).Children(fn)
+			Radius(t.Radius).Background(a.pal.card).Border(1, a.pal.line).Children(fn)
 	})
 }
 
@@ -383,29 +408,32 @@ func (a *App) viewDetailMeta(c *myui.Context, s *store.Skill) {
 		myui.Text(c, "没有 .kura-meta.json（非 kura 安装，或尚未导入元数据）").TextColor(t.TextMuted)
 		return
 	}
-	myui.Form(c, func() {
-		metaField(c, "来源", sourceURLText(m), true)
-		if m.Source.Type == store.SourceGitHub {
-			if m.Source.Ref != "" {
-				metaField(c, "Ref", m.Source.Ref, false)
+	// 标签用弱化色，值在 metaField 里单独设为正文色，主次分明。
+	myui.Column(c).FillWidth().TextColor(t.TextMuted).Children(func() {
+		myui.Form(c, func() {
+			metaField(c, "来源", sourceURLText(m), true)
+			if m.Source.Type == store.SourceGitHub {
+				if m.Source.Ref != "" {
+					metaField(c, "Ref", m.Source.Ref, false)
+				}
+				if m.Source.SubPath != "" {
+					metaField(c, "SubPath", m.Source.SubPath, true)
+				}
+				if m.Source.Commit != "" {
+					metaField(c, "Commit", shortCommit(m.Source.Commit), false)
+				}
 			}
-			if m.Source.SubPath != "" {
-				metaField(c, "SubPath", m.Source.SubPath, true)
+			if m.PluginName != "" {
+				metaField(c, "Plugin", m.PluginName, false)
 			}
-			if m.Source.Commit != "" {
-				metaField(c, "Commit", shortCommit(m.Source.Commit), false)
+			if m.InstalledAt != "" {
+				metaField(c, "安装", shortTime(m.InstalledAt), false)
 			}
-		}
-		if m.PluginName != "" {
-			metaField(c, "Plugin", m.PluginName, false)
-		}
-		if m.InstalledAt != "" {
-			metaField(c, "安装", shortTime(m.InstalledAt), false)
-		}
-		if m.UpdatedAt != "" {
-			metaField(c, "更新", shortTime(m.UpdatedAt), false)
-		}
-		metaField(c, "哈希", shortHash(m.ContentHash), false)
+			if m.UpdatedAt != "" {
+				metaField(c, "更新", shortTime(m.UpdatedAt), false)
+			}
+			metaField(c, "哈希", shortHash(m.ContentHash), false)
+		})
 	})
 }
 
