@@ -22,7 +22,11 @@ type AddOptions struct {
 	LocalPath string
 	// Repo 是 GitHub 的 owner/repo。
 	Repo string
-	// SubPath 是仓库内技能目录（可选）。为空时默认用 Repo 根目录。
+	// SubPath 是仓库内技能目录（可选）。为空时默认用 Repo 根目录；
+	// 安装路径会先做仓库内技能发现（见 discoverForAdd）：仓库根是技能
+	// 或恰好只有一个候选时直接装，多个候选时报 CandidatesError 交由
+	// 调用方展示，零个候选时报「来源目录缺少 SKILL.md」。
+	// 显式给了 SubPath 时按用户指定的目录安装，绝不自动换别的。
 	SubPath string
 	// Ref 是分支/标签/commit（可选，默认仓库默认分支）。
 	Ref string
@@ -64,6 +68,7 @@ func (c *Config) Add(opts *AddOptions) (*Result, error) {
 	var src Source
 	var cleanup func()
 	var err error
+	name := opts.Name
 	if opts.LocalPath != "" {
 		srcDir, src, err = c.resolveLocal(opts)
 	} else {
@@ -77,7 +82,47 @@ func (c *Config) Add(opts *AddOptions) (*Result, error) {
 	if err != nil {
 		return nil, err
 	}
-	return c.installDir(srcDir, src, opts.Name)
+	// GitHub 来源且未显式指定子目录：先发现仓库内的技能再决定装什么。
+	// 显式给了 SubPath 时跳过（用户指定的子目录一律照装，不自作主张）。
+	if opts.LocalPath == "" && opts.SubPath == "" {
+		dir, sub, err := discoverForAdd(opts.Repo, srcDir)
+		if err != nil {
+			return nil, err
+		}
+		srcDir = dir
+		src.SubPath = sub
+		if sub == "" && name == "" {
+			// 仓库根本身是技能：临时目录名是随机的（kura-clone-NNN），
+			// 不能当技能名；默认取仓库名（owner/repo 的尾段）。
+			name = opts.Repo[strings.LastIndex(opts.Repo, "/")+1:]
+		}
+	}
+	return c.installDir(srcDir, src, name)
+}
+
+// discoverForAdd 在 clone 好的仓库 tmp 里决定要安装的技能目录，返回
+// （技能目录绝对路径，相对仓库根的 slash 路径）。subPath 会写进元数据的
+// Source.SubPath，让后续 Update 能照它重新拉取；仓库根本身是技能时为空串。
+// 恰好一个候选（含「仓库根本身是技能」）→ 直接返回它；多个候选 →
+// 返回 *CandidatesError 把选择权交还调用方；零个 → 返回与旧路径一致
+// 的「来源目录缺少 SKILL.md」错误（仓库根没有 SKILL.md 时根目录安装
+// 本来就会失败，语义与显式 --sub-path 时完全相同）。
+func discoverForAdd(repo, tmp string) (string, string, error) {
+	dr, err := DiscoverSkills(tmp)
+	if err != nil {
+		return "", "", err
+	}
+	switch len(dr.Paths) {
+	case 1:
+		if dr.Paths[0] == "." {
+			return tmp, "", nil // 仓库根本身就是技能。
+		}
+		return filepath.Join(tmp, filepath.FromSlash(dr.Paths[0])), dr.Paths[0], nil
+	case 0:
+		return "", "", fmt.Errorf("store: 来源目录缺少 SKILL.md: %s", tmp)
+	default:
+		return "", "", &CandidatesError{Repo: repo, Paths: dr.Paths}
+	}
 }
 
 // resolveLocal 处理本地目录来源。
@@ -97,7 +142,9 @@ func (c *Config) resolveLocal(opts *AddOptions) (string, Source, error) {
 }
 
 // resolveGitHub 用 git clone --depth 1 把 owner/repo 拉到临时目录。
-// 返回仓库内技能目录的路径与清理函数（调用方 defer 执行）。
+// 返回仓库内技能目录的路径与清理函数（调用方 defer 执行）。SubPath 为空
+// 时返回 clone 根本身；未指定 SubPath 时的发现结果由 Add 经 discoverForAdd
+// 二次修正（这里保持单一职责：只负责克隆与按显式 SubPath 定位）。
 func (c *Config) resolveGitHub(opts *AddOptions) (string, Source, func(), error) {
 	tmp, err := os.MkdirTemp("", "kura-clone-")
 	if err != nil {
