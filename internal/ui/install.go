@@ -37,8 +37,8 @@ func (a *App) OpenInstall() {
 }
 
 // installOptions 把表单换成 store.AddOptions。GitHub 仓库支持直接粘贴
-// https://github.com/owner/repo[.git][/tree/<ref>/<子目录>]，表单里单独填的
-// 子目录与分支优先。
+// https://github.com/owner/repo[.git][/tree/<ref>/<子目录>]，或指向技能里
+// SKILL.md 的 /blob/<ref>/<子目录>/SKILL.md；表单里单独填的子目录与分支优先。
 func (s *installState) installOptions() *store.AddOptions {
 	opts := &store.AddOptions{Name: strings.TrimSpace(s.name)}
 	if s.source == installLocal {
@@ -57,10 +57,16 @@ func (s *installState) installOptions() *store.AddOptions {
 }
 
 // parseRepo 从 owner/repo 或 GitHub 网址里取出仓库、ref 与子目录。
+// tree 链接指向目录，子目录就是链接里的路径；blob 链接指向文件（通常是
+// .../SKILL.md），子目录取文件所在的目录。浏览器地址栏里常带的 ?plain=1、
+// #L10 这类查询与锚点会先去掉。
 func parseRepo(in string) (repo, ref, sub string) {
 	s := strings.TrimSpace(in)
 	for _, p := range []string{"https://", "http://", "www.", "github.com/"} {
 		s = strings.TrimPrefix(s, p)
+	}
+	if i := strings.IndexAny(s, "?#"); i >= 0 {
+		s = s[:i]
 	}
 	s = strings.Trim(s, "/")
 	parts := strings.Split(s, "/")
@@ -70,7 +76,12 @@ func parseRepo(in string) (repo, ref, sub string) {
 	repo = parts[0] + "/" + strings.TrimSuffix(parts[1], ".git")
 	if len(parts) >= 4 && (parts[2] == "tree" || parts[2] == "blob") {
 		ref = parts[3]
-		sub = strings.Join(parts[4:], "/")
+		path := parts[4:]
+		// 文件名不是目录：不丢掉的话它会被拼进 SubPath，安装必然报目录不存在。
+		if parts[2] == "blob" && len(path) > 0 {
+			path = path[:len(path)-1]
+		}
+		sub = strings.Join(path, "/")
 	}
 	return repo, ref, sub
 }
