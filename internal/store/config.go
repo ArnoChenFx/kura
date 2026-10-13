@@ -141,11 +141,13 @@ func SaveHomeConfig(c *Config, hc *HomeConfig) error {
 	return nil
 }
 
-// HomeConfig 是 ~/.kura/config.json 的内容：技能根目录列表与创建时间，
-// 字段保持小写驼峰。
+// HomeConfig 是 ~/.kura/config.json 的内容：技能根目录列表、外观偏好与
+// 创建时间，字段保持小写驼峰。
 type HomeConfig struct {
 	// Roots 是用户添加的技能根目录列表（见 Library）；默认根目录总是第一个。
 	Roots []string `json:"roots"`
+	// Theme 是外观偏好：ThemeSystem、ThemeLight 或 ThemeDark；空串等同跟随系统。
+	Theme string `json:"theme,omitempty"`
 	// CreatedAt 是配置首次创建时间（RFC3339）。
 	CreatedAt string `json:"createdAt,omitempty"`
 }
