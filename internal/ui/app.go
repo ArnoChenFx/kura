@@ -67,6 +67,17 @@ type App struct {
 	grid    myui.GridState  // 卡片网格的滚动与选择状态
 	updates map[string]bool // 最近一次检查发现有更新的技能（当前目录）
 
+	// 详情栏的「概览/全文」tab：detailTab 是当前选中的下标（0=概览，
+	// 1=全文），detailSel 记录 tab 属于哪个技能：viewDetail 发现换人时
+	// 把 detailTab 重置回 0，避免看到上一个技能的全文。
+	detailTab int
+	detailSel string
+	// skillDocs 缓存每个技能读出的 SKILL.md（键：技能名）：切 tab、来回
+	// 切技能不必反复读盘；扫描后失效（applyScan），更新/改文件后的下一帧
+	// 会重新读。docGen 随失效递增，后台读盘任务只回写同一代的缓存。
+	skillDocs map[string]fullTextDoc
+	docGen    int
+
 	busy           map[string]bool // 正在执行操作的技能（busyKey）
 	checking       string          // 正在预览更新的技能名（空为无）
 	checkingAll    bool            // 正在全部检查
@@ -286,6 +297,10 @@ func (a *App) applyScan(skills []*store.Skill, err error) {
 		}
 	}
 	a.rootCounts[a.cfg.Root] = n
+	// SKILL.md 可能被更新/恢复等操作改写（磁盘上的内容已变），缓存全部
+	// 失效，全文页下一帧重新读；docGen 递增让还在路上的旧读盘结果作废。
+	a.skillDocs = nil
+	a.docGen++
 }
 
 // publishAfterWork 在后台任务完成后重新扫描 cfg 并发布结果。key 是 busyKey；
