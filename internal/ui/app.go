@@ -13,6 +13,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/ArnoChenFx/kura/internal/store"
 	"github.com/egoist/mygo"
@@ -41,6 +42,13 @@ type App struct {
 	// pickFolder 弹出系统的文件夹选择框，返回所选路径（取消为空串）。
 	// 会阻塞，只在后台 goroutine 里调用；测试里替换为假实现。
 	pickFolder func() (string, error)
+	// openPath 用系统默认方式打开文件或文件夹，reveal 在文件管理器里显示并
+	// 选中它，setSource 把外观模式同步给 MyGo（原生标题栏、系统菜单）。
+	// 都会阻塞，只在后台 goroutine 里调用（SyncTheme 例外，见该方法）；
+	// 测试里替换为假实现，绝不真的打开窗口。
+	openPath  func(path string) error
+	reveal    func(path string)
+	setSource func(mode string)
 
 	skills  []*store.Skill  // 当前目录的全部技能（启用 + 停用 + 回收站）
 	query   string          // 搜索词
@@ -61,7 +69,11 @@ type App struct {
 	statusErr   bool            // 状态行是否为错误
 	confirm     confirmState    // 待确认的删除操作
 	install     installState    // 安装技能弹窗
-	pal         palette         // 本帧的表面色（随系统浅色/深色切换）
+	pal         palette         // 本帧的表面色（由 themeMode 决定浅色/深色）
+	skin        *skin           // 本帧的皮肤；卡片网格用它的 cell 主题
+	themeMode   string          // 外观偏好：store.ThemeSystem / ThemeLight / ThemeDark
+	themeSeq    atomic.Int64    // 外观切换的序号：后台任务只执行最新一次
+	themeMu     sync.Mutex      // 串行化同步原生外观与写 config.json
 	review      reviewState     // 更新评审面板（Modal）
 
 	// spawn 在后台运行 fn：生产环境为 go fn()。
@@ -91,6 +103,7 @@ func NewApp(cfg *store.Config) *App {
 	a.lib = lib
 	a.cfg = cfg
 	a.rootSel = lib.Default()
+	a.themeMode = lib.Theme
 	a.grid.Selected = &a.selIdx
 	a.grid.Key = func(i int) any {
 		if i < len(a.shown) {
@@ -110,6 +123,9 @@ func NewApp(cfg *store.Config) *App {
 		}
 		return paths[0], nil
 	}
+	a.openPath = mygo.Shell.OpenPath
+	a.reveal = mygo.Shell.ShowItemInFolder
+	a.setSource = func(mode string) { mygo.Theme.SetSource(mygo.ThemeSource(mode)) }
 	a.spawn = func(fn func()) { go fn() }
 	// 窗口接入前的兜底：发布闭包暂存 pending，等 SetWindow 回放，
 	// 保证任何 goroutine 都不会直接改 UI 状态。
@@ -434,10 +450,10 @@ func (a *App) AddRootAsync() {
 	})
 }
 
-// RemoveRootAsync 把当前目录从列表移除（只改 config.json，不动磁盘上的
-// 技能），然后回到默认目录。
-func (a *App) RemoveRootAsync() {
-	root := a.cfg.Root
+// RemoveRootAsync 把目录 root 从列表移除（只改 config.json，不动磁盘上的
+// 技能）。移除的是正在看的目录时回到默认目录；移除别的目录不改变当前
+// 所看的目录。默认目录不能移除（store.ErrDefaultRoot 显示在状态行）。
+func (a *App) RemoveRootAsync(root string) {
 	lib := a.libCopy()
 	a.spawn(func() {
 		err := lib.RemoveRoot(root)
@@ -448,7 +464,10 @@ func (a *App) RemoveRootAsync() {
 			}
 			a.lib = lib
 			delete(a.rootCounts, root)
-			a.SelectRoot(lib.Default())
+			// 要不要换目录在这里、UI 线程上判断：排队期间用户可能已切走。
+			if root == a.cfg.Root {
+				a.SelectRoot(lib.Default())
+			}
 			a.status, a.statusErr = "已从列表移除 "+root+"（文件夹未改动）", false
 		})
 	})
@@ -456,5 +475,54 @@ func (a *App) RemoveRootAsync() {
 
 // libCopy 复制目录列表交给后台修改，成功后再在 UI 线程换上。
 func (a *App) libCopy() *store.Library {
-	return &store.Library{Home: a.lib.Home, Roots: append([]string(nil), a.lib.Roots...)}
+	return &store.Library{Home: a.lib.Home, Roots: append([]string(nil), a.lib.Roots...), Theme: a.themeMode}
+}
+
+// OpenPathAsync 用系统默认方式打开 path：文件夹用文件管理器，SKILL.md 用
+// 默认的编辑器。打开动作在后台做，失败在状态行报告，成功不打扰。
+func (a *App) OpenPathAsync(path string) {
+	a.spawn(func() {
+		if err := a.openPath(path); err != nil {
+			a.publish(func() { a.status, a.statusErr = "无法打开 "+path+"："+err.Error(), true })
+		}
+	})
+}
+
+// RevealAsync 在文件管理器里显示 path 并选中它（后台执行）。
+func (a *App) RevealAsync(path string) {
+	a.spawn(func() { a.reveal(path) })
+}
+
+// SyncTheme 启动时把外观偏好同步给 MyGo，让原生标题栏与系统菜单从一开始
+// 就是对的外观。在 mygo.App.Run 之前调用（MyGo 允许这样用已存的偏好）；
+// 界面本身不依赖它：皮肤由 themeMode 决定。
+func (a *App) SyncTheme() { a.setSource(a.themeMode) }
+
+// SetThemeAsync 切换外观为 mode（store.ThemeSystem / ThemeLight / ThemeDark）。
+// 界面立刻换皮肤——皮肤由 themeMode 决定，下一帧生效；同步原生外观与写
+// config.json 在后台做，写盘失败只在状态行报告，不回滚已换的皮肤。连续
+// 切换时只有最新一次会执行，避免后到的旧任务把配置写回旧值。
+func (a *App) SetThemeAsync(mode string) {
+	mode, err := store.NormalizeTheme(mode)
+	if err != nil {
+		a.status, a.statusErr = err.Error(), true
+		return
+	}
+	if mode == a.themeMode {
+		return
+	}
+	a.themeMode = mode
+	seq := a.themeSeq.Add(1)
+	lib := a.libCopy()
+	a.spawn(func() {
+		a.themeMu.Lock()
+		defer a.themeMu.Unlock()
+		if a.themeSeq.Load() != seq {
+			return
+		}
+		a.setSource(mode)
+		if err := lib.SetTheme(mode); err != nil {
+			a.publish(func() { a.status, a.statusErr = "外观偏好没能保存："+err.Error(), true })
+		}
+	})
 }

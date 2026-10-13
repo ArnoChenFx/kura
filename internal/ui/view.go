@@ -30,7 +30,8 @@ const (
 //	│ +添加文件夹│ 状态条                         │ 操作         │
 //	└──────────┴──────────────────────────────┴────────────┘
 func (a *App) View(c *myui.Context) {
-	a.pal = kuraScheme.apply(c)
+	a.skin = kuraScheme.apply(c, a.themeMode)
+	a.pal = a.skin.pal
 	// 首帧触发一次后台初始扫描（磁盘 I/O 不在 UI 线程做）。
 	if !a.loaded {
 		a.loaded = true
@@ -107,7 +108,8 @@ func (a *App) viewRoots(c *myui.Context) {
 			myui.Text(c, "目录列表读取失败："+a.libErr).MaxLines(3).
 				FontSize(t.FontSize-2).TextColor(t.Danger).Padding(t.Space(1), t.Space(4))
 		}
-		myui.Box(c).FillWidth().Padding(t.Space(2), t.Space(3), t.Space(3), t.Space(3)).Children(func() {
+		myui.Column(c).FillWidth().Padding(t.Space(2), t.Space(3), t.Space(3), t.Space(3)).
+			Gap(t.Space(3)).Children(func() {
 			ab := myui.ButtonBase(c).Label("添加文件夹").FillWidth().Disabled(a.adding).
 				Justify(myui.Start).Gap(t.Space(2)).Padding(t.Space(2), t.Space(3)).
 				Radius(t.Radius).Border(1, t.Border).TextColor(a.pal.textMid)
@@ -121,7 +123,59 @@ func (a *App) viewRoots(c *myui.Context) {
 			if ab.Clicked() {
 				a.AddRootAsync()
 			}
+			a.viewThemeSwitch(c)
 		})
+	})
+}
+
+// themeModes 是外观开关的三个选项，顺序即分段顺序。
+var themeModes = []struct {
+	mode, label string
+	icon        *myui.SVG
+}{
+	{store.ThemeSystem, "跟随系统", iconMonitor},
+	{store.ThemeLight, "浅色", iconSun},
+	{store.ThemeDark, "深色", iconMoon},
+}
+
+// themeIndex 返回外观模式在 themeModes 里的位置，不认识的当作跟随系统。
+func themeIndex(mode string) int {
+	for i, m := range themeModes {
+		if m.mode == mode {
+			return i
+		}
+	}
+	return 0
+}
+
+// viewThemeSwitch 是左栏底部的外观开关：「外观」加三个图标分段（跟随系统
+// / 浅色 / 深色），选中的分段浮起。分段的点击在构建结束或查询响应时才写进
+// sel，所以要靠 Changed 在同一次构建里取到新选择，再交给 SetThemeAsync
+// （幂等，重复构建不会重复写盘）；sel 每次构建都从 themeMode 重新推出。
+func (a *App) viewThemeSwitch(c *myui.Context) {
+	t := c.Theme()
+	sel := themeIndex(a.themeMode)
+	myui.Row(c).FillWidth().AlignItems(myui.Center).Padding(0, t.Space(1)).Children(func() {
+		myui.Text(c, "外观").SingleLine().FontSize(t.FontSize - 1).TextColor(t.TextMuted)
+		myui.Spacer(c)
+		seg := myui.SegmentedBase(c, &sel, len(themeModes))
+		track := seg.Track.Label("外观").Padding(t.Space(0.5)).Gap(t.Space(0.5)).
+			Radius(t.Radius).Background(a.pal.card).Border(1, a.pal.line).Children(func() {
+			for i, m := range themeModes {
+				b := seg.Segment(i).Label(m.label).Tooltip(m.label).
+					Padding(t.Space(1.25), t.Space(2)).Radius(t.Radius - 2).TextColor(t.TextMuted)
+				switch {
+				case i == sel:
+					b.Background(t.SurfacePressed).TextColor(t.Text)
+				case b.Hovered():
+					b.Background(t.SurfaceHover).TextColor(t.Text)
+				}
+				b.Children(func() { myui.Icon(c, m.icon).FontSize(t.FontSize + 1) })
+			}
+		})
+		if track.Changed() {
+			a.SetThemeAsync(themeModes[sel].mode)
+		}
 	})
 }
 
@@ -149,9 +203,33 @@ func (a *App) rootItem(c *myui.Context, root string, isDefault bool) {
 			myui.Text(c, itoa(n)).SingleLine().FontSize(t.FontSize - 1).TextColor(t.TextMuted)
 		}
 	})
+	b.ContextMenu(func(m *myui.Menu) { a.rootMenu(c, m, root, isDefault) })
 	if b.Clicked() {
 		a.rootSel = root
 	}
+}
+
+// rootMenu 是左栏目录项的右键菜单：打开文件夹、复制路径；追加的目录还能
+// 从列表移除（只改 config.json，不动文件夹）。右键不切换目录。
+func (a *App) rootMenu(c *myui.Context, m *myui.Menu, root string, isDefault bool) {
+	if m.Item("打开文件夹").Chosen() {
+		a.OpenPathAsync(root)
+	}
+	if m.Item("复制路径").Chosen() {
+		a.copyPath(c, root)
+	}
+	if !isDefault {
+		m.Separator()
+		if m.Item("从列表移除").Chosen() {
+			a.RemoveRootAsync(root)
+		}
+	}
+}
+
+// copyPath 把路径放进剪贴板，状态行说一声。只在菜单项被选中的那一帧调用。
+func (a *App) copyPath(c *myui.Context, path string) {
+	c.WriteClipboard(path)
+	a.status, a.statusErr = "已复制路径 "+path, false
 }
 
 // rootLabel 是目录在左栏里的名字：最后两级路径（如 .agents/skills），
@@ -188,7 +266,7 @@ func (a *App) viewMainHeader(c *myui.Context) {
 		if isDefault {
 			ghostButton(c, iconImport, "导入元数据", false, a.ImportAsync)
 		} else {
-			ghostButton(c, iconUnlink, "从列表移除此目录", false, a.RemoveRootAsync)
+			ghostButton(c, iconUnlink, "从列表移除此目录", false, func() { a.RemoveRootAsync(a.cfg.Root) })
 		}
 		myui.Box(c).Width(t.Space(2))
 		ib := myui.PrimaryButton(c, "").Label("安装技能")
@@ -238,9 +316,17 @@ func (a *App) viewGrid(c *myui.Context, rows []*store.Skill) {
 		a.viewGridEmpty(c)
 		return
 	}
+	// 网格用 skin.cell 主题构建：它的单元格不画任何选中框与悬停底（原因见
+	// newSkin），选中与悬停全由卡片自己画，边框只有一圈。卡片里要换回真正的
+	// 主题，建完再切回 cell 主题：下一个单元格在这之后构建，读的是 c 此刻的
+	// 主题。
+	c.SetTheme(a.skin.cell)
 	myui.GridView(c, &a.grid, len(rows), cardMinWidth, cardHeight, func(i int) {
+		c.SetTheme(t)
 		a.viewCard(c, rows[i], i == a.selIdx)
+		c.SetTheme(a.skin.cell)
 	}).Grow(1).FillWidth().Padding(0, t.Space(4), t.Space(2), t.Space(4))
+	c.SetTheme(t)
 }
 
 // viewGridEmpty 是没有卡片时的占位：区分「搜索无结果」「筛选下为空」与
@@ -280,13 +366,29 @@ func (a *App) viewCard(c *myui.Context, s *store.Skill, selected bool) {
 	t := c.Theme()
 	busy := a.isBusy(s.Name)
 	dim := s.State != store.StateEnabled
-	border := a.pal.line
-	if selected {
-		border = t.Accent
+	card := myui.Column(c).Fill().Padding(t.Space(3.5)).Gap(t.Space(2.5)).
+		Radius(t.Radius+4).Shadow(0, 1, 3, 0, a.pal.shadow)
+	// 选中与悬停都由卡片自己画：同一圈边框、同一个圆角（网格的单元格不画，
+	// 见 skin.cell）。选中优先于悬停。
+	bg, border := a.pal.card, a.pal.line
+	switch {
+	case selected:
+		bg, border = a.pal.cardSel, t.Accent
+	case card.Hovered():
+		bg, border = a.pal.cardHover, a.pal.lineHover
 	}
-	myui.Column(c).Fill().Padding(t.Space(3.5)).Gap(t.Space(2.5)).
-		Radius(t.Radius+4).Background(a.pal.card).Border(1, border).
-		Shadow(0, 1, 3, 0, a.pal.shadow).Children(func() {
+	card.Background(bg).Border(1, border)
+	// 右键先选中这张卡片：菜单作用的就是右栏正显示的技能。选中放在菜单的构建
+	// 函数里（它只在菜单打开时与选了菜单项后各跑一次），不用 RightClicked：
+	// 那会让卡片变成可点击元素，吞掉网格单元格要收的左键点击。
+	card.ContextMenu(func(m *myui.Menu) {
+		if a.selName != s.Name {
+			a.selName = s.Name
+			c.Invalidate()
+		}
+		a.cardMenu(c, m, s)
+	})
+	card.Children(func() {
 		myui.Row(c).FillWidth().Gap(t.Space(3)).AlignItems(myui.Center).Children(func() {
 			avatar(c, a.pal, s.Name, t.Space(9), dim)
 			myui.Column(c).Grow(1).MinWidth(0).Gap(t.Space(0.5)).Children(func() {
@@ -340,6 +442,55 @@ func (a *App) viewCard(c *myui.Context, s *store.Skill, selected bool) {
 			}
 		})
 	})
+}
+
+// cardMenu 是卡片的右键菜单。上半是只看不改的：打开文件夹、在文件夹中显示、
+// 打开 SKILL.md、复制路径；下半是改状态的操作，随技能状态变化：启用的有
+// 停用 / 检查更新 / 移入回收站，停用的有启用 / 移入回收站，回收站里的只有
+// 恢复。技能正忙时改状态的项置灰。移入回收站仍走确认框。
+func (a *App) cardMenu(c *myui.Context, m *myui.Menu, s *store.Skill) {
+	busy := a.isBusy(s.Name)
+	if m.Item("打开文件夹").Chosen() {
+		a.OpenPathAsync(s.Dir)
+	}
+	if m.Item("在文件夹中显示").Chosen() {
+		a.RevealAsync(s.Dir)
+	}
+	if s.State != store.StateTrashed {
+		if m.Item("打开 SKILL.md").Disabled(!s.HasSKILLMD).Chosen() {
+			a.OpenPathAsync(filepath.Join(s.Dir, "SKILL.md"))
+		}
+	}
+	if m.Item("复制路径").Chosen() {
+		a.copyPath(c, s.Dir)
+	}
+	m.Separator()
+	trash := func() {
+		if m.Item("移入回收站…").Disabled(busy).Chosen() {
+			a.confirm = confirmState{open: true, name: s.Name}
+		}
+	}
+	switch s.State {
+	case store.StateEnabled:
+		if m.Item("停用").Disabled(busy).Chosen() {
+			a.ToggleAsync(s.Name, false)
+		}
+		if m.Item("检查更新").Disabled(busy || a.hasCheckTarget()).Chosen() {
+			a.CheckAsync(s.Name)
+		}
+		m.Separator()
+		trash()
+	case store.StateDisabled:
+		if m.Item("启用").Disabled(busy).Chosen() {
+			a.ToggleAsync(s.Name, true)
+		}
+		m.Separator()
+		trash()
+	case store.StateTrashed:
+		if m.Item("恢复到技能目录").Disabled(busy).Chosen() {
+			a.RestoreAsync(s.Name)
+		}
+	}
 }
 
 // viewDetail 是右栏：所选技能的详情。头部是头像、名字与状态；正文是描述

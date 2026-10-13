@@ -36,6 +36,11 @@ func newAppFor(cfg *store.Config) *App {
 		fn()
 	}
 	a.update = func(fn func()) { a.pending = append(a.pending, fn) }
+	// 系统调用一律换成空实现：测试绝不真的打开文件夹或改系统外观。
+	// 需要检查调用的测试再换成 fakeShell（见 menus_test.go）。
+	a.openPath = func(string) error { return nil }
+	a.reveal = func(string) {}
+	a.setSource = func(string) {}
 	return a
 }
 
