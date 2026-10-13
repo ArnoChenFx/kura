@@ -30,7 +30,7 @@ const (
 //	│ +添加文件夹│ 状态条                         │ 操作         │
 //	└──────────┴──────────────────────────────┴────────────┘
 func (a *App) View(c *myui.Context) {
-	a.pal = applyTheme(c)
+	a.pal = a.scheme.apply(c)
 	// 首帧触发一次后台初始扫描（磁盘 I/O 不在 UI 线程做）。
 	if !a.loaded {
 		a.loaded = true
@@ -263,7 +263,7 @@ func (a *App) viewCard(c *myui.Context, s *store.Skill, selected bool) {
 		Radius(t.Radius+4).Background(a.pal.card).Border(1, border).
 		Shadow(0, 1, 3, 0, a.pal.shadow).Children(func() {
 		myui.Row(c).FillWidth().Gap(t.Space(3)).AlignItems(myui.Center).Children(func() {
-			avatar(c, s.Name, t.Space(9), dim)
+			avatar(c, a.pal, s.Name, t.Space(9), dim)
 			myui.Column(c).Grow(1).MinWidth(0).Gap(t.Space(0.5)).Children(func() {
 				name := myui.Text(c, s.Name).SingleLine().FontWeight(600)
 				if dim {
@@ -287,7 +287,7 @@ func (a *App) viewCard(c *myui.Context, s *store.Skill, selected bool) {
 				// Switch 的输入在构建时应用：Changed 返回 true 的这次构建里，
 				// on 已是切换后的目标状态。
 				on := s.State == store.StateEnabled
-				sw := myui.Switch(c, &on).Label(s.Name + " 开关")
+				sw := kuraSwitch(c, &on, a.pal.toggle).Label(s.Name + " 开关")
 				if sw.Changed() {
 					a.ToggleAsync(s.Name, on)
 				}
@@ -300,7 +300,7 @@ func (a *App) viewCard(c *myui.Context, s *store.Skill, selected bool) {
 		myui.Text(c, desc).MaxLines(2).FontSize(t.FontSize - 1).TextColor(color).Grow(1)
 		myui.Row(c).FillWidth().Gap(t.Space(1.5)).AlignItems(myui.Center).Children(func() {
 			if a.updates[s.Name] {
-				pill(c, "有更新", t.Accent)
+				pill(c, "有更新", a.pal.signal)
 			}
 			switch s.State {
 			case store.StateDisabled:
@@ -326,7 +326,7 @@ func (a *App) viewDetail(c *myui.Context, s *store.Skill) {
 		myui.Scroll(c).Grow(1).FillWidth().Children(func() {
 			myui.Column(c).FillWidth().Padding(t.Space(4), t.Space(5)).Gap(t.Space(4)).Children(func() {
 				myui.Row(c).FillWidth().Gap(t.Space(3)).AlignItems(myui.Start).Children(func() {
-					avatar(c, s.Name, t.Space(12), s.State != store.StateEnabled)
+					avatar(c, a.pal, s.Name, t.Space(12), s.State != store.StateEnabled)
 					myui.Column(c).Grow(1).MinWidth(0).Gap(t.Space(1.5)).Children(func() {
 						name := myui.Text(c, s.Name).Bold().FontSize(t.FontSize + 4)
 						if s.State == store.StateTrashed {
@@ -335,7 +335,7 @@ func (a *App) viewDetail(c *myui.Context, s *store.Skill) {
 						myui.Row(c).Gap(t.Space(2)).AlignItems(myui.Center).Children(func() {
 							stateBadge(c, s.State)
 							if a.updates[s.Name] {
-								pill(c, "有更新", t.Accent)
+								pill(c, "有更新", a.pal.signal)
 							}
 						})
 					})

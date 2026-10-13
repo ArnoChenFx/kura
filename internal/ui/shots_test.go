@@ -5,6 +5,7 @@
 package ui
 
 import (
+	"image"
 	"image/png"
 	"os"
 	"path/filepath"
@@ -126,6 +127,12 @@ func TestRenderStateShots(t *testing.T) {
 // saveShot 把 tt 的最后一帧写成 out/name.png。
 func saveShot(t *testing.T, out, name string, tt *myui.Tester) {
 	t.Helper()
+	saveImage(t, out, name, tt.Image())
+}
+
+// saveImage 把 img 写成 out/name.png。
+func saveImage(t *testing.T, out, name string, img image.Image) {
+	t.Helper()
 	if err := os.MkdirAll(out, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -134,7 +141,7 @@ func saveShot(t *testing.T, out, name string, tt *myui.Tester) {
 		t.Fatal(err)
 	}
 	defer f.Close()
-	if err := png.Encode(f, tt.Image()); err != nil {
+	if err := png.Encode(f, img); err != nil {
 		t.Fatal(err)
 	}
 	t.Logf("已保存 %s", filepath.Join(out, name+".png"))
