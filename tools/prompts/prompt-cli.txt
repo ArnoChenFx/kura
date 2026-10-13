@@ -1,0 +1,29 @@
+You are a fresh implementation agent for kura (Go + MyGo), working in YOUR OWN git worktree E:\Project\kura-m3 on branch m3-diff (the name is historical — see the task below). Do not touch E:\Project\kura or E:\Project\kura-m2.
+
+Read first: REQUIREMENTS.md and internal/store/*.go (the finished core store: Config, Scan/ScanDisabled/ScanTrash, Meta read/write, HashDir, ImportMeta, Enable/Disable/Remove/Restore/Add/Update, each returning *Result or an error). Also .agents/skills/mygo-maintenance/SKILL.md if you touch anything under package ui — but this task is deliberately UI-FREE so you mostly will not.
+
+TASK (milestone 3: headless CLI + first-run metadata pass). No window, no package ui, no changes to main.go.
+
+1. Add a CLI entry point `cmd/kura/main.go` (binary name kura) with subcommands, all printing human-readable text plus a `--json` flag:
+   - `kura list`            — every skill in the root: name, state (enabled/disabled/trashed), source type, source url, updatedAt.
+   - `kura scan --root PATH` — same, with the root overridable (also honour a KURA_ROOT env var).
+   - `kura disable NAME` / `kura enable NAME`
+   - `kura remove NAME [--stamp TS]` / `kura restore NAME [--stamp TS]`
+   - `kura import-meta [--dry-run]` — run Config.ImportMeta against the sibling .skill-lock.json.
+   - `kura add --local PATH [--name N]` and `kura add --github owner/repo [--sub-path P] [--ref R] [--name N]`
+   - `kura update NAME`
+   - `kura doctor` — read-only diagnostics on the whole root: skills with no .kura-meta.json, meta files that fail to parse, meta whose contentHash does not match the current content (drifted), skill folders with no SKILL.md, and disabled/trashed leftovers. Exit code 0 when clean, 3 when it found problems.
+   Put the shared logic in a testable package (internal/cli or internal/app); main.go only wires os.Args to it. Never call os.Exit from inside the package; return exit codes.
+
+2. Give `kura doctor --json` a stable, documented output shape (top-level `root`, `problems[]` with `kind`, `skill`, `detail`) so a future UI can consume it.
+
+3. Tests: table-driven tests for the CLI package that run against a temp root (store.NewConfig with t.TempDir), covering list/disable/enable/remove/restore/add-local/update/doctor (clean and drifted cases), asserting both the exit code and the JSON shape. No test may touch the real ~/.agents/skills.
+
+4. `kura doctor` must be safe on a root containing a corrupt .kura-meta.json and a skill folder that is a file, not a directory: report, never panic.
+
+PROOF REQUIRED (paste raw output in your final message):
+- gofmt -l . (empty), go vet ./..., go test ./... passing.
+- A real end-to-end run against a temp root showing the commands and their output, for example: list, disable, list, enable, doctor --json, and one intentional drift case.
+- CGO_ENABLED=0 go build ./... succeeding, and the built binary's `kura --help` output.
+
+Do NOT create git commits. Do NOT read or write the user's real ~/.agents/skills except in a command you clearly mark as a dry run that only reads (do not run `import-meta` without --dry-run against it). When done, reply with: files added, the proof output, and any ambiguity in REQUIREMENTS.md plus what you chose.

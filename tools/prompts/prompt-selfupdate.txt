@@ -1,0 +1,33 @@
+You are a fresh implementation agent for kura (Go + MyGo native UI), working in YOUR OWN git worktree E:\Project\kura-m6 on branch m6-selfupdate. Do not touch the other worktrees (kura, kura-m2..kura-m5).
+
+Read first:
+- REQUIREMENTS.md, main.go, internal/ui/*.go (the window, incl. the skills "检查更新" action added in milestone 4), mygo.json, go.mod
+- The pinned MyGo module docs: `go list -m -f '{{.Dir}}' github.com/egoist/mygo`, then read `docs/updates.md`, `plugins/updater/README.md`, `plugins/updater/native/native.go` and `plugins/updater/updater.go` in that directory. The API is the authority; do not guess.
+- .agents/skills/mygo-maintenance/SKILL.md
+
+CONTEXT: kura is a desktop skills manager for `~/.agents/skills`, a MyGo native-UI app (NO webview, NO Bun/npm/Node anywhere). The repo is public: github.com/ArnoChenFx/kura, and releases will be tagged `vX.Y.Z`.
+
+GOAL (milestone 6): the installed app updates itself from GitHub releases — it notices a newer release, tells the user, and on the user's click downloads it, replaces itself and restarts. Use MyGo's own updater (`plugins/updater` with the native UI window from `plugins/updater/native`), which already implements check → release notes → download with progress → replace → relaunch, with signature verification against a public key compiled into the app. Do not hand-roll the download/replace logic.
+
+TASK
+1. Wire the updater into the app:
+   - `mygo.Use(native.Plugin)` (package `github.com/egoist/mygo/plugins/updater/native`) in main.go, or `native.New(updater.Options{...})` with sensible options: a daily `Interval`, an appropriate `Language` default (the app is Chinese-facing; use the user's locale by leaving it empty unless you find a reason not to).
+   - Add a native app menu (see `docs/menus.md`) with an About item, `updater.MenuItem()` (the "Check for Updates…" entry), a separator and Quit, so the user can check on demand.
+   - The update window is native UI already; make sure nothing requires a webview.
+2. Configuration in `mygo.json`: add `updates` with `publicKey` (the contents of the generated `mygo-update.pub`) and `github: "ArnoChenFx/kura"`. Generate the key pair with `go tool mygo keygen` (run `-h` first to learn its flags). CRITICAL: the secret half (`mygo-update.key`) must NEVER be copied into the repo, into a git-committed file, or printed in your report; only the `.pub` contents belong in mygo.json. The secret key stays wherever keygen put it, for the maintainer to add as a repository secret.
+   If keygen cannot run non-interactively, say so, leave `updates.github` in place with a clearly marked placeholder public key, and document the exact command the maintainer must run.
+3. Disambiguate the UI wording: milestone 4 already added a skills-level "检查更新" (per skill) and "全部检查" (all skills) in the skills window. A second, app-level "检查更新" in the same window would confuse the user. Keep the app-level one in the app menu, and if you also add a button, label it unambiguously (for example "更新 kura"). State your choice in the report.
+4. A version bump path: make sure `mygo.json`'s `version` is the single source of truth for the app version and that `updates` reads it; if you need a `CHANGELOG.md` section for release notes, create `CHANGELOG.md` with a `## 0.1.0` section and note in `docs/note/updates.md` that each release needs one.
+5. Document it in `docs/note/updates.md`: how the pieces fit (public key in mygo.json, private key as the `MYGO_UPDATER_PRIVATE_KEY` repository secret, tags `vX.Y.Z`), what the user sees, and the exact maintainer steps for cutting a release that ships updates. Be honest that a CI release workflow is milestone 5's file and that adding the `MYGO_UPDATER_PRIVATE_KEY` env plus `-upload` to it is a separate change.
+6. TESTS: the updater needs a built, signed app to exercise end to end, which this environment cannot do. Instead test what is testable and say plainly what is not:
+   - a test that the app menu contains the updater item and that the window still builds (`ui.NewTester` over the existing view, plus a menu construction test),
+   - `updater.AutomaticChecks()`/`LastCheck()` behaviour would be tested by the plugin itself, not here.
+   - Report explicitly: "self-update is UNVERIFIED end to end; it needs a tagged signed release."
+
+PROOF REQUIRED (paste raw output):
+- gofmt on the files you touched (clean), `go vet ./...` (clean), `go tool mygo vet .` (clean), `go test ./...` (all packages pass).
+- `CGO_ENABLED=0 go build ./...` succeeding.
+- `go tool mygo build -platform windows/amd64` succeeding in your worktree, so the app still packages with the plugin wired in.
+- The keygen command you ran, its output path, and proof that `mygo.json` carries only the PUBLIC key (for example `grep -c PRIVATE mygo.json` → 0, and show the `updates` block with the public key redacted to its first ~20 characters).
+
+Do NOT create git commits, do NOT push, do NOT create any GitHub release, and do NOT put the private key anywhere in the repo. When done, report: files changed, proof output, what is UNVERIFIED, and every ambiguity you resolved.

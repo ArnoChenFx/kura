@@ -1,0 +1,19 @@
+You are a fresh implementation agent for kura (Go + MyGo native UI), working in YOUR OWN git worktree E:\Project\kura-m2 on branch m2-list-ui. Do not touch E:\Project\kura or E:\Project\kura-m3.
+
+Read first: REQUIREMENTS.md, main.go, internal/store/*.go (the finished milestone-1 core store), and .agents/skills/mygo-maintenance/SKILL.md (MyGo native ui rules: element lifetime, ui.Handle identity, c.Key, worker threads + Window.Update, ui.NewTester).
+
+TASK (milestone 2: list UI + enable/disable):
+1. Turn main.go into a kura window: a left list of skills from store.Config.Scan() (name, state enabled/disabled/trashed, source type), a search/filter input, and a detail pane for the selected skill showing its .kura-meta.json fields (source url, ref, subPath, commit, pluginName, installedAt, updatedAt, contentHash), the skills root path, and a footer with counts.
+2. Each skill row has a toggle (on = in the root, off = disabled). Clicking it calls store Disable/Enable. Do NOT do I/O on the UI thread: run the operation in a goroutine and publish the result with window.Update; show a per-row busy state and an error/status line.
+3. Buttons for Remove (to trash) and Restore, with a confirmation step (a dialog or a confirm panel), plus a "scan/refresh" action and a "导入 .skill-lock.json 元数据" action calling Config.ImportMeta.
+4. Keep the app usable when ~/.agents/skills is missing or a skill folder is corrupt: show the error, never panic.
+5. Keep the UI code in package main or internal/ui with tests. UI tests must use ui.NewTester against a temp skills root (store.NewConfig with a temp dir), not the real ~/.agents/skills.
+
+Style: match the existing code (comments and error strings in Chinese are fine, keep them short). Keep store logic in internal/store; the UI must not reimplement it.
+
+PROOF REQUIRED (paste the raw output in your final message):
+- gofmt -l . (empty), go vet ./..., go tool mygo vet .
+- go test ./... passing, including at least: a tester test that lists skills from a temp root, one that toggles a skill off/on and asserts the folder moved, one for search filtering.
+- go build ./... (or go tool mygo build if it works) succeeding.
+
+Do NOT create git commits. Do NOT run the app window interactively (no go tool mygo dev); tests only. When done, reply with: the files you changed, the proof output, and anything in REQUIREMENTS.md you found ambiguous plus what you chose.
