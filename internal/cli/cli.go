@@ -226,7 +226,9 @@ const usageText = `kura —— agent skills 管理器（无界面命令行）
   add --local PATH [--name N]
                        从本地目录安装技能
   add --github owner/repo [--sub-path P] [--ref R] [--name N]
-                       从 GitHub 仓库安装技能
+                       从 GitHub 仓库安装技能；不给 --sub-path 时自动发现
+                       仓库内的技能：唯一候选直接安装，多个候选列出清单
+                       并以退出码 1 失败，请用 --sub-path 指定其中一个
   update <NAME>        按元数据记录的来源重新拉取并替换内容（先快照）
   update --check <NAME>
                        预览 NAME 的更新会改什么（不修改任何文件）；
@@ -259,6 +261,8 @@ JSON 输出形状（--json 时）:
                       no-skillmd | leftover
   import-meta {"root": string, "lockPath": string, "dryRun": bool,
               "wouldImport"?: [string], "imported"?: [string]}
+  add（多候选） {"error": string, "repo": string,
+              "candidates": [string]}（输出到 stderr，退出码 1）
   update --check NAME
               {"skill": string, "sourceType": string, "commit"?: string,
               "hasChanges": bool, "oldHash": string, "newHash": string,

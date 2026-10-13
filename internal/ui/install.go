@@ -5,6 +5,7 @@ package ui
 // 新装的技能；失败时弹窗保持打开并显示原因，用户改完可以再试。
 
 import (
+	"errors"
 	"strings"
 
 	"github.com/ArnoChenFx/kura/internal/store"
@@ -29,6 +30,11 @@ type installState struct {
 	busy    bool   // 正在安装
 	picking bool   // 正在选择本地文件夹
 	err     string // 上一次安装失败的原因
+	// cands 是多候选仓库里待选的技能子目录（相对仓库根的 slash 路径，
+	// 已排序）。由安装时的自动发现填入：用户只给了 owner/repo 且仓库
+	// 里有多个技能时弹窗保持打开、列出候选，点某个候选填进子目录。
+	// 选择后（ChooseInstallCandidate）与安装成功后清空。
+	cands []string
 }
 
 // OpenInstall 打开安装弹窗；保留上次填写的内容，清掉旧的错误。
@@ -95,14 +101,31 @@ func (s *installState) installReady() bool {
 	return strings.Count(repo, "/") == 1 && !strings.HasSuffix(repo, "/")
 }
 
-// InstallAsync 在后台把表单描述的技能装进当前目录。
+// InstallAsync 在后台把表单描述的技能装进当前目录。仓库里有多个候选时
+// 弹窗保持打开并展示候选列表，等用户选中后再装。
 func (a *App) InstallAsync() {
 	s := &a.install
 	if s.busy || !s.installReady() {
 		return
 	}
+	// 发现结果只在「用户没填子目录」时产生：填了就直接走安装路径。
+	if s.source == installGitHub && strings.TrimSpace(s.subPath) == "" {
+		_, _, sub := parseRepo(s.repo)
+		if sub == "" {
+			// 子目录既没填也没从链接解析出来：先发现。
+			a.DiscoverInstallCandidatesAsync()
+			return
+		}
+	}
+	startInstall(a, s.installOptions())
+}
+
+// startInstall 真正发起安装（installOptions 已就绪）。完成后重扫并选中
+// 新装的技能；失败时弹窗保持打开并显示原因。cfg/gen 在发起时记下：
+// 用户中途切换目录后，旧结果不再覆盖新目录的列表（见 reload）。
+func startInstall(a *App, opts *store.AddOptions) {
+	s := &a.install
 	s.busy, s.err = true, ""
-	opts := s.installOptions()
 	cfg, gen := a.cfg, a.gen
 	a.status, a.statusErr = "正在安装…", false
 	a.spawn(func() {
@@ -111,6 +134,14 @@ func (a *App) InstallAsync() {
 		a.publish(func() {
 			s.busy = false
 			if err != nil {
+				// 多候选：弹窗保持打开，列出候选让用户挑；其余错误只报原因。
+				var ce *store.CandidatesError
+				if errors.As(err, &ce) {
+					s.cands = ce.Paths
+					s.err = ""
+					a.status, a.statusErr = "仓库里有 "+itoa(len(ce.Paths))+" 个技能，请选择要安装的", true
+					return
+				}
 				s.err = err.Error()
 				a.status, a.statusErr = "安装失败", true
 				return
@@ -123,6 +154,59 @@ func (a *App) InstallAsync() {
 			a.status, a.statusErr = "已安装 "+res.ID, false
 		})
 	})
+}
+
+// DiscoverInstallCandidatesAsync 在后台 clone（复用 Add 的 clone 逻辑）并
+// 发现仓库内的技能，把候选填进弹窗。唯一候选时直接填进子目录并接着安装，
+// 多候选展示选择列表，零个或 clone 失败显示原因。
+func (a *App) DiscoverInstallCandidatesAsync() {
+	s := &a.install
+	if s.busy {
+		return
+	}
+	// 从表单当前值取出 repo 与 ref（installOptions 也顺带校验格式）；
+	// 发现只读，不落盘，clone 与清理复用 resolveGitHub 的路径。
+	opts := s.installOptions()
+	repo, ref := opts.Repo, opts.Ref
+	cfg, gen := a.cfg, a.gen
+	s.busy, s.err = true, ""
+	a.status, a.statusErr = "正在查找仓库里的技能…", false
+	a.spawn(func() {
+		cands, err := cfg.DiscoverRepoSkills(repo, ref)
+		a.publish(func() {
+			s.busy = false
+			if gen != a.gen {
+				return // 用户已切换目录，丢弃过期结果
+			}
+			if err != nil {
+				s.err = err.Error()
+				a.status, a.statusErr = "查找失败", true
+				return
+			}
+			if len(cands) == 1 {
+				// 唯一候选：填进子目录直接装，用户不用再点一次。
+				s.subPath = cands[0]
+				a.status = "发现技能 " + cands[0]
+				startInstall(a, s.installOptions())
+				return
+			}
+			if len(cands) == 0 {
+				// 零候选：报清楚原因，弹窗保持打开让用户改输入。
+				s.err = "store: 仓库内未找到含 SKILL.md 的技能目录"
+				a.status, a.statusErr = "查找失败", true
+				return
+			}
+			s.cands = cands
+		})
+	})
+}
+
+// ChooseInstallCandidate 把选中的候选填进「子目录」输入框并清掉候选列表，
+// 之后用户点「安装」（或回车）即按显式子目录安装。
+func (a *App) ChooseInstallCandidate(path string) {
+	s := &a.install
+	s.subPath, s.cands, s.err = path, nil, ""
+	a.status = "已选择 " + path
 }
 
 // PickInstallFolderAsync 弹出文件夹选择框，把结果填进本地来源的路径。
@@ -184,7 +268,7 @@ func (a *App) viewInstallModal(c *myui.Context) {
 					})
 					myui.Field(c, "子目录", func() {
 						myui.TextInput(c, &s.subPath).Background(a.pal.canvas).FillWidth().
-							Placeholder("可选，如 skills/tdd").Label("子目录")
+							Placeholder("可选，留空自动发现").Label("子目录")
 					})
 					myui.Field(c, "分支/标签", func() {
 						myui.TextInput(c, &s.ref).Background(a.pal.canvas).FillWidth().
@@ -197,8 +281,15 @@ func (a *App) viewInstallModal(c *myui.Context) {
 				})
 			})
 			if s.source == installGitHub {
-				myui.Text(c, "会用本机的 git 克隆仓库；安装后在卡片上可以检查更新。").
+				hint := "会用本机的 git 克隆仓库；子目录留空时自动发现仓库里的技能。"
+				if len(s.cands) > 0 {
+					hint = "仓库里有多个技能，点击下面某个候选把它填进子目录。"
+				}
+				myui.Text(c, hint).
 					FontSize(t.FontSize - 1).TextColor(t.TextMuted)
+			}
+			if len(s.cands) > 0 {
+				a.viewInstallCandidates(c)
 			}
 			if s.err != "" {
 				myui.Box(c).FillWidth().Padding(t.Space(1.5), t.Space(3)).Radius(t.Radius).
@@ -222,5 +313,34 @@ func (a *App) viewInstallModal(c *myui.Context) {
 				}
 			})
 		})
+	})
+}
+
+// viewInstallCandidates 是多候选仓库里的选择列表：一行一个候选，点击即
+// 填进「子目录」输入框。用 ButtonBase 自建行（Hovered/Clicked，同 rootItem
+// 的写法），不用 RightClicked：行要收左键点击。
+func (a *App) viewInstallCandidates(c *myui.Context) {
+	s := &a.install
+	t := c.Theme()
+	myui.Column(c).FillWidth().Gap(t.Space(0.5)).Children(func() {
+		for _, p := range s.cands {
+			b := myui.ButtonBase(c).Key(p).Label(p).FillWidth().Justify(myui.Start).
+				Padding(t.Space(1), t.Space(2)).Radius(t.Radius - 2).
+				TextColor(a.pal.textMid).Children(func() {
+				myui.Icon(c, iconFolder).FontSize(t.FontSize)
+				myui.Text(c, p).SingleLine().Grow(1).MinWidth(0).FontSize(t.FontSize - 1)
+			})
+			// 选中的候选高亮，给用户一个「当前会装哪个」的反馈。
+			switch {
+			case s.subPath == p:
+				b.Background(a.pal.sel).TextColor(t.Text)
+			case b.Hovered():
+				b.Background(t.SurfaceHover).TextColor(t.Text)
+			}
+			if b.Clicked() {
+				a.ChooseInstallCandidate(p)
+				c.Invalidate()
+			}
+		}
 	})
 }

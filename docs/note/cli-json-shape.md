@@ -54,6 +54,28 @@ future UI（里程碑 2/4 的窗口版）可直接消费。来源代码：`inter
 
 `snapshotDir` 仅有快照动作（remove/update）时出现。
 
+### add 遇到多候选仓库（自动发现）
+
+`add --github owner/repo` 不给 `--sub-path` 时由 store 自动发现仓库内的技能：
+唯一候选直接安装（正常输出）；多个候选时安装不执行，文本模式把候选清单
+写入 stderr；`--json` 模式给出结构化候选数组（退出码 1，stdout 无输出）：
+
+```json
+{
+  "error": "store: 仓库 mattpocock/skills 里有 3 个技能，请用 --sub-path 指定其中一个：…",
+  "repo": "mattpocock/skills",
+  "candidates": [
+    "skills/engineering/code-review",
+    "skills/engineering/tdd",
+    "skills/productivity/grill-me"
+  ]
+}
+```
+
+`candidates` 是相对仓库根的 slash 路径（已排序），每一项都可直接拿来当
+`--sub-path` 用。该形状是既有「错误输出到 stderr」约定的扩展：多了一个
+`repo` 与 `candidates` 字段，`error` 仍为人可读的完整描述。
+
 ## doctor
 
 ```json

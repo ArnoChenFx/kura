@@ -4,6 +4,7 @@ package cli
 // add、update。每个命令返回退出码，只通过注入的 writer 输出。
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"path/filepath"
@@ -386,17 +387,28 @@ type addFlags struct {
 	name    string
 }
 
+// candidatesJSON 是 `add --json` 遇到多候选时的顶层形状：candidates 是
+// 相对仓库根的 slash 路径数组（已排序），可直接拿去当 --sub-path 用。
+type candidatesJSON struct {
+	Error      string   `json:"error"`
+	Repo       string   `json:"repo"`
+	Candidates []string `json:"candidates"`
+}
+
 // cmdAdd 实现 `kura add --local PATH [--name N]` 与
 // `kura add --github owner/repo [--sub-path P] [--ref R] [--name N]`。
 // --name 直接传给 store.AddOptions.Name（安装时命名，元数据如实记录
 // 真实来源，与技能名无关）。
+// github 来源不给 --sub-path 时由 store 自动发现仓库内的技能：唯一候选
+// 直接安装；多个候选列出清单并以退出码 1 失败（沿用「操作失败」语义），
+// 用户用 --sub-path 指定其中一个后再装。
 func cmdAdd(args []string, stdout, stderr io.Writer, pre *globalFlags) int {
 	g := &globalFlags{}
 	fs := newFlagSet("add", stderr, g, pre)
 	af := &addFlags{}
 	fs.StringVar(&af.local, "local", "", "本地技能目录")
 	fs.StringVar(&af.github, "github", "", "GitHub 仓库，格式 owner/repo")
-	fs.StringVar(&af.subPath, "sub-path", "", "仓库内技能子目录（github 来源可选）")
+	fs.StringVar(&af.subPath, "sub-path", "", "仓库内技能子目录（github 来源可选；省略时自动发现仓库内的技能，多个候选时必填其一）")
 	fs.StringVar(&af.ref, "ref", "", "分支/标签/commit（github 来源可选）")
 	fs.StringVar(&af.name, "name", "", "安装后的技能名（默认取来源目录名）")
 	positional, err := parseArgs(fs, args)
@@ -421,6 +433,19 @@ func cmdAdd(args []string, stdout, stderr io.Writer, pre *globalFlags) int {
 		res, err = c.Add(&store.AddOptions{Repo: af.github, SubPath: af.subPath, Ref: af.ref, Name: af.name})
 	}
 	if err != nil {
+		// 多候选是「需要用户选择」而非程序故障：文本模式列出清单，
+		// JSON 模式给出结构化 candidates 数组；退出码沿用操作失败（1）。
+		var ce *store.CandidatesError
+		if errors.As(err, &ce) {
+			if g.json {
+				_ = writeJSON(stderr, candidatesJSON{
+					Error: ce.Error(), Repo: ce.Repo, Candidates: ce.Paths,
+				})
+				return ExitError
+			}
+			fmt.Fprintf(stderr, "kura: %s\n", ce.Error())
+			return ExitError
+		}
 		return printError(g, stderr, "add 失败: %v", err)
 	}
 	if g.json {
