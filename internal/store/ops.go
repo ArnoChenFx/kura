@@ -47,7 +47,7 @@ func (c *Config) Enable(name string) (*Result, error) {
 	if err := os.MkdirAll(c.Root, 0o755); err != nil {
 		return nil, fmt.Errorf("store: 创建根目录失败: %w", err)
 	}
-	if err := os.Rename(src, dst); err != nil {
+	if err := moveDir(src, dst); err != nil {
 		return nil, fmt.Errorf("store: 启用 %s 失败: %w", name, err)
 	}
 	return &Result{ID: name, State: StateEnabled, Dir: dst}, nil
@@ -66,7 +66,7 @@ func (c *Config) Disable(name string) (*Result, error) {
 	if err := c.ensureDirs(); err != nil {
 		return nil, err
 	}
-	if err := os.Rename(src, dst); err != nil {
+	if err := moveDir(src, dst); err != nil {
 		return nil, fmt.Errorf("store: 禁用 %s 失败: %w", name, err)
 	}
 	return &Result{ID: name, State: StateDisabled, Dir: dst}, nil
@@ -91,7 +91,7 @@ func (c *Config) Remove(name string) (*Result, error) {
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 		return nil, fmt.Errorf("store: 创建回收站目录失败: %w", err)
 	}
-	if err := os.Rename(src, dst); err != nil {
+	if err := moveDir(src, dst); err != nil {
 		return nil, fmt.Errorf("store: 移入回收站失败 (%s): %w", name, err)
 	}
 	return &Result{ID: name, State: StateTrashed, Dir: dst, SnapshotDir: snapDir}, nil
@@ -119,7 +119,7 @@ func (c *Config) Restore(name, stampName string) (*Result, error) {
 	if err := os.MkdirAll(c.Root, 0o755); err != nil {
 		return nil, fmt.Errorf("store: 创建根目录失败: %w", err)
 	}
-	if err := os.Rename(src, dst); err != nil {
+	if err := moveDir(src, dst); err != nil {
 		return nil, fmt.Errorf("store: 恢复 %s 失败: %w", name, err)
 	}
 	// 清理 trash/<name> 空壳目录：os.Remove 只能删空目录，若同一技能还有

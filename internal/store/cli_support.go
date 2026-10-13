@@ -55,7 +55,7 @@ func (c *Config) RemoveWithStamp(name, stampName string) (*Result, error) {
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 		return nil, fmt.Errorf("store: 创建回收站目录失败: %w", err)
 	}
-	if err := os.Rename(src, dst); err != nil {
+	if err := moveDir(src, dst); err != nil {
 		return nil, fmt.Errorf("store: 移入回收站失败 (%s): %w", name, err)
 	}
 	return &Result{ID: name, State: StateTrashed, Dir: dst, SnapshotDir: snapDir}, nil
