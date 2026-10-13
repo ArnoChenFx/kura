@@ -9,7 +9,11 @@ import (
 
 // copyDir 递归复制目录（保留普通文件与子目录；不跟随符号链接，遇符号链接
 // 按普通文件读取内容）。dst 必须不存在或为空。
-func copyDir(src, dst string) error {
+func copyDir(src, dst string) error { return copyTree(src, dst, false) }
+
+// copyTree 同 copyDir；skipGit 为真时跳过根级 .git（clone 产物，更新时本来就
+// 要删，跳过就不必把整个对象库复制一遍）。
+func copyTree(src, dst string, skipGit bool) error {
 	return filepath.WalkDir(src, func(p string, d os.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -17,6 +21,12 @@ func copyDir(src, dst string) error {
 		rel, err := filepath.Rel(src, p)
 		if err != nil {
 			return err
+		}
+		if skipGit && rel == ".git" {
+			if d.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
 		}
 		target := filepath.Join(dst, rel)
 		if d.IsDir() {

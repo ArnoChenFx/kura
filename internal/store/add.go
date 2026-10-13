@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -69,8 +68,7 @@ func (c *Config) Add(opts *AddOptions) (*Result, error) {
 	} else {
 		srcDir, src, cleanup, err = c.resolveGitHub(opts)
 	}
-	// resolveGitHub 在 clone 失败时也返回 cleanup：先登记清理，再看错误，
-	// 否则每次失败都会遗留一个 kura-clone-* 临时目录。
+	// resolveGitHub 失败时自己清理临时目录，此时 cleanup 为 nil。
 	if cleanup != nil {
 		defer cleanup()
 	}
@@ -96,45 +94,26 @@ func (c *Config) resolveLocal(opts *AddOptions) (string, Source, error) {
 	return abs, Source{Type: SourceLocal, Path: abs}, nil
 }
 
-// resolveGitHub 用 git clone --depth 1 把 owner/repo 拉到临时目录。
-// 返回仓库内技能目录的路径与清理函数（调用方 defer 执行）。
+// resolveGitHub 浅 clone owner/repo（只取树），再稀疏检出技能子目录：
+// 仓库里与技能无关的文件不下载。返回技能目录与清理函数（调用方 defer 执行）。
 func (c *Config) resolveGitHub(opts *AddOptions) (string, Source, func(), error) {
-	tmp, err := os.MkdirTemp("", "kura-clone-")
+	url := githubURL(opts.Repo)
+	sub := cleanSubPath(opts.SubPath)
+	u, err := cloneUpstream(url, opts.Ref)
 	if err != nil {
-		return "", Source{}, nil, fmt.Errorf("store: 创建临时目录失败: %w", err)
+		return "", Source{}, nil, err
 	}
-	cleanup := func() { os.RemoveAll(tmp) }
-	url := fmt.Sprintf("https://github.com/%s.git", opts.Repo)
-	args := []string{"clone", "--depth", "1"}
-	if opts.Ref != "" {
-		args = append(args, "--branch", opts.Ref)
+	tree, err := u.Tree(sub)
+	if err == nil {
+		err = u.Checkout([]string{sub})
 	}
-	args = append(args, url, tmp)
-	cmd := exec.Command("git", args...)
-	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return "", Source{}, cleanup, fmt.Errorf("store: git clone 失败: %w: %s", err, strings.TrimSpace(string(out)))
+		u.Close()
+		return "", Source{}, nil, err
 	}
-	dir := tmp
-	if opts.SubPath != "" {
-		dir = filepath.Join(tmp, filepath.FromSlash(opts.SubPath))
-	}
-	if !fileExists(dir) {
-		return "", Source{}, cleanup, fmt.Errorf("store: 仓库内不存在目录 %s", opts.SubPath)
-	}
-	// 记录 clone 到的 commit，便于 Update 判断是否有新版本。
-	commit := gitHead(dir)
-	return dir, Source{Type: SourceGitHub, URL: url, Ref: opts.Ref, SubPath: opts.SubPath, Commit: commit}, cleanup, nil
-}
-
-// gitHead 读取 repo 的 HEAD commit（短哈希）。失败返回空串，不阻塞安装。
-func gitHead(dir string) string {
-	cmd := exec.Command("git", "-C", dir, "rev-parse", "HEAD")
-	out, err := cmd.Output()
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(out))
+	// 记录 commit 与子目录树哈希，检查更新时据此判断上游是否变化。
+	src := Source{Type: SourceGitHub, URL: url, Ref: opts.Ref, SubPath: sub, Commit: u.Commit, Tree: tree}
+	return u.Dir(sub), src, u.Close, nil
 }
 
 // installDir 把 srcDir 复制为根目录下的技能文件夹并写入元数据。

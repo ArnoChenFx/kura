@@ -261,13 +261,20 @@ JSON 输出形状（--json 时）:
               "wouldImport"?: [string], "imported"?: [string]}
   update --check NAME
               {"skill": string, "sourceType": string, "commit"?: string,
-              "hasChanges": bool, "oldHash": string, "newHash": string,
+              "hasChanges": bool, "basis": string, "localModified": bool,
+              "oldHash": string, "newHash": string,
               "files": [{path, status, added, removed, oldHash?, newHash?}],
               "unchanged": int}
               status ∈ added | changed | removed；files 只含差异文件，
               无变化时为 []。退出码：有待更新 3，无变化 0。
+              basis ∈ commit | tree | content：git 来源先用 git ls-remote
+              比对上游 commit（commit），commit 变了再比对该技能目录的树哈希
+              （tree），这两种都不下载文件；其余情况才逐文件比较（content）。
+              localModified 为 true 表示已安装内容被改过（上游没变时不算
+              有更新，但应用更新会覆盖这些改动）。
   update --check --all
               {"root": string,
               "results": [{skill, error?, check?}]}
-              check 的形状同上；任一技能有待更新退出码 3。
+              check 的形状同上；任一技能有待更新退出码 3。同一仓库的技能
+              共用一次检查与 clone。
 `

@@ -9,13 +9,17 @@ import (
 )
 
 // Source 描述技能的安装来源。
-// Type 为 "github" 时填写 URL/Ref/SubPath/Commit；Type 为 "local" 时填写 Path。
+// Type 为 "github" 时填写 URL/Ref/SubPath/Commit/Tree；Type 为 "local" 时填写 Path。
 type Source struct {
 	Type    string `json:"type"`
 	URL     string `json:"url,omitempty"`
 	Ref     string `json:"ref,omitempty"`
 	SubPath string `json:"subPath,omitempty"`
 	Commit  string `json:"commit,omitempty"`
+	// Tree 是安装/更新时技能子目录的 git 树哈希（SubPath 为空时是仓库根的树）。
+	// 检查更新时与上游同一路径的树哈希比较：相同说明技能内容没变，
+	// 不必下载文件。旧元数据没有这个字段时退回逐文件比较。
+	Tree string `json:"tree,omitempty"`
 	// Path 仅在 Type=local 时使用，记录来源目录（绝对路径）。
 	Path string `json:"path,omitempty"`
 }

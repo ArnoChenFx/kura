@@ -511,6 +511,12 @@ type checkJSON struct {
 	Commit string `json:"commit,omitempty"`
 	// HasChanges 是是否存在任何文件差异。
 	HasChanges bool `json:"hasChanges"`
+	// Basis 说明凭什么判定：commit（上游 commit 与安装时相同）、tree（上游技能
+	// 目录的树哈希相同）、content（逐文件比较了内容；local 来源恒为此值）。
+	// commit/tree 时没有下载任何文件，files 必为空。
+	Basis string `json:"basis"`
+	// LocalModified 表示已安装内容与安装/更新时记录的哈希不一致（被手改过）。
+	LocalModified bool `json:"localModified"`
 	// OldHash/NewHash 是目录级内容哈希（与 .kura-meta.json 的 contentHash 同格式）。
 	OldHash string `json:"oldHash"`
 	NewHash string `json:"newHash"`
@@ -542,8 +548,8 @@ func toCheckJSON(p *store.UpdatePreview) checkJSON {
 	}
 	return checkJSON{
 		Skill: p.ID, SourceType: p.SourceType, Commit: p.Commit,
-		HasChanges: p.HasChanges(),
-		OldHash:    p.OldHash, NewHash: p.NewHash,
+		HasChanges: p.HasChanges(), Basis: p.Basis, LocalModified: p.LocalModified,
+		OldHash: p.OldHash, NewHash: p.NewHash,
 		Files: files, Unchanged: p.Unchanged,
 	}
 }
@@ -605,16 +611,20 @@ func runUpdateCheckAll(g *globalFlags, stdout, stderr io.Writer) int {
 	if err != nil {
 		return printError(g, stderr, "扫描根目录失败: %v", err)
 	}
+	names := make([]string, len(skills))
+	for i, s := range skills {
+		names[i] = s.Name
+	}
 	out := checkAllJSON{Root: c.Root, Results: []checkEntryJSON{}}
 	pending := false
-	for _, s := range skills {
-		p, perr := c.PreviewUpdate(s.Name)
-		if perr != nil {
-			out.Results = append(out.Results, checkEntryJSON{Skill: s.Name, Error: perr.Error()})
+	// 批量检查：同一仓库的技能共用一次 ls-remote / clone。
+	for _, r := range c.PreviewUpdates(names) {
+		if r.Err != nil {
+			out.Results = append(out.Results, checkEntryJSON{Skill: r.Name, Error: r.Err.Error()})
 			continue
 		}
-		cj := toCheckJSON(p)
-		out.Results = append(out.Results, checkEntryJSON{Skill: s.Name, Check: &cj})
+		cj := toCheckJSON(r.Preview)
+		out.Results = append(out.Results, checkEntryJSON{Skill: r.Name, Check: &cj})
 		if cj.HasChanges {
 			pending = true
 		}
@@ -653,7 +663,17 @@ func countPending(rs []checkEntryJSON) int {
 // printCheckText 输出人类可读的 --check 结果。
 func printCheckText(w io.Writer, cj *checkJSON) {
 	if !cj.HasChanges {
-		fmt.Fprintf(w, "%s: 已是最新\n", cj.Skill)
+		note := ""
+		switch cj.Basis {
+		case store.BasisCommit:
+			note = "（上游 commit 未变）"
+		case store.BasisTree:
+			note = "（上游该目录未变）"
+		}
+		fmt.Fprintf(w, "%s: 已是最新%s\n", cj.Skill, note)
+		if cj.LocalModified {
+			fmt.Fprintf(w, "  注意: 本地内容与安装时不一致（被改过）\n")
+		}
 		return
 	}
 	fmt.Fprintf(w, "%s: %d 个文件有变化（新增 %d · 修改 %d · 删除 %d）\n",
@@ -665,6 +685,9 @@ func printCheckText(w io.Writer, cj *checkJSON) {
 	fmt.Fprintf(w, "  哈希: %s -> %s\n", shortHashCLI(cj.OldHash), shortHashCLI(cj.NewHash))
 	if cj.Commit != "" {
 		fmt.Fprintf(w, "  上游 commit: %s\n", cj.Commit)
+	}
+	if cj.LocalModified {
+		fmt.Fprintf(w, "  注意: 本地内容已被改过，应用更新会覆盖这些改动（旧内容在快照中）\n")
 	}
 }
 

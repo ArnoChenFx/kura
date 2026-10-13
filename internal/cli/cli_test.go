@@ -659,6 +659,18 @@ func TestUpdateCheckExitCodesAndJSON(t *testing.T) {
 	if out["commit"] == "" {
 		t.Error("github 来源应输出上游 commit")
 	}
+	// 上游 commit 没变：只凭 ls-remote 判定，不下载文件；本地没被改过。
+	if out["basis"] != "commit" || out["localModified"] != false {
+		t.Errorf("无变化应凭 commit 判定且本地未改动, got basis=%v localModified=%v", out["basis"], out["localModified"])
+	}
+	// 文本输出写明依据。
+	e.stdout.Reset()
+	if code := e.run("update", "--check", "c-demo"); code != ExitOK {
+		t.Fatalf("文本模式无变化应退出 0, got %d", code)
+	}
+	if got := e.stdout.String(); !strings.Contains(got, "c-demo: 已是最新（上游 commit 未变）") {
+		t.Errorf("文本输出应写明判定依据, got %q", got)
+	}
 
 	// 上游推进 v2：改 SKILL.md、删 keep.md、加 extra-new.md；重新镜像 bare。
 	dir := filepath.Join(repo, "skills", "c-demo")
@@ -688,6 +700,9 @@ func TestUpdateCheckExitCodesAndJSON(t *testing.T) {
 	}
 	if out["hasChanges"] != true {
 		t.Errorf("hasChanges 应为 true, got %v", out["hasChanges"])
+	}
+	if out["basis"] != "content" {
+		t.Errorf("上游变了应逐文件比较, got basis=%v", out["basis"])
 	}
 	files, ok = out["files"].([]any)
 	if !ok || len(files) != 3 {
