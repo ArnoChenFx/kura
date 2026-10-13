@@ -761,3 +761,31 @@ func TestUpdateCheckAllSkipsBrokenSkill(t *testing.T) {
 		t.Errorf("--check 缺参数应退出 2, got %d", code)
 	}
 }
+
+// TestRootFromLibraryUsesItsScope 验证：--root 指向界面里添加过的目录时，
+// disable 落到该目录在 Library 里的私有 disabled，而不是共用的 disabled。
+func TestRootFromLibraryUsesItsScope(t *testing.T) {
+	e := newEnv(t)
+	e.writeSkill("demo")
+	base, err := store.DefaultConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	lib, err := store.LoadLibrary(&store.Config{Root: base.Root, Home: e.home})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := lib.AddRoot(e.root); err != nil {
+		t.Fatal(err)
+	}
+	if code := e.run("disable", "demo"); code != ExitOK {
+		t.Fatalf("disable 失败: %s", e.stderr.String())
+	}
+	want := filepath.Join(e.home, store.RootsDir, store.RootID(e.root), "disabled", "demo")
+	if _, err := os.Stat(want); err != nil {
+		t.Errorf("技能应移入 %s: %v", want, err)
+	}
+	if _, err := os.Stat(filepath.Join(e.home, "disabled", "demo")); err == nil {
+		t.Error("不应移入共用的 disabled")
+	}
+}

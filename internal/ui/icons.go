@@ -47,3 +47,26 @@ var (
 	iconFolder = myui.MustParseSVG(svgIcon(
 		`<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>`))
 )
+
+// 三栏布局新增的图标：默认目录、添加文件夹、移除目录、关闭详情、来源。
+var (
+	// iconHome（lucide house）：左栏里的默认技能目录。
+	iconHome = myui.MustParseSVG(svgIcon(
+		`<path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>`))
+	// iconPlus（lucide plus）：添加文件夹。
+	iconPlus = myui.MustParseSVG(svgIcon(`<path d="M5 12h14"/><path d="M12 5v14"/>`))
+	// iconUnlink（lucide folder-minus）：把目录从列表移除（不删文件夹）。
+	iconUnlink = myui.MustParseSVG(svgIcon(
+		`<path d="M9 13h6"/><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>`))
+	// iconClose（lucide x）：关闭详情栏。
+	iconClose = myui.MustParseSVG(svgIcon(`<path d="M18 6 6 18"/><path d="m6 6 12 12"/>`))
+	// iconGitHub（lucide git-branch）：GitHub 来源。
+	iconGitHub = myui.MustParseSVG(svgIcon(
+		`<line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/>`))
+	// iconLocal（lucide hard-drive）：本地来源。
+	iconLocal = myui.MustParseSVG(svgIcon(
+		`<line x1="22" y1="12" x2="2" y2="12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/><line x1="6" y1="16" x2="6.01" y2="16"/>`))
+	// iconUnknown（lucide circle-help）：没有元数据或元数据损坏。
+	iconUnknown = myui.MustParseSVG(svgIcon(
+		`<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/>`))
+)
