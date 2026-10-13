@@ -171,9 +171,12 @@ func (a *App) widthLimits(detailShown bool) (rootsHi, detailHi float32) {
 // 拖动，悬停或拖动时线变成强调色。size 指向它调整的那一栏的宽度；dir 为 +1
 // 表示那一栏在分割线左侧（向右拖变宽），-1 表示在右侧（向左拖变宽）。拖动量经
 // dragWidth 夹进 [lo, hi]。宽度变了就请求重绘。
+//
+// 命中区用主栏底色铺满：不铺的话，它会透出后面的窗口底色（深色下是卡片色），
+// 变成一道 gripHit 宽的色带，分割线看起来就粗了。
 func (a *App) viewGrip(c *myui.Context, size *float32, dir float32, lo, hi float32) {
 	t := c.Theme()
-	g := myui.Box(c).Width(gripHit).FillHeight().Shrink(0).Cursor(myui.CursorResizeEW)
+	g := myui.Box(c).Width(gripHit).FillHeight().Shrink(0).Background(a.pal.canvas).Cursor(myui.CursorResizeEW)
 	dx, _, held := g.Dragged()
 	if held && dx != 0 {
 		if next := dragWidth(*size, dir*dx, lo, hi); next != *size {

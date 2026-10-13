@@ -278,3 +278,60 @@ func TestTitlebarShowsAppIconNotLetter(t *testing.T) {
 		t.Errorf("标题栏左侧应画出图标，发现的非底色像素只有 %d 个", diff)
 	}
 }
+
+// TestDividerBandIsCanvasNotCard 验证分割线的命中区（gripHit 宽）用主栏底色铺满。
+// 卡片色比底色亮一档：命中区若没铺底，就会透出它后面的卡片色，成一道色带，分割线
+// 看起来就粗了。深色与浅色各测一遍，左右两条分割线都测。
+func TestDividerBandIsCanvasNotCard(t *testing.T) {
+	for _, dark := range []bool{true, false} {
+		a, cfg := newTestApp(t)
+		seedDescribed(t, cfg, "alpha", "第一个技能", nil)
+		tt := showApp(a, 1280, 800)
+		tt.SetDark(dark)
+		refresh(a, tt)
+		const y = 700 // 卡片之下，只剩底色
+		check := func(side string, x0 int) {
+			img := tt.Image()
+			for x := x0; x < x0+gripHit; x++ {
+				if got := img.RGBAAt(x, y); near(got, a.pal.card, 2) {
+					t.Errorf("深色=%v 的%s分割线命中区 x=%d 透出了卡片色 %v，应为底色 %v", dark, side, x, got, a.pal.canvas)
+				}
+			}
+		}
+		check("左", int(a.rootsW))
+		click(t, a, tt, "alpha")
+		check("右", 1280-int(a.detailW)-gripHit)
+	}
+}
+
+// TestTrashedMenuHasPermanentDeleteInBothViews 验证回收站里的技能，网格与列表两种排列下，
+// 右键名字与右键「恢复」按钮弹出的菜单都有「永久删除…」。
+func TestTrashedMenuHasPermanentDeleteInBothViews(t *testing.T) {
+	want := []string{"打开文件夹", "在文件夹中显示", "复制路径", "-", "恢复到技能目录", "-", "永久删除…"}
+	for _, list := range []bool{false, true} {
+		a, cfg := newTestApp(t)
+		seedDescribed(t, cfg, "keep", "活着的", nil)
+		seedDescribed(t, cfg, "gone", "回收站里的", nil)
+		if _, err := cfg.Remove("gone"); err != nil {
+			t.Fatal(err)
+		}
+		tt := showApp(a, 1280, 800)
+		a.filter = filterTrashed
+		if list {
+			a.viewMode = store.ViewList
+		}
+		refresh(a, tt)
+		if got := openMenu(t, a, tt, "gone"); !slices.Equal(got, want) {
+			t.Errorf("列表=%v 时右键名字的菜单 = %q，想要 %q", list, got, want)
+		}
+		tt.CloseMenu()
+		if err := tt.RightClick("恢复"); err != nil {
+			t.Fatalf("列表=%v 时点不到「恢复」按钮: %v", list, err)
+		}
+		refresh(a, tt)
+		if got := tt.Menu(); !slices.Equal(got, want) {
+			t.Errorf("列表=%v 时右键「恢复」按钮的菜单 = %q，想要 %q", list, got, want)
+		}
+		tt.CloseMenu()
+	}
+}
