@@ -93,6 +93,8 @@ type App struct {
 	themeMode      string          // 外观偏好：store.ThemeSystem / ThemeLight / ThemeDark
 	themeSeq       atomic.Int64    // 外观切换的序号：后台任务只执行最新一次
 	themeMu        sync.Mutex      // 串行化同步原生外观与写 config.json
+	viewMode       string          // 技能区排列模式：store.ViewGrid / store.ViewList
+	viewSeq        atomic.Int64    // 排列模式切换的序号：后台任务只执行最新一次
 	review         reviewState     // 更新评审面板（Modal）
 
 	// spawn 在后台运行 fn：生产环境为 go fn()。
@@ -123,6 +125,10 @@ func NewApp(cfg *store.Config) *App {
 	a.cfg = cfg
 	a.rootSel = lib.Default()
 	a.themeMode = lib.Theme
+	a.viewMode = lib.View
+	if a.viewMode == "" {
+		a.viewMode = store.ViewGrid
+	}
 	a.grid.Selected = &a.selIdx
 	a.grid.Key = func(i int) any {
 		if i < len(a.shown) {
@@ -504,7 +510,7 @@ func (a *App) RemoveRootAsync(root string) {
 
 // libCopy 复制目录列表交给后台修改，成功后再在 UI 线程换上。
 func (a *App) libCopy() *store.Library {
-	return &store.Library{Home: a.lib.Home, Roots: append([]string(nil), a.lib.Roots...), Theme: a.themeMode}
+	return &store.Library{Home: a.lib.Home, Roots: append([]string(nil), a.lib.Roots...), Theme: a.themeMode, View: a.viewMode}
 }
 
 // OpenPathAsync 用系统默认方式打开 path：文件夹用文件管理器，SKILL.md 用
@@ -572,6 +578,35 @@ func (a *App) SetThemeAsync(mode string) {
 		a.setSource(mode)
 		if err := lib.SetTheme(mode); err != nil {
 			a.publish(func() { a.status, a.statusErr = "外观偏好没能保存："+err.Error(), true })
+		}
+	})
+}
+
+// SetViewAsync 切换技能区的排列模式为 mode（store.ViewGrid / store.ViewList）。
+// 界面立刻换排列——下一帧由 viewMode 决定；写 config.json 在后台做，写盘失败
+// 只在状态行报告，不回滚已换的排列。与 SetThemeAsync 一样：相同的模式直接
+// 返回（幂等，重复构建不会重复写盘），连续切换只有最新一次会执行。
+func (a *App) SetViewAsync(mode string) {
+	mode, err := store.NormalizeView(mode)
+	if err != nil {
+		a.status, a.statusErr = err.Error(), true
+		return
+	}
+	if mode == a.viewMode {
+		return
+	}
+	a.viewMode = mode
+	seq := a.viewSeq.Add(1)
+	lib := a.libCopy()
+	a.spawn(func() {
+		// 与外观共用同一把锁：两者都是 config.json 的「读—改—写」，串行执行。
+		a.themeMu.Lock()
+		defer a.themeMu.Unlock()
+		if a.viewSeq.Load() != seq {
+			return
+		}
+		if err := lib.SetView(mode); err != nil {
+			a.publish(func() { a.status, a.statusErr = "排列模式没能保存："+err.Error(), true })
 		}
 	})
 }

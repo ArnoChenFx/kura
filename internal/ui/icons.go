@@ -82,3 +82,13 @@ var (
 	iconMonitor = myui.MustParseSVG(svgIcon(
 		`<rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/>`))
 )
+
+// 排列模式开关用到的图标。
+var (
+	// iconGrid（lucide layout-grid）：卡片网格。
+	iconGrid = myui.MustParseSVG(svgIcon(
+		`<rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/>`))
+	// iconRows（lucide rows-3）：两行列表。
+	iconRows = myui.MustParseSVG(svgIcon(
+		`<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M21 9H3"/><path d="M21 15H3"/>`))
+)
