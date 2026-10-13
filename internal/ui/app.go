@@ -8,6 +8,7 @@
 package ui
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -97,6 +98,21 @@ type App struct {
 	viewSeq        atomic.Int64    // 排列模式切换的序号：后台任务只执行最新一次
 	review         reviewState     // 更新评审面板（Modal）
 
+	// 翻译设置与译文（翻译只用于界面显示，绝不写技能目录，见 translate.go）。
+	// settings 是 ~/.kura/settings.json 的内存副本：只在 UI 线程写，写时持
+	// settingsMu；生产的 translate 闭包在后台 goroutine 里读它，持读锁。
+	settings        store.Settings
+	settingsLoaded  bool          // 设置读取成功（文件不存在也算，得到零值）
+	settingsErr     string        // 读取 settings.json 的错误（JSON 损坏等）
+	settingsMu      sync.RWMutex  // 保护 settings 在 UI 线程写与后台读之间的一致
+	settingsSeq     atomic.Int64  // 保存设置的序号：后台任务只写最新一次
+	settingsWriteMu sync.Mutex    // 串行化写 settings.json
+	settingsUI      settingsState // 设置弹窗
+	trans           *translateState
+	// translate 调用翻译 API；生产实现走 (a.settings).Translate。测试注入假
+	// 实现，绝不联网。只在后台 goroutine 里调用（会阻塞）。
+	translate func(ctx context.Context, text string) (string, error)
+
 	// spawn 在后台运行 fn：生产环境为 go fn()。
 	spawn func(func())
 	// update 把 fn 调度到 UI 线程执行：生产环境为 Window.Update。
@@ -128,6 +144,21 @@ func NewApp(cfg *store.Config) *App {
 	a.viewMode = lib.View
 	if a.viewMode == "" {
 		a.viewMode = store.ViewGrid
+	}
+	// 翻译设置：读取失败不致命（只报告），界面照常可用。
+	if st, _, err := store.LoadSettings(cfg); err != nil {
+		a.settingsErr = err.Error()
+	} else {
+		a.settings, a.settingsLoaded = *st, true
+	}
+	a.trans = newTranslateState()
+	a.translate = func(ctx context.Context, text string) (string, error) {
+		// 读的是最新的 a.settings（保存设置后立即生效）；拷贝一份再调用，
+		// 请求期间不持锁。
+		a.settingsMu.RLock()
+		cur := a.settings
+		a.settingsMu.RUnlock()
+		return cur.Translate(ctx, text)
 	}
 	a.grid.Selected = &a.selIdx
 	a.grid.Key = func(i int) any {

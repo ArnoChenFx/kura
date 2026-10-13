@@ -50,6 +50,9 @@ func (a *App) View(c *myui.Context) {
 	rows := a.visible()
 	a.syncSelection(rows)
 	sel := a.selected()
+	// 译文模式下为选中的技能发起描述翻译（受缓存占位保护，同一原文只发一次；
+	// 请求在后台，这里只读状态，见 translate.go）。
+	a.ensureTranslations(sel)
 
 	a.viewTitlebar(c)
 	// 三栏占满标题栏以下的剩余高度；标题栏自身不参与收缩（见 viewTitlebar）。
@@ -82,6 +85,9 @@ func (a *App) View(c *myui.Context) {
 
 	// 安装技能弹窗。
 	a.viewInstallModal(c)
+
+	// 设置弹窗（翻译 API 与目标语言）。
+	a.viewSettingsModal(c)
 }
 
 // viewTitlebar 是自绘标题栏：跨整个窗口宽度的一条顶栏，放在三栏之上。
@@ -137,6 +143,10 @@ func (a *App) viewRoots(c *myui.Context) {
 			myui.Text(c, "目录列表读取失败："+a.libErr).MaxLines(3).
 				FontSize(t.FontSize-2).TextColor(t.Danger).Padding(t.Space(1), t.Space(4))
 		}
+		if a.settingsErr != "" {
+			myui.Text(c, "设置读取失败："+a.settingsErr).MaxLines(3).
+				FontSize(t.FontSize-2).TextColor(t.Danger).Padding(t.Space(1), t.Space(4))
+		}
 		myui.Column(c).FillWidth().Padding(t.Space(2), t.Space(3), t.Space(3), t.Space(3)).
 			Gap(t.Space(3)).Children(func() {
 			ab := myui.ButtonBase(c).Label("添加文件夹").FillWidth().Disabled(a.adding).
@@ -173,6 +183,20 @@ func (a *App) viewRoots(c *myui.Context) {
 			})
 			if cb.Clicked() {
 				a.CheckAppUpdateAsync()
+			}
+			// 设置：翻译 API 与目标语言。与「添加文件夹」「检查更新」同一样式。
+			sb := myui.ButtonBase(c).Label("设置").Tooltip("翻译 API 与目标语言").
+				FillWidth().Justify(myui.Start).Gap(t.Space(2)).Padding(t.Space(2), t.Space(3)).
+				Radius(t.Radius).Border(1, t.Border).TextColor(a.pal.textMid)
+			if sb.Hovered() {
+				sb.Background(t.SurfaceHover).TextColor(t.Text)
+			}
+			sb.Children(func() {
+				myui.Icon(c, iconSettings)
+				myui.Text(c, "设置")
+			})
+			if sb.Clicked() {
+				a.OpenSettings()
 			}
 			a.viewThemeSwitch(c)
 		})
@@ -515,7 +539,7 @@ func (a *App) viewRow(c *myui.Context, s *store.Skill, selected bool) {
 				}
 			})
 			// 第 2 行：描述，单行省略；左缩进与名字对齐（头像宽 + 间距）。
-			desc, color := s.Description, t.TextMuted
+			desc, color := a.descText(translateCardPrefix, s), t.TextMuted
 			if desc == "" {
 				desc, color = "没有描述", t.TextMuted.Alpha(0.6)
 			}
@@ -645,7 +669,8 @@ func (a *App) viewCard(c *myui.Context, s *store.Skill, selected bool) {
 				}
 			}
 		})
-		desc, color := s.Description, t.TextMuted
+		// 译文模式下，选中技能的卡片显示译文（其余卡片仍是原文，见 translate.go）。
+		desc, color := a.descText(translateCardPrefix, s), t.TextMuted
 		if desc == "" {
 			desc, color = "没有描述", t.TextMuted.Alpha(0.6)
 		}
@@ -749,6 +774,7 @@ func (a *App) viewDetail(c *myui.Context, s *store.Skill) {
 					})
 					ghostButton(c, iconClose, "关闭详情", false, func() { a.selName = "" })
 				})
+				a.viewTranslateBar(c)
 				// 概览/全文 tab：绑定 a.detailTab。点选在下一次构建生效，
 				// 两个页面都按 a.detailTab 分支，本帧内的切换下一帧生效。
 				myui.Tabs(c, &a.detailTab, detailTabOverview, detailTabFull).FillWidth()
@@ -783,7 +809,8 @@ func (a *App) detailBody(c *myui.Context, s *store.Skill) {
 func (a *App) viewDetailOverview(c *myui.Context, s *store.Skill) {
 	t := c.Theme()
 	if s.Description != "" {
-		myui.Text(c, s.Description).TextColor(t.Text.Alpha(0.85))
+		myui.Text(c, a.descText(translateDetailPrefix, s)).TextColor(t.Text.Alpha(0.85))
+		a.viewTranslateNote(c, s)
 	}
 	if !s.HasSKILLMD && s.State != store.StateTrashed {
 		myui.Text(c, "缺少 SKILL.md").TextColor(t.Warning)
@@ -792,6 +819,75 @@ func (a *App) viewDetailOverview(c *myui.Context, s *store.Skill) {
 	a.detailGroup(c, "位置", true, func() {
 		myui.Text(c, s.Dir).FontSize(t.FontSize - 1).TextColor(t.TextMuted)
 	})
+}
+
+// viewTranslateBar 是详情头部下方的「原文 / 译文」开关条。目标语言是全局
+// 一个（设置里选），开关也是全局的：切到译文后，选中的技能的描述显示译文。
+// 译文模式但翻译 API 还没配好时，给出引导与「打开设置」入口，不发请求。
+// 全文页本次不翻译，译文模式下在这里说明。
+//
+// 分段控件的点击在构建结束或查询响应时才写进 sel，所以靠 Changed 在同一次
+// 构建里取到新选择再交给 SetTranslateOn；sel 每次构建都从 trans.on 推出。
+func (a *App) viewTranslateBar(c *myui.Context) {
+	t := c.Theme()
+	myui.Column(c).FillWidth().Gap(t.Space(1.5)).Children(func() {
+		myui.Row(c).FillWidth().AlignItems(myui.Center).Gap(t.Space(2)).Children(func() {
+			myui.Icon(c, iconTranslate).TextColor(t.TextMuted).FontSize(t.FontSize)
+			myui.Text(c, "翻译描述").SingleLine().FontSize(t.FontSize - 1).TextColor(t.TextMuted)
+			myui.Spacer(c)
+			sel := 0
+			if a.trans.on {
+				sel = 1
+			}
+			if myui.Segmented(c, &sel, "原文", "译文").Label("显示语言").Shrink(0).Changed() {
+				a.SetTranslateOn(sel == 1)
+				c.Invalidate()
+			}
+		})
+		if !a.trans.on {
+			return
+		}
+		if !a.settings.Ready() {
+			myui.Box(c).FillWidth().Padding(t.Space(2), t.Space(3)).Radius(t.Radius).
+				Background(t.Warning.Alpha(0.10)).Border(1, t.Warning.Alpha(0.4)).Children(func() {
+				myui.Column(c).FillWidth().Gap(t.Space(1.5)).Children(func() {
+					myui.Text(c, "先在设置里填翻译 API").TextColor(t.Warning)
+					myui.Row(c).FillWidth().Children(func() {
+						if myui.Button(c, "打开设置").Clicked() {
+							a.OpenSettings()
+						}
+					})
+				})
+			})
+		}
+		if a.detailTab != 0 {
+			myui.Text(c, "全文暂不翻译，显示的是原文").FontSize(t.FontSize - 1).TextColor(t.TextMuted)
+		}
+	})
+}
+
+// viewTranslateNote 是概览页描述下方的一行小字：译文模式下说明翻译的状态
+// （翻译中 / 失败原因 / 当前译文的语言）。失败时原文仍在上方，不被遮挡。
+// 翻译 API 未配置时不说话（引导在开关条里）。
+func (a *App) viewTranslateNote(c *myui.Context, s *store.Skill) {
+	if !a.trans.on || !a.settings.Ready() {
+		return
+	}
+	t := c.Theme()
+	e, ok := a.trans.get(detailDescKey(s.Name), s.Description)
+	switch {
+	case !ok || e.pending:
+		myui.Row(c).Gap(t.Space(1.5)).AlignItems(myui.Center).Children(func() {
+			myui.Spinner(c)
+			myui.Text(c, "翻译中…").FontSize(t.FontSize - 1).TextColor(t.TextMuted)
+		})
+	case e.err != "":
+		myui.Text(c, "翻译失败："+e.err+"（切回原文再切到译文可重试）").MaxLines(4).
+			FontSize(t.FontSize - 1).TextColor(t.Danger)
+	default:
+		myui.Text(c, "译文 · "+a.settings.LangLabel()+" · 仅界面显示，不改动技能文件").
+			FontSize(t.FontSize - 2).TextColor(t.TextMuted)
+	}
 }
 
 // fullTextLoading 是 skillDocs 里的「正在读」占位值：占位与失败都走
