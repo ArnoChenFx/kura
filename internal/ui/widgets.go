@@ -230,9 +230,62 @@ func searchBox(c *myui.Context, query *string) myui.Element {
 	row.Children(func() {
 		myui.Icon(c, iconSearch).TextColor(t.TextMuted)
 		in := myui.TextInput(c, query).Grow(1).MinWidth(t.Space(15)).
-			Placeholder("搜索技能").Label("搜索技能")
+			Placeholder("搜索技能").Label("搜索技能").
+			// 外框由 row 画：输入框自身不再画边框与底色，避免框中套框。
+			Border(0, myui.Color{}).Background(myui.Color{}).Padding(0)
 		// 焦点在输入框里时 Escape 清空（与 SearchField 的行为一致）。
 		in.OnShortcut(0, myui.KeyEscape, func() { *query = "" })
 	})
 	return row
+}
+
+// iconButton 是只有图标的次级按钮：Label 与 Tooltip 都用 label，
+// 供无障碍、悬停提示与测试。
+func iconButton(c *myui.Context, icon *myui.SVG, label string, disabled bool, onClick func()) {
+	b := myui.Button(c, "").Label(label).Tooltip(label).Disabled(disabled)
+	b.Children(func() { myui.Icon(c, icon) })
+	if b.Clicked() {
+		onClick()
+	}
+}
+
+// sourceIcon 返回卡片底行的来源图标。
+func sourceIcon(s *store.Skill) *myui.SVG {
+	if s.Meta == nil {
+		return iconUnknown
+	}
+	switch s.Meta.Source.Type {
+	case store.SourceGitHub:
+		return iconGitHub
+	case store.SourceLocal:
+		return iconLocal
+	}
+	return iconUnknown
+}
+
+// captionColor 是卡片底行文字的颜色：元数据损坏或缺少 SKILL.md 时用
+// Warning 提醒，其余用弱化色。
+func captionColor(c *myui.Context, s *store.Skill) myui.Color {
+	t := c.Theme()
+	if s.MetaErr != "" || !s.HasSKILLMD && s.State != store.StateTrashed {
+		return t.Warning
+	}
+	return t.TextMuted
+}
+
+// pill 是卡片右下角的小标签：浅色底 + 同色文字。
+func pill(c *myui.Context, text string, color myui.Color) {
+	t := c.Theme()
+	myui.Box(c).Shrink(0).Padding(t.Space(0.25), t.Space(1.5)).Radius(t.Radius).
+		Background(color.Alpha(0.12)).Children(func() {
+		myui.Text(c, text).SingleLine().FontSize(t.FontSize - 2).TextColor(color)
+	})
+}
+
+// shortTime 把 RFC3339 时间截到分钟（2026-02-02 13:34），解析不了时原样返回。
+func shortTime(s string) string {
+	if len(s) >= 16 && s[10] == 'T' {
+		return s[:10] + " " + s[11:16]
+	}
+	return s
 }

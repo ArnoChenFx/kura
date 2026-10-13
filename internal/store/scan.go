@@ -15,10 +15,12 @@ type State string
 
 // Skill 是一个技能文件夹的完整视图。
 type Skill struct {
-	Name        string
-	Dir         string
-	State       State
-	HasSKILLMD  bool
+	Name       string
+	Dir        string
+	State      State
+	HasSKILLMD bool
+	// Description 是 SKILL.md frontmatter 的 description，没有时为空串。
+	Description string
 	Meta        *Meta
 	MetaErr     string
 	ContentHash string
@@ -59,6 +61,22 @@ func (c *Config) ScanAll() ([]*Skill, error) {
 	return enabled, nil
 }
 
+// CountEnabled 返回根目录里技能文件夹的数量，只列目录、不读元数据也不算
+// 哈希，供界面的目录徽标使用。目录不存在或读失败时返回 0。
+func (c *Config) CountEnabled() int {
+	entries, err := os.ReadDir(c.Root)
+	if err != nil {
+		return 0
+	}
+	n := 0
+	for _, e := range entries {
+		if e.IsDir() && !strings.HasPrefix(e.Name(), ".") {
+			n++
+		}
+	}
+	return n
+}
+
 // scanDir 列出 dir 下的一级子目录，构造 Skill 视图。目录不存在视为空。
 func scanDir(dir string, state State) ([]*Skill, error) {
 	entries, err := os.ReadDir(dir)
@@ -86,6 +104,9 @@ func buildSkill(dir, name string, state State) *Skill {
 		Dir:        dir,
 		State:      state,
 		HasSKILLMD: fileExists(filepath.Join(dir, "SKILL.md")),
+	}
+	if s.HasSKILLMD {
+		s.Description = readDescription(dir)
 	}
 	res := readMeta(dir)
 	if res.Err != nil {

@@ -501,7 +501,7 @@ func TestHeaderCountsAndEmptyDetail(t *testing.T) {
 	tt.Frame()
 
 	// 头部：路径（可能被中段省略）与计数（启用 1、停用 1）。
-	if !tt.HasText(elideMiddle(cfg.Root)) || !tt.HasText("已启用 1") || !tt.HasText("已停用 1") {
+	if !tt.HasText(cfg.Root) || !tt.HasText("已启用 1") || !tt.HasText("已停用 1") {
 		t.Errorf("头部应显示根目录与计数，文本 %v", tt.Texts())
 	}
 	// 未选中：空态有引导与概况卡片，而不是只有一行灰字。

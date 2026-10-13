@@ -25,19 +25,7 @@ func TestRenderStateShots(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// save 把最后一帧写成 PNG。
-	save := func(t *testing.T, tt *myui.Tester, name string) {
-		t.Helper()
-		f, err := os.Create(filepath.Join(out, name+".png"))
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer f.Close()
-		if err := png.Encode(f, tt.Image()); err != nil {
-			t.Fatal(err)
-		}
-		t.Logf("已保存 %s", filepath.Join(out, name+".png"))
-	}
+	save := func(t *testing.T, tt *myui.Tester, name string) { saveShot(t, out, name, tt) }
 
 	// 状态一：完全空的根目录。
 	t.Run("empty-root", func(t *testing.T) {
@@ -133,6 +121,23 @@ func TestRenderStateShots(t *testing.T) {
 		tt.Frame()
 		save(t, tt, "review-modal")
 	})
+}
+
+// saveShot 把 tt 的最后一帧写成 out/name.png。
+func saveShot(t *testing.T, out, name string, tt *myui.Tester) {
+	t.Helper()
+	if err := os.MkdirAll(out, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	f, err := os.Create(filepath.Join(out, name+".png"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	if err := png.Encode(f, tt.Image()); err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("已保存 %s", filepath.Join(out, name+".png"))
 }
 
 // mustPreview 在测试里同步取一次更新预览。

@@ -27,10 +27,10 @@ func main() {
 	mygo.App.WhenReady(func() {
 		win := mygo.NewWindow(mygo.WindowOptions{
 			Title:     "kura",
-			Width:     980,
-			Height:    640,
-			MinWidth:  720,
-			MinHeight: 460,
+			Width:     1200,
+			Height:    760,
+			MinWidth:  880,
+			MinHeight: 520,
 			// 记住上次窗口位置与大小。
 			StateKey: "main",
 			// The window shows the interface MyGo draws, not a web page.

@@ -3,7 +3,8 @@
 // 以及启用/禁用/删除/恢复/添加/更新等全部变更操作。
 //
 // 设计要点：
-//   - 根目录与 kura 数据目录全部建模为配置（root 不可为空），v2 可加多根目录。
+//   - 根目录与 kura 数据目录全部建模为配置（root 不可为空）；多个根目录由
+//     Library 管理，每个根目录对应一个 Config。
 //   - 所有操作返回类型化结果或错误，绝不 panic；元数据文件损坏按零值处理。
 //   - 每次修改技能内容前先写入快照（Update/Remove）。
 package store
@@ -23,6 +24,10 @@ type Config struct {
 	Root string
 	// Home 是 kura 的数据目录（默认 ~/.kura），存放 disabled/trash/snapshots/config.json。
 	Home string
+	// Scope 是该根目录私有状态（disabled/trash/snapshots）在 Home 下的相对
+	// 子目录。默认根目录为空串，沿用 Home/disabled 等原有布局；Library 里
+	// 追加的根目录为 roots/<id>，避免不同根目录的同名技能互相覆盖。
+	Scope string
 }
 
 // Config 的目录约定常量。
@@ -65,14 +70,17 @@ func DefaultConfig() (*Config, error) {
 	}, nil
 }
 
-// DisabledRoot 返回禁用技能的存放目录（Home/disabled）。
-func (c *Config) DisabledRoot() string { return filepath.Join(c.Home, DisabledDir) }
+// stateHome 返回该根目录私有状态的目录（Home 或 Home/<Scope>）。
+func (c *Config) stateHome() string { return filepath.Join(c.Home, c.Scope) }
 
-// TrashRoot 返回已删除技能的回收站目录（Home/trash）。
-func (c *Config) TrashRoot() string { return filepath.Join(c.Home, TrashDir) }
+// DisabledRoot 返回禁用技能的存放目录（Home/[Scope/]disabled）。
+func (c *Config) DisabledRoot() string { return filepath.Join(c.stateHome(), DisabledDir) }
 
-// SnapshotsRoot 返回内容快照目录（Home/snapshots）。
-func (c *Config) SnapshotsRoot() string { return filepath.Join(c.Home, SnapshotsDir) }
+// TrashRoot 返回已删除技能的回收站目录（Home/[Scope/]trash）。
+func (c *Config) TrashRoot() string { return filepath.Join(c.stateHome(), TrashDir) }
+
+// SnapshotsRoot 返回内容快照目录（Home/[Scope/]snapshots）。
+func (c *Config) SnapshotsRoot() string { return filepath.Join(c.stateHome(), SnapshotsDir) }
 
 // ConfigPath 返回 Home/config.json 的路径。
 func (c *Config) ConfigPath() string { return filepath.Join(c.Home, ConfigFileName) }
@@ -133,10 +141,10 @@ func SaveHomeConfig(c *Config, hc *HomeConfig) error {
 	return nil
 }
 
-// HomeConfig 是 ~/.kura/config.json 的内容。v1 只记录技能根目录与创建时间，
-// 字段保持小写驼峰，v2 增加多根目录时向后兼容。
+// HomeConfig 是 ~/.kura/config.json 的内容：技能根目录列表与创建时间，
+// 字段保持小写驼峰。
 type HomeConfig struct {
-	// Roots 是技能根目录列表；v1 只有一个条目。
+	// Roots 是用户添加的技能根目录列表（见 Library）；默认根目录总是第一个。
 	Roots []string `json:"roots"`
 	// CreatedAt 是配置首次创建时间（RFC3339）。
 	CreatedAt string `json:"createdAt,omitempty"`

@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 )
 
 // newTestConfig 建立隔离的临时环境：root + home 都在 t.TempDir() 下。
@@ -530,6 +531,10 @@ func TestUpdate(t *testing.T) {
 	// 重新镜像一次 v2。
 	os.RemoveAll(bare)
 	run("clone", "-q", "--bare", repo, bare)
+
+	// updatedAt 精确到秒：等过一个整秒，保证「前进」可观测（快机器上
+	// 安装与更新可能落在同一秒）。
+	time.Sleep(time.Until(time.Now().Truncate(time.Second).Add(time.Second)))
 
 	// Update。
 	r, err := c.Update("up-skill")
