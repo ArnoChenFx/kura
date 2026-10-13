@@ -60,8 +60,13 @@ func TestRenderDesignShots(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	dark := false
 	render := func(name string, w, h int, prep func(tt *myui.Tester)) {
-		tt := newTester(a, w, h)
+		view := a.View
+		if dark {
+			view = func(c *myui.Context) { c.SetTheme(myui.DarkTheme()); a.View(c) }
+		}
+		tt := myui.NewTester(view, w, h)
 		a.settle()
 		tt.Frame()
 		a.settle()
@@ -87,5 +92,9 @@ func TestRenderDesignShots(t *testing.T) {
 			err: "store: 已存在同名技能: pdf-tools"}
 	})
 	a.install = installState{}
+	a.filter, a.selName = filterAll, "write-a-prd"
+	dark = true
+	render("design-7-dark", 1280, 800, nil)
+	dark = false
 	render("design-4-trash", 1280, 800, func(tt *myui.Tester) { a.selName = "legacy-lint"; a.filter = filterTrashed })
 }

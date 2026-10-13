@@ -11,12 +11,12 @@ import (
 
 // 三栏的固定宽度：左栏放目录名与徽标，右栏放详情字段；中栏占满剩余。
 const (
-	rootsWidth  = 216
+	rootsWidth  = 224
 	detailWidth = 320
 	// cardMinWidth / cardHeight 是卡片的最小宽度与固定高度：网格按窗口宽度
 	// 决定列数，列宽在最小宽度之上平分剩余空间。
-	cardMinWidth = 232
-	cardHeight   = 128
+	cardMinWidth = 248
+	cardHeight   = 140
 )
 
 // View 构建 kura 主窗口的一帧，三栏结构：
@@ -30,6 +30,7 @@ const (
 //	│ +添加文件夹│ 状态条                         │ 操作         │
 //	└──────────┴──────────────────────────────┴────────────┘
 func (a *App) View(c *myui.Context) {
+	a.pal = applyTheme(c)
 	// 首帧触发一次后台初始扫描（磁盘 I/O 不在 UI 线程做）。
 	if !a.loaded {
 		a.loaded = true
@@ -47,7 +48,7 @@ func (a *App) View(c *myui.Context) {
 	myui.Row(c).Fill().AlignItems(myui.Stretch).Children(func() {
 		a.viewRoots(c)
 		myui.Divider(c)
-		myui.Column(c).Grow(1).MinWidth(0).FillHeight().Children(func() {
+		myui.Column(c).Grow(1).MinWidth(0).FillHeight().Background(a.pal.canvas).Children(func() {
 			a.viewMainHeader(c)
 			a.viewFilterBar(c)
 			a.viewErrorBanner(c)
@@ -75,14 +76,22 @@ func (a *App) View(c *myui.Context) {
 	a.viewInstallModal(c)
 }
 
-// viewRoots 是左栏：应用名、技能目录列表（每项带在用技能数）与底部的
+// viewRoots 是左栏：品牌、技能目录列表（每项带在用技能数）与底部的
 // 「添加文件夹」。默认目录总在第一个。
 func (a *App) viewRoots(c *myui.Context) {
 	t := c.Theme()
-	myui.Column(c).Width(rootsWidth).Shrink(0).FillHeight().Children(func() {
-		myui.Row(c).Padding(t.Space(3), t.Space(4), t.Space(2), t.Space(4)).
-			AlignItems(myui.Center).Gap(t.Space(2)).Children(func() {
-			myui.Text(c, "kura").Bold().FontSize(t.FontSize + 4)
+	myui.Column(c).Width(rootsWidth).Shrink(0).FillHeight().Background(a.pal.sidebar).Children(func() {
+		// 品牌：靛蓝方块里的 K + kura。
+		myui.Row(c).Padding(t.Space(4), t.Space(4), t.Space(3), t.Space(4)).
+			AlignItems(myui.Center).Gap(t.Space(2.5)).Children(func() {
+			myui.Box(c).Size(t.Space(7), t.Space(7)).Radius(t.Radius).Background(t.Accent).
+				Center().Children(func() {
+				myui.Text(c, "K").Bold().TextColor(t.AccentText)
+			})
+			myui.Column(c).Gap(0).Children(func() {
+				myui.Text(c, "kura").Bold().FontSize(t.FontSize + 2)
+				myui.Text(c, "技能管理").FontSize(t.FontSize - 2).TextColor(t.TextMuted)
+			})
 		})
 		myui.Sidebar(c, &a.rootSel, func() {
 			myui.SidebarSection(c, "技能目录", nil, func() {
@@ -97,13 +106,18 @@ func (a *App) viewRoots(c *myui.Context) {
 					}
 				}
 			})
-		}).Grow(1).FillWidth()
+		}).Grow(1).FillWidth().Background(a.pal.sidebar)
 		if a.libErr != "" {
 			myui.Text(c, "目录列表读取失败："+a.libErr).MaxLines(3).
 				FontSize(t.FontSize-2).TextColor(t.Danger).Padding(0, t.Space(4))
 		}
-		myui.Box(c).Padding(t.Space(2), t.Space(3), t.Space(3), t.Space(3)).Children(func() {
-			ab := myui.Button(c, "").Label("添加文件夹").FillWidth().Disabled(a.adding)
+		myui.Box(c).FillWidth().Padding(t.Space(2), t.Space(3), t.Space(3), t.Space(3)).Children(func() {
+			ab := myui.ButtonBase(c).Label("添加文件夹").FillWidth().Disabled(a.adding).
+				Justify(myui.Start).Gap(t.Space(2)).Padding(t.Space(2), t.Space(3)).
+				Radius(t.Radius).Border(1, t.Border).TextColor(t.TextMuted)
+			if ab.Hovered() {
+				ab.Background(t.SurfaceHover).TextColor(t.Text)
+			}
 			ab.Children(func() {
 				myui.Icon(c, iconPlus)
 				myui.Text(c, "添加文件夹")
@@ -126,47 +140,52 @@ func rootLabel(root string) string {
 	return parent + "/" + base
 }
 
-// viewMainHeader 是中栏头部：当前目录名与完整路径，右侧是作用于整个目录
-// 的图标按钮（刷新、全部检查、导入元数据、从列表移除）。
+// viewMainHeader 是中栏头部：当前目录名与完整路径；右侧是主操作「安装
+// 技能」与作用于整个目录的图标按钮（刷新、全部检查、导入元数据或从列表移除）。
 func (a *App) viewMainHeader(c *myui.Context) {
 	t := c.Theme()
 	isDefault := a.cfg.Root == a.lib.Default()
-	myui.Row(c).FillWidth().Padding(t.Space(3), t.Space(4), t.Space(1), t.Space(4)).
-		Gap(t.Space(2)).AlignItems(myui.Center).Children(func() {
-		myui.Column(c).Grow(1).MinWidth(0).Gap(t.Space(0.5)).Children(func() {
-			myui.Text(c, rootLabel(a.cfg.Root)).Bold().FontSize(t.FontSize + 3).SingleLine()
-			myui.Text(c, a.cfg.Root).SingleLine().FontSize(t.FontSize - 1).TextColor(t.TextMuted)
+	myui.Row(c).FillWidth().Padding(t.Space(4), t.Space(5), t.Space(2), t.Space(5)).
+		Gap(t.Space(1)).AlignItems(myui.Center).Children(func() {
+		myui.Column(c).Grow(1).MinWidth(0).Gap(t.Space(1)).Children(func() {
+			myui.Text(c, rootLabel(a.cfg.Root)).Bold().FontSize(t.FontSize + 6).SingleLine()
+			myui.Row(c).Gap(t.Space(1.5)).AlignItems(myui.Center).Children(func() {
+				myui.Icon(c, iconFolder).TextColor(t.TextMuted).FontSize(t.FontSize - 1)
+				myui.Text(c, a.cfg.Root).SingleLine().MinWidth(0).FontSize(t.FontSize - 1).TextColor(t.TextMuted)
+			})
 		})
 		if a.scanning || a.checkingAll || a.checking != "" {
 			myui.Spinner(c)
 		}
+		ghostButton(c, iconRefresh, "刷新", a.scanning, a.ReloadAsync)
+		ghostButton(c, iconCheckAll, "全部检查", a.checkingAll || a.checking != "", a.CheckAllAsync)
+		// .skill-lock.json 只描述默认目录里的技能。
+		if isDefault {
+			ghostButton(c, iconImport, "导入元数据", false, a.ImportAsync)
+		} else {
+			ghostButton(c, iconUnlink, "从列表移除此目录", false, a.RemoveRootAsync)
+		}
+		myui.Box(c).Width(t.Space(2))
 		ib := myui.PrimaryButton(c, "").Label("安装技能")
 		ib.Children(func() {
 			myui.Icon(c, iconPlus)
-			myui.Text(c, "安装技能")
+			myui.Text(c, "安装技能").FontWeight(600)
 		})
 		if ib.Clicked() {
 			a.OpenInstall()
 		}
-		iconButton(c, iconRefresh, "刷新", a.scanning, a.ReloadAsync)
-		iconButton(c, iconCheckAll, "全部检查", a.checkingAll || a.checking != "", a.CheckAllAsync)
-		// .skill-lock.json 只描述默认目录里的技能。
-		if isDefault {
-			iconButton(c, iconImport, "导入元数据", false, a.ImportAsync)
-		} else {
-			iconButton(c, iconUnlink, "从列表移除此目录", false, a.RemoveRootAsync)
-		}
 	})
 }
 
-// viewFilterBar 是搜索框 + 状态筛选（带数量）。
+// viewFilterBar 是搜索框 + 状态筛选（带数量）。窄的时候筛选换到搜索框
+// 下一行（Wrap），而不是互相挤压。
 func (a *App) viewFilterBar(c *myui.Context) {
 	t := c.Theme()
 	en, dis, trash := a.counts()
-	// 窄的时候筛选换到搜索框下一行（Wrap），而不是互相挤压。
-	myui.Row(c).FillWidth().Wrap().Padding(t.Space(2), t.Space(4)).Gap(t.Space(2)).
+	myui.Row(c).FillWidth().Wrap().Padding(t.Space(2), t.Space(5), t.Space(3), t.Space(5)).Gap(t.Space(2)).
 		AlignItems(myui.Center).Children(func() {
-		searchBox(c, &a.query).Grow(1).Basis(t.Space(50)).MaxWidth(t.Space(80))
+		searchBox(c, &a.query, a.pal.card).Grow(1).Basis(t.Space(50)).MaxWidth(t.Space(80))
+		myui.Spacer(c)
 		myui.Segmented(c, &a.filter,
 			"全部 "+itoa(en+dis), "启用 "+itoa(en), "停用 "+itoa(dis), "回收站 "+itoa(trash)).
 			Shrink(0)
@@ -179,9 +198,9 @@ func (a *App) viewErrorBanner(c *myui.Context) {
 		return
 	}
 	t := c.Theme()
-	myui.Box(c).FillWidth().Margin(t.Space(1), t.Space(4), 0, t.Space(4)).
-		Padding(t.Space(1.5), t.Space(3)).Radius(t.Radius).
-		Background(t.Danger.Alpha(0.10)).Border(1, t.Danger.Alpha(0.4)).
+	myui.Box(c).FillWidth().Margin(0, t.Space(5), t.Space(2), t.Space(5)).
+		Padding(t.Space(2), t.Space(3)).Radius(t.Radius).
+		Background(t.Danger.Alpha(0.08)).Border(1, t.Danger.Alpha(0.3)).
 		Children(func() {
 			myui.Text(c, a.loadErr).SingleLine().TextColor(t.Danger)
 		})
@@ -196,7 +215,7 @@ func (a *App) viewGrid(c *myui.Context, rows []*store.Skill) {
 	}
 	myui.GridView(c, &a.grid, len(rows), cardMinWidth, cardHeight, func(i int) {
 		a.viewCard(c, rows[i], i == a.selIdx)
-	}).Grow(1).FillWidth().Padding(t.Space(1), t.Space(3))
+	}).Grow(1).FillWidth().Padding(0, t.Space(4), t.Space(2), t.Space(4))
 }
 
 // viewGridEmpty 是没有卡片时的占位：区分「搜索无结果」「筛选下为空」与
@@ -211,9 +230,12 @@ func (a *App) viewGridEmpty(c *myui.Context) {
 		msg, hint = "没有"+stateText(filterState(a.filter))+"的技能", ""
 	}
 	myui.Box(c).Grow(1).FillWidth().Center().Children(func() {
-		myui.Column(c).Gap(t.Space(2)).AlignItems(myui.Center).Children(func() {
-			myui.Icon(c, iconInbox).TextColor(t.TextMuted).FontSize(t.FontSize * 3)
-			myui.Text(c, msg).Bold()
+		myui.Column(c).Gap(t.Space(3)).AlignItems(myui.Center).Children(func() {
+			myui.Box(c).Size(t.Space(16), t.Space(16)).Radius(t.Space(8)).
+				Background(t.Accent.Alpha(0.08)).Center().Children(func() {
+				myui.Icon(c, iconInbox).TextColor(t.Accent).FontSize(t.FontSize * 2)
+			})
+			myui.Text(c, msg).Bold().FontSize(t.FontSize + 1)
 			if hint != "" {
 				myui.Text(c, hint).TextColor(t.TextMuted)
 			}
@@ -223,37 +245,44 @@ func (a *App) viewGridEmpty(c *myui.Context) {
 
 // viewCard 是一张技能卡片：
 //
-//	[名字 …………………… 开关]
-//	[描述，最多两行          ]
-//	[来源 · 提示      有更新]
+//	[头像] [名字           ] [开关]
+//	       [来源 · 插件    ]
+//	[描述，最多两行                ]
+//	[标签：有更新 / 已停用 / 缺 SKILL.md]
 //
-// 停用的卡片名字变灰，回收站卡片加删除线并把开关换成「恢复」。
+// 停用的卡片头像与名字变淡，回收站卡片加删除线并把开关换成「恢复」。
 func (a *App) viewCard(c *myui.Context, s *store.Skill, selected bool) {
 	t := c.Theme()
 	busy := a.isBusy(s.Name)
-	border := t.Border
+	dim := s.State != store.StateEnabled
+	border := a.pal.line
 	if selected {
 		border = t.Accent
 	}
-	myui.Column(c).Fill().Padding(t.Space(3)).Gap(t.Space(1.5)).
-		Radius(t.Radius+2).Background(t.Surface).Border(1, border).Children(func() {
-		myui.Row(c).FillWidth().Gap(t.Space(2)).AlignItems(myui.Center).Children(func() {
-			name := myui.Text(c, s.Name).SingleLine().FontWeight(600).Grow(1).MinWidth(0)
-			if s.State != store.StateEnabled {
-				name.TextColor(t.TextMuted)
-			}
-			if s.State == store.StateTrashed {
-				name.Strikethrough()
-			}
+	myui.Column(c).Fill().Padding(t.Space(3.5)).Gap(t.Space(2.5)).
+		Radius(t.Radius+4).Background(a.pal.card).Border(1, border).
+		Shadow(0, 1, 3, 0, a.pal.shadow).Children(func() {
+		myui.Row(c).FillWidth().Gap(t.Space(3)).AlignItems(myui.Center).Children(func() {
+			avatar(c, s.Name, t.Space(9), dim)
+			myui.Column(c).Grow(1).MinWidth(0).Gap(t.Space(0.5)).Children(func() {
+				name := myui.Text(c, s.Name).SingleLine().FontWeight(600)
+				if dim {
+					name.TextColor(t.TextMuted)
+				}
+				if s.State == store.StateTrashed {
+					name.Strikethrough()
+				}
+				myui.Row(c).Gap(t.Space(1)).AlignItems(myui.Center).Children(func() {
+					myui.Icon(c, sourceIcon(s)).TextColor(t.TextMuted).FontSize(t.FontSize - 2)
+					myui.Text(c, cardSource(s)).SingleLine().MinWidth(0).
+						FontSize(t.FontSize - 2).TextColor(t.TextMuted)
+				})
+			})
 			switch {
 			case busy:
 				myui.Spinner(c)
 			case s.State == store.StateTrashed:
-				rb := myui.Button(c, "").Label("恢复").Tooltip("恢复到技能目录")
-				rb.Children(func() { myui.Icon(c, iconRestore) })
-				if rb.Clicked() {
-					a.RestoreAsync(s.Name)
-				}
+				ghostButton(c, iconRestore, "恢复", false, func() { a.RestoreAsync(s.Name) })
 			default:
 				// Switch 的输入在构建时应用：Changed 返回 true 的这次构建里，
 				// on 已是切换后的目标状态。
@@ -266,62 +295,78 @@ func (a *App) viewCard(c *myui.Context, s *store.Skill, selected bool) {
 		})
 		desc, color := s.Description, t.TextMuted
 		if desc == "" {
-			desc = "（SKILL.md 没有 description）"
-			color = color.Alpha(0.6)
+			desc, color = "没有描述", t.TextMuted.Alpha(0.6)
 		}
 		myui.Text(c, desc).MaxLines(2).FontSize(t.FontSize - 1).TextColor(color).Grow(1)
 		myui.Row(c).FillWidth().Gap(t.Space(1.5)).AlignItems(myui.Center).Children(func() {
-			myui.Icon(c, sourceIcon(s)).TextColor(t.TextMuted).FontSize(t.FontSize - 1)
-			myui.Text(c, rowCaption(s)).SingleLine().Grow(1).MinWidth(0).
-				FontSize(t.FontSize - 2).TextColor(captionColor(c, s))
 			if a.updates[s.Name] {
 				pill(c, "有更新", t.Accent)
-			} else if s.State == store.StateDisabled {
+			}
+			switch s.State {
+			case store.StateDisabled:
 				pill(c, "已停用", t.Warning)
+			case store.StateTrashed:
+				pill(c, "回收站", t.Danger)
+			}
+			if s.MetaErr != "" {
+				pill(c, "元数据损坏", t.Danger)
+			} else if !s.HasSKILLMD && s.State != store.StateTrashed {
+				pill(c, "缺少 SKILL.md", t.Warning)
 			}
 		})
 	})
 }
 
-// viewDetail 是右栏：所选技能的详情，按「标题 → 描述 → 元数据 → 位置 →
-// 操作」分组；右上角的关闭按钮取消选择、收起右栏。
+// viewDetail 是右栏：所选技能的详情。头部是头像、名字与状态；正文是描述
+// 与分组的信息块（来源、元数据、位置）；底部固定操作栏。
 func (a *App) viewDetail(c *myui.Context, s *store.Skill) {
 	t := c.Theme()
 	busy := a.isBusy(s.Name)
-	myui.Column(c).Width(detailWidth).Shrink(0).FillHeight().Children(func() {
+	myui.Column(c).Width(detailWidth).Shrink(0).FillHeight().Background(a.pal.card).Children(func() {
 		myui.Scroll(c).Grow(1).FillWidth().Children(func() {
-			myui.Column(c).FillWidth().Padding(t.Space(3), t.Space(4)).Gap(t.Space(3)).Children(func() {
-				// 标题区：名字 + 关闭；状态徽标 + 来源。
-				myui.Row(c).FillWidth().Gap(t.Space(2)).AlignItems(myui.Start).Children(func() {
-					name := myui.Text(c, s.Name).Bold().FontSize(t.FontSize + 4).Grow(1).MinWidth(0)
-					if s.State == store.StateTrashed {
-						name.Strikethrough()
-					}
-					iconButton(c, iconClose, "关闭详情", false, func() { a.selName = "" })
-				})
-				myui.Row(c).Gap(t.Space(2)).AlignItems(myui.Center).Children(func() {
-					stateBadge(c, s.State)
-					myui.Text(c, sourceText(s)).SingleLine().TextColor(t.TextMuted)
+			myui.Column(c).FillWidth().Padding(t.Space(4), t.Space(5)).Gap(t.Space(4)).Children(func() {
+				myui.Row(c).FillWidth().Gap(t.Space(3)).AlignItems(myui.Start).Children(func() {
+					avatar(c, s.Name, t.Space(12), s.State != store.StateEnabled)
+					myui.Column(c).Grow(1).MinWidth(0).Gap(t.Space(1.5)).Children(func() {
+						name := myui.Text(c, s.Name).Bold().FontSize(t.FontSize + 4)
+						if s.State == store.StateTrashed {
+							name.Strikethrough()
+						}
+						myui.Row(c).Gap(t.Space(2)).AlignItems(myui.Center).Children(func() {
+							stateBadge(c, s.State)
+							if a.updates[s.Name] {
+								pill(c, "有更新", t.Accent)
+							}
+						})
+					})
+					ghostButton(c, iconClose, "关闭详情", false, func() { a.selName = "" })
 				})
 				if s.Description != "" {
-					myui.Text(c, s.Description)
+					myui.Text(c, s.Description).TextColor(t.Text.Alpha(0.85))
 				}
 				if !s.HasSKILLMD && s.State != store.StateTrashed {
 					myui.Text(c, "缺少 SKILL.md").TextColor(t.Warning)
 				}
-
-				myui.Divider(c)
-				sectionHeader(c, "元数据")
-				a.viewDetailMeta(c, s)
-
-				sectionHeader(c, "位置")
-				myui.Text(c, s.Dir).FontSize(t.FontSize - 1).TextColor(t.TextMuted)
+				a.detailGroup(c, "元数据", func() { a.viewDetailMeta(c, s) })
+				a.detailGroup(c, "位置", func() {
+					myui.Text(c, s.Dir).FontSize(t.FontSize - 1).TextColor(t.TextMuted)
+				})
 			})
 		})
 		myui.Divider(c)
-		myui.Box(c).FillWidth().Padding(t.Space(3), t.Space(4)).Children(func() {
+		myui.Box(c).FillWidth().Padding(t.Space(3), t.Space(5)).Children(func() {
 			a.viewDetailActions(c, s, busy)
 		})
+	})
+}
+
+// detailGroup 是详情里的一个信息块：小标题 + 浅底圆角框。
+func (a *App) detailGroup(c *myui.Context, title string, fn func()) {
+	t := c.Theme()
+	myui.Column(c).FillWidth().Gap(t.Space(1.5)).Children(func() {
+		sectionHeader(c, title)
+		myui.Column(c).FillWidth().Padding(t.Space(3)).Gap(t.Space(1.5)).
+			Radius(t.Radius).Background(a.pal.canvas).Border(1, a.pal.line).Children(fn)
 	})
 }
 
@@ -380,8 +425,12 @@ func (a *App) viewDetailActions(c *myui.Context, s *store.Skill, busy bool) {
 	// trashButton 是「移入回收站」：Label 保持「详情:移入回收站」供测试与无障碍。
 	trashButton := func() {
 		myui.Spacer(c)
-		b := myui.Button(c, "").Label("详情:移入回收站").Tooltip("移入回收站")
-		b.Children(func() { myui.Icon(c, iconTrash).TextColor(t.Danger) })
+		b := myui.ButtonBase(c).Label("详情:移入回收站").Tooltip("移入回收站").
+			Padding(t.Space(1.75)).Radius(t.Radius).TextColor(t.Danger)
+		if b.Hovered() {
+			b.Background(t.Danger.Alpha(0.1))
+		}
+		b.Children(func() { myui.Icon(c, iconTrash).FontSize(t.FontSize + 2) })
 		if b.Clicked() {
 			a.confirm = confirmState{open: true, name: s.Name}
 		}
@@ -423,14 +472,17 @@ func (a *App) viewDetailActions(c *myui.Context, s *store.Skill, busy bool) {
 // viewStatusBar 是中栏底部的状态条：最近一次操作的结果 + 当前目录的总数。
 func (a *App) viewStatusBar(c *myui.Context) {
 	t := c.Theme()
-	myui.Row(c).FillWidth().Padding(t.Space(1.5), t.Space(4)).
+	myui.Row(c).FillWidth().Padding(t.Space(2), t.Space(5)).
 		Gap(t.Space(2)).AlignItems(myui.Center).Children(func() {
 		if a.status != "" {
 			color := t.TextMuted
 			if a.statusErr {
 				color = t.Danger
 			}
-			myui.Text(c, a.status).SingleLine().Grow(1).MinWidth(0).TextColor(color)
+			myui.Box(c).Size(t.Space(1.5), t.Space(1.5)).Radius(t.Space(0.75)).Shrink(0).
+				Background(color)
+			myui.Text(c, a.status).SingleLine().Grow(1).MinWidth(0).
+				FontSize(t.FontSize - 1).TextColor(color)
 		} else {
 			myui.Spacer(c)
 		}

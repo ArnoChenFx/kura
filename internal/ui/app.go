@@ -61,6 +61,7 @@ type App struct {
 	statusErr   bool            // 状态行是否为错误
 	confirm     confirmState    // 待确认的删除操作
 	install     installState    // 安装技能弹窗
+	pal         palette         // 本帧的表面色（随系统浅色/深色切换）
 	review      reviewState     // 更新评审面板（Modal）
 
 	// spawn 在后台运行 fn：生产环境为 go fn()。

@@ -221,11 +221,11 @@ func sectionHeader(c *myui.Context, title string) {
 // 输入框，中文界面里不合适；因此照它的结构用公开 API 自建：同样的
 // Surface 底、1px 边框、圆角与文字光标，另加 Escape 清空。
 // 返回外层元素，调用方用 Grow/MaxWidth 控制宽度。
-func searchBox(c *myui.Context, query *string) myui.Element {
+func searchBox(c *myui.Context, query *string, bg myui.Color) myui.Element {
 	t := c.Theme()
 	row := myui.Row(c).AlignItems(myui.Center).
 		Gap(t.Space(1.5)).Padding(t.Space(1.5), t.Space(2.5)).
-		Radius(t.Radius).Background(t.Surface).Border(1, t.Border).
+		Radius(t.Radius).Background(bg).Border(1, t.Border).
 		Cursor(myui.CursorText)
 	row.Children(func() {
 		myui.Icon(c, iconSearch).TextColor(t.TextMuted)
@@ -288,4 +288,22 @@ func shortTime(s string) string {
 		return s[:10] + " " + s[11:16]
 	}
 	return s
+}
+
+// cardSource 是卡片名字下的一行来源：GitHub 显示 owner/repo，本地显示
+// 「本地」。插件名等细节留给详情栏。
+func cardSource(s *store.Skill) string {
+	if s.Meta == nil {
+		if s.MetaErr != "" {
+			return "元数据损坏"
+		}
+		return "无元数据"
+	}
+	src := sourceText(s)
+	if s.Meta.Source.Type == store.SourceGitHub {
+		if r, _, _ := parseRepo(s.Meta.Source.URL); r != "" {
+			src = r
+		}
+	}
+	return src
 }
