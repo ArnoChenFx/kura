@@ -277,8 +277,13 @@ func (a *App) publishAfterWork(cfg *store.Config, gen int, key string, err error
 }
 
 // ReloadAsync 在后台重新扫描当前目录，并统计其他目录的在用技能数，
-// 完成后发布结果。
-func (a *App) ReloadAsync() {
+// 完成后发布结果，状态行报告扫描了多少个技能。
+func (a *App) ReloadAsync() { a.reload(true) }
+
+// reload 是 ReloadAsync 的实现。announce 为 false 时，扫描成功不改状态行：
+// 切换目录之后状态行留给「已添加目录」「已从列表移除」这类消息，不被
+// 紧随其后的「已扫描 N 个技能」盖掉；出错时照常报告。
+func (a *App) reload(announce bool) {
 	if a.scanning {
 		return
 	}
@@ -299,7 +304,7 @@ func (a *App) ReloadAsync() {
 			}
 			if gen != a.gen {
 				// 扫描期间切换了目录：结果作废，给新目录再扫一次。
-				a.ReloadAsync()
+				a.reload(false)
 				return
 			}
 			a.applyScan(skills, err)
@@ -311,8 +316,10 @@ func (a *App) ReloadAsync() {
 				a.status, a.statusErr = err.Error(), true
 			case a.loadErr != "":
 				a.status, a.statusErr = a.loadErr, true
-			default:
-				a.status, a.statusErr = fmt.Sprintf("已扫描 %d 个技能", len(skills)), false
+			case announce:
+				// 与筛选栏的「全部」、状态条的总数一致：不含回收站。
+				en, dis, _ := a.counts()
+				a.status, a.statusErr = fmt.Sprintf("已扫描 %d 个技能", en+dis), false
 			}
 		})
 	})
@@ -392,7 +399,7 @@ func (a *App) SelectRoot(root string) {
 	a.updates = map[string]bool{}
 	a.review = reviewState{}
 	a.status, a.statusErr = "", false
-	a.ReloadAsync()
+	a.reload(false)
 }
 
 // AddRootAsync 弹出文件夹选择框，把所选文件夹加入目录列表（写

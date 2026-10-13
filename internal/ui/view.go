@@ -498,8 +498,10 @@ func (a *App) viewDetailActions(c *myui.Context, s *store.Skill, busy bool) {
 }
 
 // viewStatusBar 是中栏底部的状态条：最近一次操作的结果 + 当前目录的总数。
+// 总数与筛选栏的「全部」一致，不含回收站里的技能。
 func (a *App) viewStatusBar(c *myui.Context) {
 	t := c.Theme()
+	en, dis, _ := a.counts()
 	myui.Row(c).FillWidth().Padding(t.Space(2), t.Space(5)).
 		Gap(t.Space(2)).AlignItems(myui.Center).Children(func() {
 		if a.status != "" {
@@ -514,7 +516,7 @@ func (a *App) viewStatusBar(c *myui.Context) {
 		} else {
 			myui.Spacer(c)
 		}
-		myui.Text(c, fmt.Sprintf("共 %d 个技能", len(a.skills))).
+		myui.Text(c, fmt.Sprintf("共 %d 个技能", en+dis)).
 			SingleLine().Shrink(0).FontSize(t.FontSize - 1).TextColor(t.TextMuted)
 	})
 }

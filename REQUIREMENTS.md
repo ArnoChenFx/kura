@@ -5,26 +5,34 @@ A desktop manager for agent skills, built with [MyGo](https://github.com/egoist/
 
 ## Scope of v1
 
-Manage the skills in one root directory:
+Manage the skills in one or more **skill roots**:
 
-- root: `~/.agents/skills` (Windows: `C:\Users\ArnoChen\.agents\skills`)
+- the default root: `~/.agents/skills` (Windows: `C:\Users\ArnoChen\.agents\skills`);
+  it is always present and always first in the list
+- any other folder the user adds in the UI (for example a project's
+  `.claude/skills`); the list lives in `~/.kura/config.json` under `roots`
 - one directory per skill, containing `SKILL.md` plus optional files
 
-Other agent roots (`.claude/skills`, `.codex/skills`, arbitrary directories) are
-**out of scope for v1**, but every root must be modeled as configuration, not a
-constant, so v2 can add more.
+Roots are configuration, never constants. Every root keeps its own
+disabled/trash/snapshots state, so same-named skills in different roots never
+interfere. Removing a root from the list only edits `config.json`: the folder
+and the skills in it are left untouched. Copying or syncing skills *between*
+roots is out of scope.
 
 ## Commands (UI surfaces later; core first)
 
+Every action works on the selected root.
+
 | Action | Meaning |
 | --- | --- |
-| List | Every skill in the root, with enabled/disabled state and source metadata |
+| List | Every skill in the root, with enabled/disabled state, description and source metadata |
 | Add | Install a skill into the root: from a local directory, or from a GitHub source (`owner/repo`, optional subdirectory and ref) |
 | Update | Re-fetch a skill from its recorded source and replace its content (snapshotting the old content first) |
 | Remove | Take a skill out of the root into kura's own trash directory (recoverable) |
 | Disable | Move a skill's folder from the root into `~/.kura/disabled/`; the UI shows a toggle (off) |
 | Enable | Move it back from `~/.kura/disabled/` into the root |
 | Restore | Put a trashed (removed) skill back into the root |
+| Add root / Remove root | Add any folder to the list of roots, or take a non-default root out of the list (never touches the folder) |
 
 Disable/enable is a **move**, never a copy or a flag inside the skill.
 
@@ -54,7 +62,8 @@ Written inside each managed skill folder, next to `SKILL.md`:
 
 `source.type` is `local` (with `path`) or `github`. `pluginName` is imported from
 the sibling `~/.agents/.skill-lock.json` when the skill is listed there; the lock
-file is read and never rewritten by kura v1.
+file is read and never rewritten by kura v1. It only describes the default root,
+so "import metadata" is offered for the default root only.
 
 `contentHash` is a SHA-256 over the skill folder's files, with paths sorted and
 `.kura-meta.json` itself excluded, so an unchanged skill keeps a stable hash and
@@ -67,8 +76,41 @@ drift can be detected.
   disabled/<skill>/     # disabled skills, folder + .kura-meta.json
   trash/<skill>/        # removed skills with a timestamp
   snapshots/<skill>/<timestamp>/  # pre-update and pre-remove content snapshots
+  roots/<id>/           # the same three directories, for each added (non-default) root
   config.json           # roots, preferences
 ```
+
+The default root keeps the layout above, so existing data needs no migration.
+`<id>` is the first 12 hex digits of the SHA-256 of the normalised root path.
+The CLI's `--root` reaches the same state when it points at a root from the list.
+
+## Window
+
+Three columns:
+
+1. **Skill roots** (left): the default root plus every folder the user added,
+   each with its enabled-skill count, and "Add folder" (system folder picker).
+2. **Skill cards** (middle): a responsive grid with several cards per row. A card
+   shows the name, the source (`owner/repo` or local), the two-line
+   `description` from `SKILL.md`, tags (update available, disabled, broken
+   metadata, missing `SKILL.md`) and the enable switch. Above the grid: search
+   (name and description) and filter tabs All / Enabled / Disabled / Trash, each
+   with its count ("All" does not include the trash). Header actions: refresh,
+   check all for updates, import metadata (default root) or remove from list
+   (other roots), and **Install skill**.
+3. **Detail** (right, only while a card is selected): name, state, description,
+   metadata, location and the actions (check update, disable/enable, trash or
+   restore).
+
+**Install skill** is a dialog: a GitHub repository (`owner/repo` or a pasted URL,
+optional subdirectory, ref and name) or a local folder (system picker, optional
+name). It installs into the selected root.
+
+Look: a dark, low-contrast palette taken from the reference screenshot (near
+neutral charcoal base, slightly lighter bordered cards, three grey text levels,
+mint toggles) with one muted periwinkle accent used sparingly; the light skin
+keeps the same hues. Saturated indigo/violet is explicitly unwanted. All colours
+live in `internal/ui/theme.go`.
 
 ## Non-goals for v1
 
