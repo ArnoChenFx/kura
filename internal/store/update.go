@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -103,7 +102,7 @@ func (c *Config) refetchGitHub(name string, meta *Meta) (string, Source, func(),
 		args = append(args, "--branch", meta.Source.Ref)
 	}
 	args = append(args, meta.Source.URL, tmp)
-	cmd := exec.Command("git", args...)
+	cmd := gitCommand(args...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return "", Source{}, cleanup, fmt.Errorf("store: git clone 失败: %w: %s", err, strings.TrimSpace(string(out)))
@@ -121,7 +120,7 @@ func (c *Config) refetchGitHub(name string, meta *Meta) (string, Source, func(),
 // gitHeadStaging 读取 staging 目录中的 git commit（替换发生在移除 .git 之后无法
 // 再读，故在复制后立刻读一次）。失败返回空串。
 func gitHeadStaging(dir string) string {
-	cmd := exec.Command("git", "-C", dir, "rev-parse", "HEAD")
+	cmd := gitCommand("-C", dir, "rev-parse", "HEAD")
 	out, err := cmd.Output()
 	if err != nil {
 		return ""

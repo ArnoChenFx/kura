@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -110,7 +109,7 @@ func (c *Config) resolveGitHub(opts *AddOptions) (string, Source, func(), error)
 		args = append(args, "--branch", opts.Ref)
 	}
 	args = append(args, url, tmp)
-	cmd := exec.Command("git", args...)
+	cmd := gitCommand(args...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return "", Source{}, cleanup, fmt.Errorf("store: git clone 失败: %w: %s", err, strings.TrimSpace(string(out)))
@@ -129,7 +128,7 @@ func (c *Config) resolveGitHub(opts *AddOptions) (string, Source, func(), error)
 
 // gitHead 读取 repo 的 HEAD commit（短哈希）。失败返回空串，不阻塞安装。
 func gitHead(dir string) string {
-	cmd := exec.Command("git", "-C", dir, "rev-parse", "HEAD")
+	cmd := gitCommand("-C", dir, "rev-parse", "HEAD")
 	out, err := cmd.Output()
 	if err != nil {
 		return ""
