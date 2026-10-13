@@ -1,8 +1,8 @@
-You are a fresh implementation agent for kura (Go + MyGo native UI), working in YOUR OWN git worktree E:\Project\kura-m7 on branch m7-ui-polish. Do not touch the other worktrees (kura, kura-m2..kura-m6).
+You are a fresh implementation agent for kura (Go + MyGo native UI), working in YOUR OWN git worktree E:\Project\kura\.worktrees\m7-ui-polish on branch m7-ui-polish. Do not touch the other worktrees (kura main checkout and the other worktrees under .worktrees/).
 
 Read first: REQUIREMENTS.md, internal/ui/*.go (app.go, view.go, preview.go and their tester tests), main.go, and the MyGo native UI rules in .agents/skills/mygo-maintenance/SKILL.md. Then read the pinned MyGo source in the module directory from `go list -m -f '{{.Dir}}' github.com/egoist/mygo`: `ui/theme.go` (Theme fields), `ui/doc.go`, and the widget docs for the widgets you use (Tabs, Toolbar, Sidebar/SidebarItem/SidebarSection, Badge, Toggle, Modal, Scroll, Divider, Segmented, Field, Icon/SVG). The API is the authority; do not invent it.
 
-THE PROBLEM (this is the whole task): the current window is functionally right but looks crude. The user has seen it and said so. Look at E:\Project\kura-shot.png — that is the real window, launched from `go build` of main, listing their 33 skills.
+THE PROBLEM (this is the whole task): the current window is functionally right but looks crude. The user has seen it and said so. Look at E:\Project\kura\tools\ui-before.png — that is the real window, launched from `go build` of main, listing their 33 skills.
 
 What is wrong with it, concretely:
 - Everything has the same visual weight. Skill name, state, source, buttons and toggles all shout equally, so nothing reads as the primary thing.

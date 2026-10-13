@@ -1,4 +1,4 @@
-You are a fresh implementation agent for kura (Go + MyGo native UI), working in YOUR OWN git worktree E:\Project\kura-m6 on branch m6-selfupdate. Do not touch the other worktrees (kura, kura-m2..kura-m5).
+You are a fresh implementation agent for kura (Go + MyGo native UI), working in YOUR OWN git worktree E:\Project\kura\.worktrees\m6-selfupdate on branch m6-selfupdate. Do not touch the other worktrees (kura main checkout and the other worktrees under .worktrees/).
 
 Read first:
 - REQUIREMENTS.md, main.go, internal/ui/*.go (the window, incl. the skills "检查更新" action added in milestone 4), mygo.json, go.mod
