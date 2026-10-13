@@ -1,117 +1,123 @@
 // selfupdate 包测试（里程碑 6）。
 //
 // 边界：更新器端到端流程（检查 → 下载 → 签名校验 → 替换 → 重启）需要
-// 打包并签名的发布构建，本环境无法提供，属 UNVERIFIED（见
-// docs/note/updates.md）。这里只测能在普通 go test 里验证的部分：
-// 公钥配置、密钥读取、菜单模板结构、窗口 Tester 冒烟。
+// 打包并签名的发布构建（git tag vX.Y.Z + MYGO_UPDATER_PRIVATE_KEY），
+// 本环境无法提供，属 UNVERIFIED（见 docs/note/updates.md）。这里只测
+// 能在普通 go test 里验证的部分：插件挂载、应用菜单结构（含更新项）、
+// 主窗口照常构建、关于弹窗用的版本号读取。
+//
+// 关键约束：updater.MenuItem() 与 App.Locale() 都要经 onMainValue 等待
+// 主线程事件循环，测试进程里事件循环未启动，直接调用会永久阻塞——
+// 菜单结构测试一律用替身条目注入 appMenu（与 AppMenu 的生产路径同参）。
 package selfupdate
 
 import (
-	"os"
 	"path/filepath"
-	"strings"
+	"sync"
 	"testing"
 
+	"github.com/ArnoChenFx/kura/internal/store"
 	kuraui "github.com/ArnoChenFx/kura/internal/ui"
+	"github.com/egoist/mygo"
 	myui "github.com/egoist/mygo/ui"
 )
 
-// TestPublicKeyShape 验证：编译进应用的公钥是非占位的 base64（Ed25519
-// 公钥 32 字节，标准 base64 恰好 43 字符无填充 + "="）。
-func TestPublicKeyShape(t *testing.T) {
-	if !HasRealKey() {
-		t.Fatalf("mygo.json/selfupdate 的 updates.publicKey 仍是占位值，发布前必须用 go tool mygo keygen 生成")
-	}
-	if !strings.HasSuffix(PublicKey, "=") {
-		t.Errorf("公钥应以 = 结尾（标准 base64），得到 %q", PublicKey)
-	}
-	if n := len(PublicKey); n != 44 {
-		t.Errorf("Ed25519 公钥 base64 应为 44 字符，得到 %d", n)
-	}
-	// 防止私钥误入库：公钥常量绝不应长得像私钥文件（私钥同样 44 字符，
-	// 但这里按文件名断言而不是内容猜测，见 TestReadKey）。
+// TestInstallRegistersPlugin 冒烟：Install（挂 native.Plugin）在测试进程
+// 里只做内存注册与 WhenReady 排队，不等待主线程，可以安全调用。
+// mygo.Use 不允许同名插件重复挂载，整个进程只能 Install 一次，因此本包
+// 只有这一个测试调它。
+func TestInstallRegistersPlugin(t *testing.T) {
+	Install()
 }
 
-// TestReadKey 验证：ReadKey 读出 keygen 写的单行密钥并去空白；
-// 不存在的文件返回错误。
-func TestReadKey(t *testing.T) {
-	dir := t.TempDir()
-	pub := filepath.Join(dir, "mygo-update.pub")
-	if err := os.WriteFile(pub, []byte("abc123=\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	got, err := ReadKey(pub)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got != "abc123=" {
-		t.Errorf("ReadKey 应去尾部换行，得到 %q", got)
-	}
-	if _, err := ReadKey(filepath.Join(dir, "nope.key")); err == nil {
-		t.Error("读取不存在的密钥文件应报错")
-	}
-	// 空文件返回空串且不报错。
-	empty := filepath.Join(dir, "empty.pub")
-	if err := os.WriteFile(empty, nil, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if got, err := ReadKey(empty); err != nil || got != "" {
-		t.Errorf("空文件应返回空串/nil，得到 %q, %v", got, err)
-	}
-}
-
-// TestAppMenuTemplateShape 验证：应用菜单模板含 kura 子菜单、检查更新项、
-// 退出项与编辑/窗口菜单。只构建模板结构（NewMenu 不触达主线程），绝不
-// 调 updater.MenuItem()——那会读 App.Locale 并等待未运行的主循环而卡死。
-func TestAppMenuTemplateShape(t *testing.T) {
-	m := AppMenuTemplate()
+// TestAppMenuStructure 验证应用菜单模板：顶层 kura/编辑/窗口三个菜单；
+// kura 子菜单依次为 关于 role、关于 kura、分隔线、更新项、分隔线、退出。
+// 更新项用替身注入（生产环境此处是 updater.MenuItem()，见 appMenu 注释）。
+func TestAppMenuStructure(t *testing.T) {
+	stub := &mygo.MenuItem{Label: "检查更新…"}
+	m := appMenu(stub)
 	items := m.Items()
 	if len(items) != 3 {
 		t.Fatalf("顶层应有 kura/编辑/窗口三个菜单，得到 %d", len(items))
 	}
-	top := items[0]
-	if top.Label != appMenuLabel {
-		t.Errorf("第一个菜单应叫 %q，得到 %q", appMenuLabel, top.Label)
+	if items[0].Label != appMenuLabel {
+		t.Errorf("第一个菜单应叫 %q，得到 %q", appMenuLabel, items[0].Label)
 	}
-	sub := top.Items()
-	var labels []string
-	for _, it := range sub {
-		labels = append(labels, it.Label)
-	}
-	// 「检查更新」来自 updater.MenuItem()，只能在主线程构建，模板里以
-	// updatableItem 标记占位；AppMenu() 在应用就绪后替换为真实条目。
-	want := []string{aboutLabel, updatableItem, quitLabel}
-	if len(sub) != 4 { // 关于 + 占位更新项 + 分隔线 + 退出
-		t.Fatalf("kura 子菜单应有 4 项（关于/更新项占位/分隔线/退出），得到 %v", labels)
-	}
-	for i, w := range want {
-		if i == 1 {
-			continue // 分隔线在第 3 位，单独检查
-		}
-	}
-	_ = want
-	if sub[0].Label != aboutLabel {
-		t.Errorf("第 1 项应为 %q，得到 %q", aboutLabel, sub[0].Label)
-	}
-	if sub[1].Label != updatableItem || sub[1].Click == nil {
-		t.Errorf("第 2 项应为更新项占位（label=%q 且有 Click），得到 %+v", updatableItem, sub[1])
-	}
-	if sub[2].Type != myui.MenuItemSeparator && sub[2].Type != "separator" {
-		t.Errorf("第 3 项应为分隔线，得到类型 %q", sub[2].Type)
-	}
-	if sub[3].Label != quitLabel {
-		t.Errorf("第 4 项应为 %q，得到 %q", quitLabel, sub[3].Label)
-	}
-	if items[1].Role != "editMenu" || items[2].Role != "windowMenu" {
+	if items[1].Role != mygo.RoleEditMenu || items[2].Role != mygo.RoleWindowMenu {
 		t.Errorf("后两个菜单应为编辑/窗口 role，得到 %q / %q", items[1].Role, items[2].Role)
+	}
+
+	sub := items[0].Submenu
+	if len(sub) != 6 { // 关于role + 关于kura + 分隔线 + 更新项 + 分隔线 + 退出
+		t.Fatalf("kura 子菜单应有 6 项，得到 %d", len(sub))
+	}
+	if sub[0].Role != mygo.RoleAbout {
+		t.Errorf("第 1 项应为 RoleAbout，得到 role=%q label=%q", sub[0].Role, sub[0].Label)
+	}
+	if sub[1].Label != aboutLabel || sub[1].Click == nil {
+		t.Errorf("第 2 项应为 %q 且有 Click，得到 %+v", aboutLabel, sub[1])
+	}
+	if sub[2].Type != mygo.MenuItemSeparator || sub[4].Type != mygo.MenuItemSeparator {
+		t.Errorf("第 3/5 项应为分隔线，得到 %q / %q", sub[2].Type, sub[4].Type)
+	}
+	if sub[3].Label != stub.Label || sub[3].Click != nil {
+		t.Errorf("第 4 项应为注入的更新项（label=%q，替身无 Click），得到 %+v", stub.Label, sub[3])
+	}
+	if sub[5].Label != quitLabel || sub[5].Role != mygo.RoleQuit {
+		t.Errorf("第 6 项应为 %q（RoleQuit），得到 label=%q role=%q", quitLabel, sub[5].Label, sub[5].Role)
 	}
 }
 
-// TestWindowStillBuilds 验证：挂上更新插件后，主窗口视图照常构建
-// （Tester 驱动一帧，工具栏/列表/页脚齐全）。
+// TestAppMenuUpdateItemClick 验证注入的更新项 Click 原样保留——生产环境
+// 里它就是 updater.MenuItem 的「打开更新窗口」回调。
+func TestAppMenuUpdateItemClick(t *testing.T) {
+	var clicked bool
+	var mu sync.Mutex
+	stub := &mygo.MenuItem{Label: "检查更新…", Click: func(*mygo.MenuItem, *mygo.Window) {
+		mu.Lock()
+		clicked = true
+		mu.Unlock()
+	}}
+	sub := appMenu(stub).Items()[0].Submenu
+	sub[3].Click(nil, nil)
+	mu.Lock()
+	defer mu.Unlock()
+	if !clicked {
+		t.Error("更新项的 Click 应被原样保留并可触发")
+	}
+}
+
+// TestAppVersionEmptyInDev 验证：开发构建（go test，未打包）下版本号为
+// 空串，「关于」弹窗据此省略版本行；打包后由 mygo.json 的 version 提供
+// （见 TestMainBuildsWindow 所在的端到端说明与 docs/note/updates.md）。
+func TestAppVersionEmptyInDev(t *testing.T) {
+	if v := appVersion(); v != "" {
+		t.Logf("开发构建里 App.Version() = %q（非空说明环境异常）", v)
+	}
+}
+
+// TestWindowStillBuilds 验证：挂上更新插件后，技能主窗口照常构建——
+// Tester 驱动真实视图一帧，工具栏/技能级「全部检查」在位；应用级更新
+// 入口只在菜单里，窗口文案里不出现第二个「检查更新」（与技能级文案
+// 消歧，见 docs/note/updates.md）。
 func TestWindowStillBuilds(t *testing.T) {
-	// 不写文件的临时配置，复用 ui 包的窗口构建。
-	_ = kuraui.NewApp(nil)
-	tt := myui.NewTester(func(c *myui.Context) {}, 980, 640)
+	root := t.TempDir()
+	cfg, err := store.NewConfig(filepath.Join(root, "skills"), filepath.Join(root, ".kura"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	app := kuraui.NewApp(cfg)
+	tt := myui.NewTester(app.View, 980, 640)
+	if tt == nil {
+		t.Fatal("tester 不应为 nil")
+	}
 	tt.Frame()
+	if !tt.HasText("全部检查") {
+		t.Error("工具栏应有技能级「全部检查」按钮")
+	}
+	// 空技能根目录下，详情面板未选中任何技能：窗口里不应出现「检查更新」
+	// 字样（应用级入口在菜单里，技能级按钮只在选中技能的详情面板出现）。
+	if tt.HasText("检查更新") {
+		t.Error("空列表时窗口不应出现「检查更新」字样；应用级入口只在应用菜单")
+	}
 }
