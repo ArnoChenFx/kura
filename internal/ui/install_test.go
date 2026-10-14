@@ -130,7 +130,8 @@ func TestInstallLocalFolder(t *testing.T) {
 }
 
 // TestInstallGitHubFailureKeepsModalOpen 验证 GitHub 安装失败时弹窗保持打开
-// 并显示原因。PATH 指向空目录，git 必然找不到，因此既不联网也不依赖本机配置。
+// 并显示原因。PATH 指向空目录，git 必然找不到，因此既不联网也不依赖开发机的
+// git 配置。
 func TestInstallGitHubFailureKeepsModalOpen(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 	a, cfg := newTestApp(t)

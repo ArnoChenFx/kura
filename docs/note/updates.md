@@ -12,7 +12,7 @@ kura 自己不写任何下载、校验、替换代码。本文说明各部分如
 ```
 mygo keygen                 生成 Ed25519 密钥对
   ├─ mygo-update.pub(公钥)  → 内容抄进 mygo.json 的 updates.publicKey(可提交)
-  └─ mygo-update.key(私钥)  → 绝不进仓库:本机安全保存 + CI secret
+  └─ mygo-update.key(私钥)  → 绝不进仓库:安全保存原件 + CI secret
                               MYGO_UPDATER_PRIVATE_KEY(存私钥内容本身)
 
 mygo.json                   updates.publicKey + updates.github = "ArnoChenFx/kura"
@@ -48,9 +48,9 @@ kura 这边的三个接点(都在本里程碑落盘):
 CI 侧应把**私钥内容**存为仓库 secret `MYGO_UPDATER_PRIVATE_KEY`(名字与
 mygo 读取的环境变量一致),详见下文「CI 现状」。
 
-> 版本记录:2026-10-13 用 `go tool mygo keygen` 重新生成了一次密钥对——此前
-> `mygo.json` 里的公钥在本机找不到对应私钥(可能是 `-o` 指定的临时目录已随
-> worktree 删除),而当时尚未发布任何 Release、也没有已安装的应用持有旧公钥,
+> 版本记录:2026-10-13 用 `go tool mygo keygen` 重新生成过一次密钥对——此前
+> `mygo.json` 里的公钥已找不到对应的私钥文件（keygen 的 `-o` 指向了临时目录，
+> 随目录删除而丢失），而当时尚未发布任何 Release、也没有已安装的应用持有旧公钥，
 > 换钥零代价。此后请固定使用 keygen 默认目录并做好备份。
 
 ## 用户看到什么

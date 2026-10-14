@@ -15,8 +15,8 @@ import (
 // 错误码表自定义。
 //
 // 特别注意：syscall.EXDEV 在 Windows 不是这个含义（它属于一组为 POSIX 兼容
-// 「发明」的值），本机实测 errors.Is(err, syscall.EXDEV) 对真实的跨卷错误
-// 返回 false，绝不能用 EXDEV 判断。
+// 「发明」的值），errors.Is(err, syscall.EXDEV) 对真实的跨卷错误会返回
+// false（在 Windows 上实测过），绝不能用 EXDEV 判断。
 const errNotSameDevice syscall.Errno = 17 // ERROR_NOT_SAME_DEVICE
 
 // isCrossDevice 判断 err 是否为「源与目标不在同一卷」的移动失败。

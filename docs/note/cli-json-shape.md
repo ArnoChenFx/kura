@@ -18,14 +18,14 @@ future UI（里程碑 2/4 的窗口版）可直接消费。来源代码：`inter
   "root": "C:\\Users\\me\\.agents\\skills",
   "skills": [
     {
-      "name": "yixin-api",
+      "name": "notes-api",
       "state": "enabled",              // enabled | disabled | trashed
       "hasSkillMd": true,
-      "dir": "C:\\Users\\me\\.agents\\skills\\yixin-api",
+      "dir": "C:\\Users\\me\\.agents\\skills\\notes-api",
       "sourceType": "github",          // 来自 meta.source.type
       "sourceUrl": "https://github.com/owner/repo.git",
       "ref": "main",
-      "subPath": "skills/yixin-api",
+      "subPath": "skills/notes-api",
       "pluginName": "mattpocock-skills",
       "updatedAt": "2026-09-06T13:34:08Z",
       "contentHash": "sha256:3301…",
@@ -127,7 +127,7 @@ future UI（里程碑 2/4 的窗口版）可直接消费。来源代码：`inter
 
 ```json
 {
-  "skill": "yixin-api",
+  "skill": "notes-api",
   "sourceType": "github",
   "commit": "3f9c1ab8d2…",               // local 来源无此字段
   "hasChanges": true,

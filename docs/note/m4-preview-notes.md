@@ -29,7 +29,8 @@
 已知取舍：
 
 - 行数统计不感知 git 的 autocrlf；克隆产物与本地内容行尾不一致时会显示为整文件
-  变更。测试里用 `GIT_CONFIG_GLOBAL` 指向空文件隔离了本机 `autocrlf=true`，
+  变更。测试里用 `GIT_CONFIG_GLOBAL` 指向空文件隔离了开发机上的 `autocrlf`
+  设置（该设置为 true 时 clone 会把 LF 转成 CRLF）。
   真实用户场景中 kura 安装的内容与上游 clone 的行尾处理一致，通常不出现。
 - `.kura-meta.json` 与 `.git` 在两侧都跳过（元数据是 kura 自管文件，不属于技能内容）。
 

@@ -106,16 +106,16 @@
   静静存下一张废图）；
 - `tools/capture-multiinstall.ps1` 开头不再 `Remove-Item -Recurse` 整个输出目录，
   只清它自己造的东西（fixtures 与它要写的 PNG），不会再把旁边的截图删掉；
-- 产物：`tools/multiinstall-window/install-candidates.png`。
+- 产物是临时的验证材料，不入库（见下面的验证一节）。
 
 ## 验证
 
 - `go test ./...`（含 `-race`）、`CGO_ENABLED=0 go test ./...`、`go vet ./...`、
   `go tool mygo vet .`、`gofmt`（去掉 CRLF 后逐文件比对）、两个 build 全绿。
 - 真机窗口：`powershell -NoProfile -ExecutionPolicy Bypass -File tools/capture-multiinstall.ps1
-  -Exe build/windows-amd64/kura.exe -OutDir tools/multiinstall-window`
+  -Exe build/windows-amd64/kura.exe -OutDir <输出目录>`
   （隔离 HOME + 本地 bare 仓库经 `insteadOf` 冒充 github，不联网；UI Automation 驱动真实窗口）。
-  产物在 `tools/multiinstall-window/`：`candidates-1-checked.png`（勾选一个、按钮
+  产物（写到 `<输出目录>`，属于临时验证材料、不入库）：`candidates-1-checked.png`（勾选一个、按钮
   `安装选中的 1 个`）、`candidates-2-checked.png` / `multi-installed.png`（勾两个一次装完）、
   `installed.png` 与 `installed-test-driven-development.meta.json`（目录名 `tdd` 的技能按
   frontmatter 的 `name` 装成 `test-driven-development`）、`stale-invalidated.png` /
@@ -123,10 +123,10 @@
 - 无头渲染（`KURA_UI_SHOTS`）：
 
   ```bash
-  KURA_UI_SHOTS=$PWD/tools/multiinstall-window go test -count=1 -run TestRenderInstallCandidatesShot ./internal/ui/
+  KURA_UI_SHOTS=$PWD/<输出目录> go test -count=1 -run TestRenderInstallCandidatesShot ./internal/ui/
   ```
 
-  产物 `tools/multiinstall-window/install-candidates.png`：12 个候选、`共 12 个技能`、
+  产物 `install-candidates.png`（写到 `<输出目录>`）：12 个候选、`共 12 个技能`、
   勾选 2 个、主按钮 `安装选中的 2 个`、限高 8 行的滚动区。注意 `KURA_UI_SHOTS` 是相对
   测试包目录（`internal/ui`）解析的（`shots_test.go` 的既有约定），要写绝对路径才会
   落到仓库根的 `tools/` 下。
@@ -134,7 +134,7 @@
 ## 未验证
 
 - 没有真的联网拉过 38 个技能的仓库（`mattpocock/skills`）再看真机窗口：候选列表的
-  滚动只由 12 候选的无头渲染 `tools/multiinstall-window/install-candidates.png` 与 3 候选
+  滚动只由 12 候选的无头渲染（`TestRenderInstallCandidatesShot` 的产物）与 3 候选
   的真机窗口截图覆盖。
 - 在途改「分支/标签」的真机路径没单独跑：与在途改仓库同一套判据，由
   `TestInstallModalInFlightRepoEditDiscardsDiscovery`（仓库）+

@@ -10,9 +10,10 @@
 kura 是一个**桌面技能管理器**，用 [MyGo](https://github.com/egoist/mygo) 的**原生 `ui` 包**构建，
 无 webview、无 Bun/npm/Node。
 
-- 仓库：`E:\Project\kura`，公开：`github.com/ArnoChenFx/kura`
+- 公开仓库：`github.com/ArnoChenFx/kura`
 - Go module：`github.com/ArnoChenFx/kura`
-- 管理若干个技能根目录：默认的 `~/.agents/skills`（Windows：`C:\Users\ArnoChen\.agents\skills`），
+- 管理若干个技能根目录：默认的 `~/.agents/skills`（Windows 上即
+  `%USERPROFILE%\.agents\skills`），
   外加用户在界面里添加的任意文件夹（多根目录）
 
 **用户目标**：让技能目录好管理、看得清、能恢复，并且应用本身能自更新。
@@ -137,13 +138,13 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools/capture-window.ps1 \
   -Exe <exe绝对路径> -Out <png路径>
 ```
 
-**诚实报告**：说清哪些验证过、哪些没验证。发布产物、签名更新链路这类本机做不到的，
+**诚实报告**：说清哪些验证过、哪些没验证。发布产物、签名更新链路这类本地做不到的，
 要明写「未验证」以及原因，不要含糊成「应该没问题」。
 
 ### 测试隔离（硬要求）
 
 - 测试**只能用 `t.TempDir()` 造的根目录**，**绝不**碰真实的 `~/.agents/skills`、`~/.kura`。
-- 依赖 git 的测试要固定 `GIT_CONFIG_GLOBAL` 等环境，避免受本机配置影响。
+- 依赖 git 的测试要固定 `GIT_CONFIG_GLOBAL` 等环境，避免受开发机 git 配置影响。
 - 不要写会联网的测试（GitHub 取源要在测试里注入/替换；UI 里要测 GitHub 安装的失败路径，用 `t.Setenv("PATH", t.TempDir())` 让 git 找不到）。
 - UI 测试里文件夹选择框 `App.pickFolder` 必须换成假实现，绝不弹出系统对话框。
 - 打开文件/文件夹、在文件管理器里显示、同步原生外观这三个系统调用（`App.openPath` / `reveal` / `setSource`）在 `newAppFor` 里默认换成空实现；要检查调用就用 `fakeShell` / `recordSource`。绝不真的打开窗口或改系统外观。
@@ -155,18 +156,21 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools/capture-window.ps1 \
 - 本仓库 `core.autocrlf=true`：工作区文件带 CRLF，**`gofmt -l .` 会把既有文件全部列出（假阳性）**。
   判断格式是否真有问题：`tr -d '\r'` 之后再比 `gofmt` 输出，或只看你**新增**的文件。
 - 提交时 git 会打印 `LF will be replaced by CRLF` 警告，这是正常的，不是错误。
-- Shell 是 Fork 自带 git 的 bash（`LORCA_SHELL`）。命令默认在 `E:\Project\kura` 下执行。
+- Shell 是 Git for Windows 自带的 bash（`LORCA_SHELL` 指向它）。
+  命令默认在仓库根目录下执行；本文里的相对路径都相对仓库根。
 
 ---
 
 ## 7. Git 与工作区约定
 
 - **默认不提交、不推送**。只有明确要求时才 `git commit` / `git push`；`git push` 需要用户批准。
-- 一个里程碑/任务一个分支，**worktree 必须放在项目内** `E:\Project\kura\.worktrees\<名字>`，
-  **绝不要**在 `E:\Project` 根目录下建 `kura-*` 目录。`/.worktrees/` 已在 `.gitignore` 里。
+- 一个里程碑/任务一个分支，**worktree 必须放在仓库内** `<仓库根>/.worktrees/<名字>`，
+  **绝不要**在仓库的上一级目录下留 `kura-*` 之类的目录。`/.worktrees/` 已在 `.gitignore` 里。
 - **只操作自己的 worktree 与 agent 面板**，不碰用户正在用的会话和其他 worktree。
 - 提交信息用英文，形如 `feat(ui): ...` / `fix(store): ...` / `ci: ...` / `docs: ...`。
 - 临时文件（prompt、日志、截图、watch 脚本）放 `tools/`，不要散落在仓库根或项目外。
+  **`tools/` 里只留可复用的脚本与数据**（截图/验证脚本、demo 程序、评审 brief）；
+  一次性的日志、截图、补丁、备份在任务结束后删掉，不要入库。
 
 ---
 

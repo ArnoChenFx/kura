@@ -63,4 +63,4 @@
 - `internal/ui/install_discover_test.go`：弹窗多候选流程（列表出现 →
   点击候选 → 装上）、唯一候选直装、零候选报错、blob 链接子目录直接装。
   全部本地构造仓库（`symbolic-ref HEAD → refs/heads/main` 保证分支存在，
-  本机 Fork 自带的 git 不支持 `init --branch`）。
+  不用 `init --branch`：部分 git 版本还不支持它）。

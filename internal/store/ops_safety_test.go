@@ -166,7 +166,7 @@ func TestPurgeRejectsSymlinkSnapshot(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := os.Symlink(elsewhere, snap); err != nil {
-		t.Skipf("本机不能建符号链接（Windows 需要开发者模式）: %v", err)
+		t.Skipf("当前环境不能建符号链接（Windows 需要开发者模式）: %v", err)
 	}
 
 	if _, err := base.Purge("linked"); err == nil {

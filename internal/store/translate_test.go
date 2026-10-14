@@ -3,7 +3,7 @@ package store
 // translate_test.go — OpenAI 兼容翻译客户端的测试。
 //
 // 隔离硬要求（AGENTS.md）：**绝不联网**——所有请求都打到 httptest.NewServer
-// 起的本机假服务；不碰用户真实目录；测试里的 key 一律是假值
+// 起的本地假服务；不碰用户真实目录；测试里的 key 一律是假值
 // test-key-not-real，绝不出现在任何真实请求或写盘文件里。
 
 import (

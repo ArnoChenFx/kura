@@ -2,3 +2,7 @@
 /.mygo/
 mygo_windows_*.syso
 /.worktrees/
+
+# tools 下的一次性产物不入库（日志、截图、补丁、备份）
+/tools/*.log
+/tools/**/*.png

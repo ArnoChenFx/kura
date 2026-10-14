@@ -19,7 +19,7 @@ import (
 )
 
 // isolatedGitEnv 把子进程 git 的 global/system 配置重定向到空临时文件：
-//   - 屏蔽用户机器上的 core.autocrlf（本机为 true 时 clone 会把 LF 转成
+//   - 屏蔽用户机器上的 core.autocrlf（它为 true 时 clone 会把 LF 转成
 //     CRLF，导致预览的行级对比在 Windows 上全行不匹配）；
 //   - mirror 的 insteadOf 只落在临时文件里，不污染真实全局配置。
 //   - 环境变量由 t.Setenv 自动还原。
