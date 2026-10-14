@@ -1,82 +1,213 @@
-# kura — v1 requirements
+# kura — requirements
 
-A desktop manager for agent skills, built with [MyGo](https://github.com/egoist/mygo)
-(native `ui` package, no webview).
+kura is a desktop manager for agent skills, built with
+[MyGo](https://github.com/egoist/mygo) (native `ui` package, no webview; no Node,
+Bun or npm).
 
-## Scope of v1
+This file is the requirement of record: what kura must do, the edge cases it must
+handle, and what it deliberately does not do. `AGENTS.md` holds the engineering
+conventions (package boundaries, UI threading, verification commands, test
+isolation); this file wins on questions of behaviour.
 
-Manage the skills in one or more **skill roots**:
+Everything below is implemented unless it is listed in
+[Not implemented, not verified, or limited](#14-not-implemented-not-verified-or-limited).
 
-- the default root: `~/.agents/skills` (Windows: `C:\Users\ArnoChen\.agents\skills`);
-  it is always present and always first in the list
+## 1. Skill roots
+
+kura manages one or more **skill roots**:
+
+- the default root: `~/.agents/skills` (Windows: `%USERPROFILE%\.agents\skills`).
+  It is always in the list and always first; it can be neither removed nor moved.
 - any other folder the user adds in the UI (for example a project's
-  `.claude/skills`); the list lives in `~/.kura/config.json` under `roots`
-- one directory per skill, containing `SKILL.md` plus optional files
+  `.claude/skills`). The list lives in `~/.kura/config.json` under `roots`.
+- one directory per skill, containing `SKILL.md` plus optional files.
 
-Roots are configuration, never constants. Every root keeps its own
-disabled/trash/snapshots state, so same-named skills in different roots never
-interfere. Removing a root from the list only edits `config.json`: the folder
-and the skills in it are left untouched. Copying or syncing skills *between*
-roots is out of scope.
+Roots are configuration, never constants.
 
-## Commands (UI surfaces later; core first)
+- A root must be an existing folder (`ErrNotDir`); adding one that is already in
+  the list is `ErrRootExists`. Both are sentinel errors, judgeable with
+  `errors.Is`.
+- Roots other than the default can be reordered by dragging in the UI. Moving the
+  default root, or moving any root to position 0, is `ErrDefaultRoot`; a root or
+  position that is not in the list is `ErrUnknownRoot`.
+- **Removing a root only edits `config.json`**: the folder and the skills in it
+  are left untouched. Copying or syncing skills *between* roots is out of scope.
+- Every root keeps its own disabled/trash/snapshots state, so same-named skills in
+  different roots never interfere:
 
-Every action works on the selected root.
+  | Root | Disabled / trash / snapshots |
+  | --- | --- |
+  | default (`~/.agents/skills`) | `~/.kura/disabled/`, `~/.kura/trash/`, `~/.kura/snapshots/` (existing layout, no migration) |
+  | an added root | `~/.kura/roots/<id>/disabled/`, `.../trash/`, `.../snapshots/` |
+
+  `<id>` is the first 12 hex digits of the SHA-256 of the normalised root path
+  (`store.RootID`). Two different roots with the same skill name stay apart.
+- The CLI's `--root` reaches the same state when it points at a root from the
+  list: `cli.resolveConfig` goes through `store.Library.Config`.
+- **`config.json` is read-modify-written under `configMu`.** Appearance, view mode
+  and the root list are written by separate background tasks; without the lock
+  they overwrite each other (an auto-discovered root could be dropped for good).
+  Any new writer of `config.json` must take the same lock (`Library.SetTheme`,
+  `SetView`, `updateRoots`, `DiscoverAgentRoots` already do).
+- A corrupt `config.json` must not break the app: `LoadLibrary` returns a list
+  containing only the default root plus an error; the window reports it and stays
+  usable, and the CLI keeps working on the default layout. A hand-edited `theme`
+  or `view` with an unknown value is **not** an error: it falls back to `system`
+  and `grid`.
+
+## 2. Automatic discovery of agent skill directories
+
+- On startup kura adds the agent skill directories that already exist on the
+  machine, without asking per directory. The candidate list is
+  `store.AgentSkillDirs` (`internal/store/agentdirs.go`), relative to the user's
+  home directory, in table order: `.claude/skills` (Claude Code), `.codex/skills`,
+  `.cursor/skills`, `.config/opencode/skills`, `.gemini/skills`,
+  `.gemini/antigravity/skills`, `.copilot/skills`, `.pi/agent/skills`,
+  `.kiro/skills`, `.qwen/skills`, `.codeium/windsurf/skills`, `.roo/skills`,
+  `.trae/skills`, `.config/goose/skills`, `.factory/skills`, `.augment/skills`,
+  `.config/agents/skills`. The default root is not in the list: it is already
+  first.
+- Only paths that exist and are directories are considered. The window shows how
+  many directories were added; finding none stays silent.
+- **Every candidate path is considered exactly once.** The ones seen are recorded
+  in `config.json`'s `discovered`, so a directory the user removed from the list
+  is never added back.
+- A candidate that is already in the list, or resolves (through symlinks) to a
+  directory already in the list, is recorded but not added twice.
+- Nothing new means no write to `config.json`. A corrupt `config.json` makes
+  discovery fail with an error and **no** write: user-edited content is not
+  clobbered.
+
+## 3. Installing skills
+
+A skill is installed into the selected root, from one of two sources:
+
+- a local directory, optionally with a name;
+- a GitHub repository (`owner/repo` or a pasted URL) with an optional
+  subdirectory, ref and name.
+
+Discovery inside a repository (when the user gave no explicit subdirectory):
+
+1. `SKILL.md` at the repository root → the whole repository is one skill.
+2. Otherwise the `skills` array of `.claude-plugin/plugin.json`, when present
+   (`./skills/<category>/<name>` style) — the author's explicit list wins. Entries
+   pointing at missing paths are ignored rather than failing the whole install; a
+   corrupt manifest falls back to scanning.
+3. Otherwise a recursive scan: every directory with a `SKILL.md` is a candidate.
+   `.git`, `node_modules` and build output are skipped; depth is capped at 6 and
+   the candidate count at 64 (`ErrTooManySkills` above that — an explicit error
+   beats silently dropping candidates). The scan does not descend into a
+   directory that already matched.
+
+Installing several skills from one repository at once (`store.AddMany`):
+
+- one clone per batch, one tree lookup for all subdirectories, one sparse
+  checkout — not one per skill;
+- a failure in one item (name clash, subdirectory not in the repository, invalid
+  subdirectory) fails only that item; the error text names the subdirectory;
+- results correspond one-to-one with the requested items;
+- the same subdirectory twice is not deduplicated: the second item fails with a
+  name clash, unless a different name is given (installing the same content under
+  two names is allowed);
+- the UI shows the candidates as a check list (nothing selected by default, with
+  a select-all/none toggle, in a scrolling area capped at 8 rows) and the main
+  button counts the selection. A candidate list belongs to the `owner/repo`+ref
+  it was discovered for: if the user edits the repository field, the stale list is
+  dropped instead of being installed into a different repository, and a discovery
+  result that arrives after the form changed is discarded whole (no implicit
+  install).
+
+Default naming priority: an explicit name (UI field or `--name`) → the `name`
+field of `SKILL.md`'s frontmatter → the source directory name (the repository name
+when the repository root is the skill, so a random temporary clone directory name
+never leaks). A name that cannot be used as a directory name is silently skipped
+in favour of the next candidate: non-empty, not `.` or `..`, no `/` or `\`, no
+`..`, none of `<>:"|?*` or control characters, not ending in a space or a dot,
+and not a Windows device name (`con`, `CON.md`, …). Metadata `id` and
+`displayName` follow the installed name; an existing skill with that name in the
+root is a conflict error.
+
+## 4. Skill state: enable, disable, remove, restore, purge
+
+Disable/enable is a **move**, never a copy and never a flag inside the skill: the
+folder travels between the root and `~/.kura/disabled/`. A name clash at the
+destination is an error, on both directions.
+
+Moving between volumes (for example a root on another drive than `~/.kura` on
+Windows) must work: the move prefers a same-volume rename and falls back to
+"copy into a temporary directory on the target volume → rename into place →
+delete the source"; on failure the temporary directory is cleaned up and the
+source is left untouched.
 
 | Action | Meaning |
 | --- | --- |
-| List | Every skill in the root, with enabled/disabled state, description and source metadata |
-| Add | Install a skill into the root: from a local directory, or from a GitHub source (`owner/repo`, optional subdirectory and ref) |
-| Update | Re-fetch a skill from its recorded source and replace its content (snapshotting the old content first) |
-| Remove | Take a skill out of the root into kura's own trash directory (recoverable) |
-| Disable | Move a skill's folder from the root into `~/.kura/disabled/`; the UI shows a toggle (off) |
-| Enable | Move it back from `~/.kura/disabled/` into the root |
-| Restore | Put a trashed (removed) skill back into the root |
-| Add root / Remove root | Add any folder to the list of roots, or take a non-default root out of the list (never touches the folder) |
+| Remove | snapshot the content, then move the folder to `trash/<name>/<stamp>/` (recoverable) |
+| Restore | move `trash/<name>/<stamp>/` back into the root; without a stamp the newest copy is taken. The emptied `trash/<name>/` container is removed; other stamps of the same skill are kept |
+| Purge | delete every timestamped copy in the trash for good |
 
-Disable/enable is a **move**, never a copy or a flag inside the skill.
+`Purge` is the only irreversible action and has extra requirements:
 
-## Metadata: `.kura-meta.json`
+- it must write a **valid** snapshot for each trash copy before deleting
+  (`snapshots/<name>/<stamp>/`). A snapshot is valid only if it is a real
+  directory (not a symlink or junction), is not empty, and its `HashDir` matches
+  the trash copy. An empty or wrong snapshot is rewritten; a non-empty mismatching
+  one is left alone and the new one goes to `<stamp>-N`. If the snapshot cannot be
+  written, the purge aborts and the trash copy survives; a partially written
+  snapshot is cleaned up.
+- the name must be a single directory name (`ErrInvalidName`), and after
+  resolving symlinks the deletion target must still be inside the trash
+  directory. Otherwise nothing is deleted.
+- snapshots themselves are never deleted: "snapshot before any destructive
+  operation" is the rule, and the snapshot of a purge stays for the record.
+
+## 5. Metadata: `.kura-meta.json`
 
 Written inside each managed skill folder, next to `SKILL.md`:
 
 ```json
 {
   "metaVersion": 1,
-  "id": "yixin-api",
-  "displayName": "yixin-api",
+  "id": "notes-api",
+  "displayName": "notes-api",
   "source": {
     "type": "github",
-    "url": "https://github.com/billionsintelligence/yixin-api.git",
+    "url": "https://github.com/example/notes-skills.git",
     "ref": "main",
-    "subPath": "skills/yixin-api",
+    "subPath": "skills/notes-api",
     "commit": "abc1234",
     "tree": "def5678"
   },
-  "pluginName": "mattpocock-skills",
-  "installedAt": "2026-06-21T04:42:05.890Z",
-  "updatedAt": "2026-09-06T13:34:08.150Z",
+  "pluginName": "example-skills",
+  "installedAt": "2026-01-01T00:00:00.000Z",
+  "updatedAt": "2026-01-02T00:00:00.000Z",
   "contentHash": "sha256:...",
   "notes": ""
 }
 ```
 
-`source.type` is `local` (with `path`) or `github`. `pluginName` is imported from
-the sibling `~/.agents/.skill-lock.json` when the skill is listed there; the lock
-file is read and never rewritten by kura v1. It only describes the default root,
-so "import metadata" is offered for the default root only: the window hides the
-action for other roots, and `store.Config.ImportMeta` and `kura import-meta`
-refuse an added root (exit code 1).
+- `source.type` is `local` (with `path`) or `github`; when the type is `github`,
+  `subPath` is empty if the skill is the repository root itself.
+- `source.commit` and `source.tree` record the upstream commit and the git tree
+  hash of the skill's subdirectory (the repository root tree when there is no
+  `subPath`) at install or update time. They are what makes checking for updates
+  cheap. Metadata written by older versions, or imported from the lock file, has
+  no `tree` and falls back to a per-file comparison — no migration is needed.
+- `pluginName` is imported from the sibling `~/.agents/.skill-lock.json` when the
+  skill is listed there.
+- **`~/.agents/.skill-lock.json` is read-only for kura: read in, never rewritten.**
+  It only describes the default root, so "import metadata" is offered for the
+  default root only: the window hides the action for other roots, and
+  `store.Config.ImportMeta` / `kura import-meta` refuse an added root with
+  `ErrImportDefaultOnly` (CLI exit code 1, including `--dry-run` and `--lock`).
+  Importing only fills in missing metadata: a skill that already has
+  `.kura-meta.json` is skipped, never overwritten.
+- `contentHash` is a SHA-256 over the skill folder's files, with paths sorted and
+  `.kura-meta.json` itself excluded, so an unchanged skill keeps a stable hash and
+  drift can be detected.
+- Broken metadata must never crash the app or a scan: the skill is reported with
+  `metaError`/`MetaErr` and the UI, `doctor` and the CLI stay usable.
 
-`contentHash` is a SHA-256 over the skill folder's files, with paths sorted and
-`.kura-meta.json` itself excluded, so an unchanged skill keeps a stable hash and
-drift can be detected.
-
-`source.commit` and `source.tree` record the upstream commit and the git tree hash
-of the skill's subdirectory (the repository root tree when there is no `subPath`)
-at install or update time. They are what makes checking for updates cheap (below).
-
-## Checking for updates
+## 6. Checking for updates and applying them
 
 The check never relies on local clocks or file times; it compares git object
 hashes, cheapest first, and stops as soon as it can decide:
@@ -84,101 +215,291 @@ hashes, cheapest first, and stops as soon as it can decide:
 1. `git ls-remote` for the recorded `ref` (the default branch when empty). Same
    commit as `source.commit` → up to date, nothing is downloaded.
 2. Otherwise one treeless shallow clone per repository (`--depth 1
-   --filter=blob:none --no-checkout`): fetches the commit and trees, no file
-   contents. Same tree hash for the skill's subdirectory as `source.tree` → up to
-   date (the repository changed elsewhere), still no file contents.
-3. Otherwise (or when the metadata has no `commit`/`tree`, as for skills imported
-   from `.skill-lock.json`) a sparse checkout of just the skill subdirectories
-   and a per-file comparison with the installed content.
+   --filter=blob:none --no-checkout`): the commit and trees, no file contents.
+   Same tree hash for the skill's subdirectory as `source.tree` → up to date (the
+   repository changed elsewhere), still no file contents.
+3. Otherwise (or when the metadata has no `commit`/`tree`) a sparse checkout of
+   just the skill subdirectories and a per-file comparison with the installed
+   content.
 
-Skills from the same repository (same URL and ref) share one `ls-remote`, one
-clone and one sparse checkout, both when checking and when applying updates. A
-`local` source is compared file by file directly. Every git command has a
-timeout, aborts a stalled transfer (below 1 KB/s for 30 s) and never prompts for
-credentials. Steps 1 and 2 compare upstream against what was installed, so a
-locally edited skill is not reported as "has update"; the check flags it as
-locally modified instead (applying an update overwrites the edits, after a
-snapshot).
+- Skills from the same repository (same URL and ref) share one `ls-remote`, one
+  clone and one sparse checkout, both when checking and when applying updates
+  (`PreviewUpdates` / `UpdateMany`; never loop over `PreviewUpdate` / `Update`).
+- A `local` source is compared file by file against the recorded path.
+- Steps 1 and 2 compare upstream against what was installed, so a locally edited
+  skill is not reported as "has update": the check flags it as locally modified
+  (`localModified`) instead. Applying an update still overwrites those edits,
+  after a snapshot.
+- `PreviewUpdate` is strictly read-only: no snapshot, no change to the skill
+  folder or metadata. The window shows the preview as a review panel with one
+  line per changed file (status, path, ±lines, new hash prefix) and applies it
+  only on request; `kura update --check` exits 3 when something would change.
+- Applying an update: snapshot the old content → fetch → replace atomically →
+  refresh `updatedAt`, `commit`, `tree` and `contentHash`. A fetch failure leaves
+  the skill as it was; a successful replacement keeps the snapshot.
+- Every git invocation goes through `runGit` / `gitOutput` (timeout,
+  `GIT_TERMINAL_PROMPT=0`, abort below 1 KB/s for 30 s) and through
+  `gitCommandContext` (`exec_cmd_windows.go` / `exec_cmd_other.go`), which starts
+  git without a console window on Windows. This is the only git entry point;
+  non-test code must not call `exec.Command("git", …)` directly.
 
-## kura's own directories
+## 7. Translations
 
-```
-~/.kura/
-  disabled/<skill>/     # disabled skills, folder + .kura-meta.json
-  trash/<skill>/        # removed skills with a timestamp
-  snapshots/<skill>/<timestamp>/  # pre-update and pre-remove content snapshots
-  roots/<id>/           # the same three directories, for each added (non-default) root
-  config.json           # roots, preferences (theme: system | light | dark)
-```
+Translation exists to make skill text readable in the UI. It is **display only**.
 
-The default root keeps the layout above, so existing data needs no migration.
-`<id>` is the first 12 hex digits of the SHA-256 of the normalised root path.
-The CLI's `--root` reaches the same state when it points at a root from the list.
+- Settings live in `~/.kura/settings.json` (`baseUrl`, `apiKey`, `model`,
+  `targetLang`), read and written only through `store.LoadSettings` /
+  `SaveSettings`. The API key is stored **in plain text** with file permissions
+  `0600`: the user's explicit choice for a local single-user app — no system
+  credential manager, no encryption. The key must never appear in logs, error
+  messages, test fixtures or any exported file.
+- There is one global target language. `store.NormalizeTargetLang` maps known
+  inputs to canonical codes (`zh`→`zh-CN`, `en-US`, `ja`, `fr`, …); an unknown
+  value is `ErrUnknownLang` and is **not** guessed. An empty value means
+  `zh-CN`.
+- No request is made unless `Settings.Ready()` (base URL, key and model all set);
+  otherwise the UI guides the user to the settings dialog and
+  `ErrNotConfigured` is returned. The HTTP client is OpenAI-compatible
+  (`/chat/completions`), standard library only, with the caller's timeout and
+  cancellation; responses are capped (10 MB) and non-2xx bodies are truncated to
+  512 bytes in the error.
+- `SKILL.md` is translated paragraph by paragraph: `SplitForTranslation` splits at
+  blank lines and never inside a fenced code block (``` or ~~~, CommonMark
+  rules — an indented code block is not a fence). The system prompt requires
+  fenced code, front matter and identifiers to be kept verbatim.
+- **Translations live in memory only** (`internal/ui/translate.go`'s
+  `translateState.items`, keys such as `card:<skill>:description`). Nothing is
+  written into a skill folder: no `SKILL.md` edit, no `.kura-meta.json` change, no
+  cache file on disk. The UI never goes blank: while a translation is missing it
+  shows the original text.
+- Changing the translation settings bumps `translateState.epoch` and cancels the
+  context of in-flight requests; results that come back afterwards are discarded,
+  never mixed with the new settings.
 
-## Window
+## 8. The window
 
 Three columns:
 
-1. **Skill roots** (left): the default root plus every folder the user added,
-   each with its enabled-skill count, and "Add folder" (system folder picker).
-2. **Skill cards** (middle): a responsive grid with several cards per row. A card
-   shows the name, the source (`owner/repo` or local), the two-line
-   `description` from `SKILL.md`, tags (update available, disabled, broken
-   metadata, missing `SKILL.md`) and the enable switch. Above the grid: search
-   (name and description) and filter tabs All / Enabled / Disabled / Trash, each
-   with its count ("All" does not include the trash). Header actions: refresh,
-   check all for updates, import metadata (default root) or remove from list
-   (other roots), and **Install skill**.
-3. **Detail** (right, only while a card is selected): name, state, description,
-   metadata, location and the actions (check update, disable/enable, trash or
-   restore).
+1. **Skill roots** (left): the default root plus every folder the user added, each
+   with its enabled-skill count, plus "add folder" (system folder picker). Roots
+   can be dragged to reorder (the default stays first).
+2. **Skill cards** (middle): the skills of the selected root. A card shows the
+   name, the source (`owner/repo` or local), the two-line `description` from
+   `SKILL.md`, tags (update available, disabled, trashed, broken metadata, missing
+   `SKILL.md`) and the enable switch. Above the grid: search (name, description
+   and display name), filter tabs All / Enabled / Disabled / Trash with counts
+   ("All" means enabled + disabled and never includes the trash), and the layout
+   switch. Header actions: refresh, check all for updates, import metadata
+   (default root) or remove from list (added roots), install skill.
+3. **Detail** (right, only while a skill is selected): name, state, description,
+   metadata, location and the actions. Two tabs: overview and full text. The full
+   text renders the `SKILL.md` Markdown (headings, lists, fenced code, quotes,
+   rules and inline code/bold/italic/strikethrough/links; unknown structures
+   degrade to a paragraph; the source is capped and never makes the UI panic).
+   The text is loaded in the background and cached per skill name; a scan
+   invalidates the cache.
 
-**Context menus** are the system's native menus, opened with the secondary mouse
-button (they do not show up in screenshots):
+Requirements:
 
-- a skill card: open the folder, show it in the file manager, open `SKILL.md`
-  (greyed out when the skill has none), copy the path; below a separator the
-  actions that fit the card's state: an enabled skill can be disabled, checked for
-  updates or moved to the trash, a disabled one enabled or moved to the trash, a
-  trashed one restored. Right-clicking a card selects it first, so the menu always
-  acts on the skill the detail column shows. The state-changing items are greyed
-  out while the skill is busy; moving to the trash still asks for confirmation.
-- a root in the left column: open the folder, copy the path and, for an added root
-  only, remove it from the list (never touches the folder). Right-clicking a root
-  does not switch to it.
+- Skills are sorted by name, case-insensitively; disabled skills are mixed in
+  rather than pushed to the bottom, because state is expressed by the card's
+  switch and tags.
+- The selection is tracked **by skill name** (the grid uses an index only as a
+  view detail). Hiding the selected skill with a filter leaves the detail column
+  as it is.
+- Column widths are draggable (left 168–420, detail 260–560 DIP, middle at least
+  300). When the window is too narrow the two side columns give way together
+  without changing the user's preference, and the dragged widths come back when
+  the window grows.
+- Card grid or two-line list, chosen by the user and remembered in `config.json`
+  as `view` (`grid` default).
+- **Context menus are the system's native menus.** A skill card: open the folder,
+  show it in the file manager, open `SKILL.md` (greyed out when there is none),
+  copy the path, then the actions that fit the card's state (disable, check for
+  updates, move to the trash, enable, restore). Right-clicking a card selects it
+  first, so the menu always acts on the skill the detail column shows. A root:
+  open the folder, copy the path and — for added roots only — remove it from the
+  list; right-clicking a root does not switch to it. State-changing items are
+  greyed out while the skill is busy; moving to the trash and purging ask for
+  confirmation.
+- **Appearance** is follow the system (default) / light / dark, applied at once,
+  saved as `theme` in `config.json` and given to MyGo so the native title bar and
+  system menus match. Switching goes through `SetThemeAsync`: the skin changes
+  immediately, the write and `mygo.Theme.SetSource` happen in the background, and
+  a failure is only reported in the status line (the skin is not rolled back).
+  Consecutive switches keep only the newest. `main.go` calls `app.SyncTheme()`
+  before `App.Run`.
+- The view switch (`SetViewAsync`) follows the same pattern: change now, write in
+  the background, report failures in the status line only, do not roll back.
+- **The window has no system title bar.** kura draws its own bar, 40 DIP tall (the
+  larger of `c.TitleBar().Height` and 40, so the bar does not collapse when the
+  window buttons are hidden),
+  with padding from `c.TitleBar()`'s `Left`/`Right` so it does not collide with
+  the system window buttons. The whole bar drags the window (double-click =
+  maximise/restore) and contains **no interactive elements**, because they would
+  swallow the drag gesture.
+- Text the user may want to select and copy lives in a `Selectable()` container,
+  and controls inside such a container must be `Unselectable()`.
+- All colours come from `internal/ui/theme.go` (`kuraScheme` / `palette`); view
+  code contains no hex literals. The palette is a near-neutral charcoal base with
+  bordered cards, three grey text levels, mint toggles and one muted periwinkle
+  accent. Saturated indigo/violet is explicitly unwanted.
 
-**Appearance** is a switch at the foot of the left column: follow the system
-(default) / light / dark. The choice applies at once, is saved as `theme` in
-`~/.kura/config.json` (`system`, `light` or `dark`; a missing or unknown value
-means `system`) and is also given to MyGo, so the native title bar and system
-menus match.
+### UI thread contract (the easiest thing to get wrong)
 
-**Install skill** is a dialog: a GitHub repository (`owner/repo` or a pasted URL,
-optional subdirectory, ref and name) or a local folder (system picker, optional
-name). It installs into the selected root.
+- Views may be rebuilt several times per event: side effects belong to a handled
+  action or an explicitly guarded task, never to an unconditional render path.
+- Slow I/O and heavy computation never run on the UI thread; results are
+  published back with `Window.Update`.
+- Elements and widgets are invalid after the next build: store app data, widget
+  state and `ui.Handle`s — never elements.
+- After a state change, request a redraw with `Invalidate` instead of writing the
+  model and querying it in the same build.
+- A background task records `App.gen` when it starts and, when it publishes,
+  drops the result if `gen != a.gen` (the root changed meanwhile). Every new
+  background path must do the same (`publishAfterWork`, `reload`).
+- A widget's bound value is only written at the end of a build or when its
+  response is queried; segment controls use `Track.Changed()` and switches use
+  `Changed()` to see the new value in the same build.
 
-Look: a dark, low-contrast palette taken from the reference screenshot (near
-neutral charcoal base, slightly lighter bordered cards, three grey text levels,
-mint toggles) with one muted periwinkle accent used sparingly; the light skin
-keeps the same hues, with the accent darkened just enough for contrast and kept
-as desaturated as the dark one. Saturated indigo/violet is explicitly unwanted.
-All colours live in `internal/ui/theme.go`.
+## 9. Command line
 
-Interaction feedback: a card is ringed once, by its own border (the grid draws
-nothing around it), and brightens on hover; the toggle's track tints and its knob
-gets a halo on hover, stretches while pressed, and rings on keyboard focus; the
-pointer becomes a hand over a toggle.
+`cmd/kura` is a headless binary over the same `internal/store`. `cli.Run` returns
+an exit code and **never** calls `os.Exit`; `cmd/kura/main.go` owns the exit.
 
-## Non-goals for v1
+| Command | Behaviour |
+| --- | --- |
+| `list` / `scan` | every skill of the root (enabled, disabled and trashed) with state, description and metadata |
+| `disable NAME` / `enable NAME` | move between the root and `disabled/` |
+| `remove NAME [--stamp TS]` / `restore NAME [--stamp TS]` | move into / out of the trash; `--stamp` picks the timestamped copy |
+| `import-meta [--dry-run] [--lock PATH]` | fill missing metadata from `.skill-lock.json`; default root only |
+| `add --local PATH [--name N]` / `add --github owner/repo [--sub-path P] [--ref R] [--name N]` | install one skill |
+| `update NAME` | re-fetch the recorded source and replace the content (snapshot first) |
+| `update --check NAME` / `update --check --all` | preview the changes without touching anything; exit 3 when something would change |
+| `doctor` | read-only health check |
+| `version`, `help` | version, usage |
+
+- Exit codes are fixed: `0` success, `1` operation failed (unknown skill, name
+  clash, IO error, …), `2` usage error (unknown command, flag parse failure, wrong
+  argument count), `3` `doctor` found problems or `update --check` found pending
+  updates.
+- `doctor` kinds (a stable contract): `not-a-dir`, `no-meta`, `meta-parse`,
+  `hash-drift`, `no-skillmd`, `leftover`.
+- Every command accepts `--json`: machine-readable output on stdout, errors as
+  `{"error": "..."}` on stderr. Fields are only ever added — never renamed,
+  never removed — and the shapes are documented in
+  [docs/note/cli-json-shape.md](docs/note/cli-json-shape.md).
+- `--root` / `--home` (and the environment variables `KURA_ROOT` / `KURA_HOME`)
+  may appear before or after the subcommand; flags win over the environment. A
+  `--root` that is an added root uses that root's private state.
+- Multiple candidates from one repository are a failure for `add` (exit 1) with
+  the candidate list in the output (`--json`: `{"error", "repo", "candidates"}`);
+  `--sub-path` installs exactly that one.
+
+## 10. Application self-update
+
+kura does not implement downloading, verifying or replacing itself; MyGo's updater
+plugin does (native update window, no webview).
+
+- `internal/selfupdate.Install()` mounts `native.Plugin` before `mygo.App.Run()`
+  (once per process); the automatic check runs once a day and the preference lives
+  in the updater's own `updater.json`, which the user can change in the window.
+- `internal/selfupdate.AppMenu()` (from the `WhenReady` callback, on the main
+  thread) builds the app menu: the kura submenu (About, "check for updates",
+  quit) plus the standard Edit and Window roles so the usual shortcuts survive.
+- Updates are verified with Ed25519 against the public key compiled in from
+  `mygo.json`'s `updates.publicKey`; the private key exists only as the CI secret
+  `MYGO_UPDATER_PRIVATE_KEY` and must never enter the repository.
+- **`mygo.json`'s `version` is the only source of the application version.**
+  `internal/cli` carries its own `Version` constant for the separate CLI binary;
+  it is not part of self-update and is kept in sync by hand. Release tags are `v` +
+  the application version, and `.github/workflows/release.yml` fails when the tag
+  and the version disagree. A release also needs a `## <version>` section in
+  `CHANGELOG.md`, which becomes the release notes shown in the update window.
+- The release workflow builds every platform with
+  `go tool mygo build -platform <target> -upload`: installers, update archives,
+  deltas and the `update-<target>.json` manifests, which carry a signature for the
+  archive and for every delta. The manifests go last, so the app never reads a
+  manifest pointing at a missing file. Deltas are built against the last three
+  published versions (`updates.deltas`; `0` disables).
+- Development builds and package-manager copies do not self-update; the update
+  window explains why. `internal/cli.Version` is the CLI's own version and is not
+  part of self-update; it is kept in sync with `mygo.json` by hand.
+
+## 11. kura's own directories
+
+```
+~/.kura/
+  disabled/<skill>/              # disabled skills (folder + .kura-meta.json)
+  trash/<skill>/<stamp>/         # removed skills, recoverable
+  snapshots/<skill>/<stamp>/     # content snapshots from before an update or a removal
+  roots/<id>/                    # disabled/ trash/ snapshots/ for each added root
+  config.json                    # roots, preferences (theme: system|light|dark; view: grid|list)
+  settings.json                  # translation API and global target language (plaintext key, 0600)
+```
+
+Plus, outside `~/.kura`:
+
+- `~/.agents/skills/` — the default root (Windows:
+  `%USERPROFILE%\.agents\skills`);
+- `~/.agents/.skill-lock.json` — read-only input for `kura import-meta`;
+- `<skill>/.kura-meta.json` — per-skill metadata.
+
+## 12. Verification and acceptance
+
+A change is done only when these are green (the exact commands are in `AGENTS.md`):
+`gofmt -l .` (empty), `go vet ./...`, `go tool mygo vet .`, `go test ./...`,
+`CGO_ENABLED=0 go test ./...`, `CGO_ENABLED=0 go build ./...` and
+`go tool mygo build -platform windows/amd64`.
+
+- Shared state changes are additionally tested with `-race`.
+- A layout or platform-behaviour change must be checked in a **real window**
+  (`tools/capture-window.ps1`), not only in tests.
+- UI failures are reproduced with `ui.NewTester`, including the extra frames after
+  an element disappears.
+- Test isolation is mandatory: tests use roots created with `t.TempDir()` and must
+  never touch the real `~/.agents/skills` or `~/.kura`; git-dependent tests pin
+  `GIT_CONFIG_GLOBAL` and friends; no test may use the network (a GitHub path is
+  tested by pointing `PATH` at an empty directory, or with a local repository
+  rewritten through `insteadOf`).
+- In UI tests `App.pickFolder` is a fake and never opens a system dialog, and the
+  three system calls `App.openPath` / `reveal` / `setSource` are replaced with
+  no-ops (`newAppFor`); tests that need to observe them inject `fakeShell` /
+  `recordSource`. Never really open a window or change the system appearance.
+- Reports state honestly what was verified and what was not.
+
+## 13. Non-goals
 
 - Editing `SKILL.md` text inside kura
-- Syncing to `.claude/skills` or other mirrors (see open question 2)
+- Syncing to `.claude/skills` or other mirrors
 - Uploading a skill back to GitHub
 - Skill dependency resolution
+- Copying or syncing skills between roots (adding and managing several roots is
+  supported)
 
-## Milestones
+## 14. Not implemented, not verified, or limited
 
-1. **Core store** — scan/parse/write meta, hashes, config, enable/disable/remove/restore/add/update as a package with tests. No UI.
-2. **List UI** — native window listing skills with toggle + search.
-3. **Actions UI** — add/update/remove flows, progress, errors.
-4. **Diff + polish** — show upstream diff (github.com/egoist/godiff), icons, packaging.
+- **End-to-end self-update is not verified**: an installed app discovering a new
+  release from the GitHub manifest, downloading it, verifying the signature,
+  replacing itself and restarting has never been exercised end to end. The
+  release v0.1.3 does publish the manifests, update archives and deltas, so the
+  publishing half exists; the client half is untested
+  ([docs/note/updates.md](docs/note/updates.md)).
+- **Delta updates are not verified in use**: delta files are produced and
+  published (`kura-<from>-to-<to>-<platform>.delta`), but whether an installed app
+  actually picks a delta over the full archive has not been observed.
+- **macOS builds are unsigned and not notarised.** `mygo.json` sets no `macos`
+  section, so MyGo falls back to an ad-hoc signature (`-`) and runs no notary
+  step; no Developer ID signing happens in CI either. macOS will therefore warn
+  before the first launch. Windows builds carry no Authenticode signature, so
+  SmartScreen may warn as well.
+- The window's user-visible text is Chinese only.
+- The update preview's line counts do not account for git's `autocrlf`: when the
+  cloned content and the local content differ in line endings, a file is shown as
+  fully changed ([docs/note/m4-preview-notes.md](docs/note/m4-preview-notes.md)).
+- The multi-skill install candidate list has only been checked with a 12-candidate
+  headless render and a 3-candidate real window, not with a real repository of
+  ~38 skills ([docs/note/multi-select-install.md](docs/note/multi-select-install.md)).
+- Windows device-name handling in `validSkillDirName` is deliberately
+  conservative: on other platforms it falls back to the directory name more often
+  than strictly necessary, and it has not been exercised on other platforms.
