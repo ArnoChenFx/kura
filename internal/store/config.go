@@ -151,6 +151,10 @@ type HomeConfig struct {
 	// View 是技能区的排列模式：ViewGrid（卡片网格）或 ViewList（两行列表）；
 	// 空串等同卡片网格。
 	View string `json:"view,omitempty"`
+	// Discovered 记录已经考虑过的 agent 技能目录（绝对路径）。自动发现
+	// （Library.DiscoverAgentRoots）每个路径只考虑一次：用户之后从列表移除的
+	// 目录记在这里，下次启动不会被再次加回来。
+	Discovered []string `json:"discovered,omitempty"`
 	// CreatedAt 是配置首次创建时间（RFC3339）。
 	CreatedAt string `json:"createdAt,omitempty"`
 }

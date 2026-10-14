@@ -120,4 +120,15 @@ func TestRenderDesignShots(t *testing.T) {
 			tt.Key(0, myui.KeyTab)
 		}
 	})
+	// 译文 + 全文：译文模式下打开全文页。译文来自假翻译（前缀「[译]」），只为看版式。
+	render("10-fulltext-translated", 1280, 800, func() {
+		f := &fakeTranslator{}
+		a.translate = f.translate
+		a.settings = trReadySettings()
+		a.selName, a.filter, a.install = "yixin-api", filterAll, installState{}
+	}, func(tt *myui.Tester) {
+		// detClickTab 完整跑两轮（全文先读盘、再翻译），截图才是译文而不是「翻译全文中…」。
+		detClickTab(t, a, tt, "译文")
+		detClickTab(t, a, tt, detailTabFull)
+	})
 }

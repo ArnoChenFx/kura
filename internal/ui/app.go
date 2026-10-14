@@ -8,10 +8,12 @@
 package ui
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -21,10 +23,12 @@ import (
 	myui "github.com/egoist/mygo/ui"
 )
 
-// confirmState 是“移入回收站”确认框的状态。
+// confirmState 是确认框的状态：移入回收站（purge 为假）或从回收站永久删除
+// （purge 为真）共用一个框，由 purge 决定文案与最终动作。
 type confirmState struct {
-	open bool
-	name string
+	open  bool
+	name  string
+	purge bool
 }
 
 // App 是 kura 主窗口的状态。View 由 MyGo 在主线程反复调用，
@@ -33,12 +37,20 @@ type App struct {
 	lib        *store.Library // 全部技能目录
 	libErr     string         // 读取/保存目录列表的错误（config.json 损坏等）
 	cfg        *store.Config  // 当前选中目录的配置
-	rootSel    string         // 左栏选中的目录（绑定 Sidebar），与 cfg.Root 不同时切换
+	rootSel    string         // 左栏选中的目录，与 cfg.Root 不同时切换
 	gen        int            // 目录切换代数：切换后丢弃旧目录的后台结果
 	rootCounts map[string]int // 每个目录根下在用技能数（左栏徽标）
 	adding     bool           // 正在选择/添加文件夹
-	win        *mygo.Window
-	path       string // 导入元数据用的 .skill-lock.json 路径，空为默认位置
+	// rootsW 与 detailW 是用户拖出来的左栏与详情栏宽度偏好（DIP），由两侧的
+	// 分割线拖动改变；窗口放不下时并不改它们，而是每帧按可用宽度夹紧出实际
+	// 宽度 rootsEff / detailEff（见 fitWidths），窗口再变宽时偏好自然恢复。
+	// 中栏占剩余宽度。bodyW 是本帧窗口内容的宽度（c.Size）。都只在内存里，
+	// 重启后回到默认宽度。
+	rootsW, detailW     float32
+	rootsEff, detailEff float32
+	bodyW               float32
+	win                 *mygo.Window
+	path                string // 导入元数据用的 .skill-lock.json 路径，空为默认位置
 
 	// pickFolder 弹出系统的文件夹选择框，返回所选路径（取消为空串）。
 	// 会阻塞，只在后台 goroutine 里调用；测试里替换为假实现。
@@ -100,7 +112,8 @@ type App struct {
 
 	// 翻译设置与译文（翻译只用于界面显示，绝不写技能目录，见 translate.go）。
 	// settings 是 ~/.kura/settings.json 的内存副本：只在 UI 线程写，写时持
-	// settingsMu；生产的 translate 闭包在后台 goroutine 里读它，持读锁。
+	// settingsMu。翻译任务在 UI 线程发起时拷走一份传给 translate，后台
+	// goroutine 不直接读它。
 	settings        store.Settings
 	settingsLoaded  bool          // 设置读取成功（文件不存在也算，得到零值）
 	settingsErr     string        // 读取 settings.json 的错误（JSON 损坏等）
@@ -109,9 +122,10 @@ type App struct {
 	settingsWriteMu sync.Mutex    // 串行化写 settings.json
 	settingsUI      settingsState // 设置弹窗
 	trans           *translateState
-	// translate 调用翻译 API；生产实现走 (a.settings).Translate。测试注入假
+	// translate 用设置 s 调用翻译 API；生产实现走 s.Translate。设置由任务
+	// 发起时在 UI 线程固定下来，同一任务的所有请求用同一套配置。测试注入假
 	// 实现，绝不联网。只在后台 goroutine 里调用（会阻塞）。
-	translate func(ctx context.Context, text string) (string, error)
+	translate func(ctx context.Context, s store.Settings, text string) (string, error)
 
 	// spawn 在后台运行 fn：生产环境为 go fn()。
 	spawn func(func())
@@ -132,7 +146,8 @@ type App struct {
 // cfg.Root 是默认技能目录；其余目录从 cfg.Home 下的 config.json 读取。
 // 目录列表损坏不致命：只显示默认目录，并在界面上报告错误。
 func NewApp(cfg *store.Config) *App {
-	a := &App{selIdx: -1, syncIdx: -1, busy: map[string]bool{}, rootCounts: map[string]int{}, updates: map[string]bool{}}
+	a := &App{selIdx: -1, syncIdx: -1, busy: map[string]bool{}, rootCounts: map[string]int{}, updates: map[string]bool{},
+		rootsW: rootsWidth, detailW: detailWidth}
 	lib, err := store.LoadLibrary(cfg)
 	if err != nil {
 		a.libErr = err.Error()
@@ -152,13 +167,8 @@ func NewApp(cfg *store.Config) *App {
 		a.settings, a.settingsLoaded = *st, true
 	}
 	a.trans = newTranslateState()
-	a.translate = func(ctx context.Context, text string) (string, error) {
-		// 读的是最新的 a.settings（保存设置后立即生效）；拷贝一份再调用，
-		// 请求期间不持锁。
-		a.settingsMu.RLock()
-		cur := a.settings
-		a.settingsMu.RUnlock()
-		return cur.Translate(ctx, text)
+	a.translate = func(ctx context.Context, s store.Settings, text string) (string, error) {
+		return s.Translate(ctx, text)
 	}
 	a.grid.Selected = &a.selIdx
 	a.grid.Key = func(i int) any {
@@ -246,8 +256,10 @@ func filterState(f int) store.State {
 	return ""
 }
 
-// visible 返回按状态筛选与搜索词过滤后的技能。「全部」不含回收站：
-// 回收站里的技能只在「回收站」筛选下出现，避免与在用技能混在一起。
+// visible 返回按状态筛选与搜索词过滤后的技能，按名字排序（不区分大小写）。
+// 停用的技能与启用的混排，不沉到最后：状态只靠卡片上的开关与标签表达。
+// 「全部」不含回收站：回收站里的技能只在「回收站」筛选下出现，避免与在用技能
+// 混在一起。
 func (a *App) visible() []*store.Skill {
 	q := strings.ToLower(strings.TrimSpace(a.query))
 	want := filterState(a.filter)
@@ -262,6 +274,9 @@ func (a *App) visible() []*store.Skill {
 			rows = append(rows, s)
 		}
 	}
+	slices.SortStableFunc(rows, func(x, y *store.Skill) int {
+		return cmp.Or(cmp.Compare(strings.ToLower(x.Name), strings.ToLower(y.Name)), cmp.Compare(x.Name, y.Name))
+	})
 	return rows
 }
 
@@ -441,6 +456,14 @@ func (a *App) RestoreAsync(name string) {
 	})
 }
 
+// PurgeAsync 从回收站永久删除技能 name（后台执行；删除前 store 先写快照）。
+func (a *App) PurgeAsync(name string) {
+	a.runOp(name, "正在永久删除 "+name+"…", "已永久删除 "+name, func(cfg *store.Config) error {
+		_, err := cfg.Purge(name)
+		return err
+	})
+}
+
 // runOp 在后台对当前目录的技能 name 执行 op：同一技能同时只跑一个操作，
 // 期间显示 busy；完成后重新扫描并在状态行报告结果。
 func (a *App) runOp(name, doing, okMsg string, op func(*store.Config) error) {
@@ -535,6 +558,54 @@ func (a *App) RemoveRootAsync(root string) {
 				a.SelectRoot(lib.Default())
 			}
 			a.status, a.statusErr = "已从列表移除 "+root+"（文件夹未改动）", false
+		})
+	})
+}
+
+// ReorderRootAsync 把目录 root 挪到列表里的第 to 个位置（后台写 config.json）。
+// 默认目录固定在第一个，由 store.Library.MoveRoot 保证。
+func (a *App) ReorderRootAsync(root string, to int) {
+	lib := a.libCopy()
+	a.spawn(func() {
+		err := lib.MoveRoot(root, to)
+		a.publish(func() {
+			if err != nil {
+				a.status, a.statusErr = err.Error(), true
+				return
+			}
+			a.lib = lib
+		})
+	})
+}
+
+// DiscoverAgentRootsAsync 在后台把本机已有的 agent 技能目录加入列表（见
+// store.Library.DiscoverAgentRoots，不逐个确认）。home 为空时什么也不做。
+// 新加入的目录在后台统计它的在用技能数，结果回到 UI 线程后再换上列表，
+// 状态行说明加入了几个；没有新目录时保持安静。
+func (a *App) DiscoverAgentRootsAsync(home string) {
+	if home == "" {
+		return
+	}
+	lib := a.libCopy()
+	a.spawn(func() {
+		added, err := lib.DiscoverAgentRoots(home)
+		counts := make(map[string]int, len(added))
+		for _, r := range added {
+			counts[r] = lib.Config(r).CountEnabled()
+		}
+		a.publish(func() {
+			if err != nil {
+				a.status, a.statusErr = "自动发现技能目录失败："+err.Error(), true
+				return
+			}
+			if len(added) == 0 {
+				return
+			}
+			a.lib = lib
+			for r, n := range counts {
+				a.rootCounts[r] = n
+			}
+			a.status, a.statusErr = fmt.Sprintf("已自动加入 %d 个 agent 技能目录", len(added)), false
 		})
 	})
 }

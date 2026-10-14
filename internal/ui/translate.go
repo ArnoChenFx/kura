@@ -9,14 +9,15 @@ package ui
 //   - 目标语言是全局一个（设置里选），不是每个技能单独选。
 //   - 渲染路径只读缓存；网络请求只经 TranslateAsync 进后台 goroutine。
 //
-// 翻译策略（取舍）：只翻译「当前选中的技能」的描述——它在右栏详情与中栏
-// 它自己的那张卡片（或列表行）里各出现一次，共用同一次请求。其余卡片在
-// 译文模式下继续显示原文，不为整页几十张卡片一次性打爆翻译 API；切换选中
-// 后新选中的技能才发起翻译，已翻过的命中缓存、不再请求。全文页（SKILL.md
-// 正文）本次不翻译。
+// 翻译策略（取舍）：只翻译「当前选中的技能」——描述在右栏详情与中栏它自己的
+// 那张卡片（或列表行）里各出现一次，共用同一次请求；「全文」页在选中后逐段翻译
+// 整份 SKILL.md（见 TranslateDocAsync）。其余卡片在译文模式下继续显示原文，不为
+// 整页几十张卡片一次性打爆翻译 API；切换选中后新选中的技能才发起翻译，已翻过的
+// 命中缓存、不再请求。
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -33,6 +34,19 @@ const (
 	translateDetailPrefix = "detail:"
 	translateDescSuffix   = ":description"
 )
+
+// docChunkRunes 是全文翻译每段的大致上限（字符数）：切分只在空行处进行，超过
+// 上限的单个块整块发送（见 store.SplitForTranslation）。
+const docChunkRunes = 1800
+
+// 全文译文的 key：每个技能一份，形如 "doc:<技能名>:full"。
+const (
+	translateDocPrefix = "doc:"
+	translateDocSuffix = ":full"
+)
+
+// docTransKey 是技能全文译文的 key。
+func docTransKey(name string) string { return translateDocPrefix + name + translateDocSuffix }
 
 // cardDescKey / detailDescKey 是技能描述在卡片与详情里的翻译 key。
 func cardDescKey(name string) string   { return translateCardPrefix + name + translateDescSuffix }
@@ -62,6 +76,19 @@ type translateState struct {
 	// epoch 随 reset 递增：翻译配置（接口、密钥、模型、目标语言）变了，
 	// 旧配置下还在路上的请求结果不能写进新缓存（见 App.TranslateAsync）。
 	epoch int
+	// ctx 属于当前 epoch，reset 时取消并换新：后台任务在 UI 线程发起时拿到它，
+	// 每段请求之前检查、并用它派生请求的 context，配置一变，剩下的段不再
+	// 发出，在途的请求也被中断（后台 goroutine 不读 epoch 本身）。
+	ctx    context.Context
+	cancel context.CancelFunc
+}
+
+// current 返回当前 epoch 的 context（惰性创建）。只在 UI 线程调用。
+func (s *translateState) current() context.Context {
+	if s.ctx == nil {
+		s.ctx, s.cancel = context.WithCancel(context.Background())
+	}
+	return s.ctx
 }
 
 // newTranslateState 创建空的翻译状态（默认显示原文）。
@@ -136,6 +163,10 @@ func (s *translateState) clearErrors() {
 func (s *translateState) reset() {
 	s.items = map[string]translateEntry{}
 	s.epoch++
+	if s.cancel != nil {
+		s.cancel()
+	}
+	s.ctx, s.cancel = nil, nil
 }
 
 // descText 返回技能描述在界面上应显示的文本：译文模式下用缓存的译文（拿
@@ -178,7 +209,8 @@ func (a *App) ensureTranslations(s *store.Skill) {
 //
 //   - 发起前先在 UI 线程 begin 占位 pending：同一 key 同一原文只发一次。
 //   - 请求带 translateTimeout 的超时，走注入的 a.translate（测试换成假实现，
-//     绝不联网）；goroutine 里不碰任何 UI 状态。
+//     绝不联网）；goroutine 里不碰任何 UI 状态。发起时固定设置副本，请求
+//     用的就是这一份；请求的 context 派生自当前 epoch，配置变了即被取消。
 //   - 结果经 a.publish 回到 UI 线程写缓存，下一帧读到；配置变了
 //     （epoch 不同）的旧结果直接丢弃。
 //   - 失败只把错误文本记进条目供界面显示；错误里若出现 API key，先抹掉
@@ -193,9 +225,10 @@ func (a *App) TranslateAsync(key, text string, alias ...string) {
 	if len(keys) == 0 {
 		return
 	}
-	fn, epoch, secret := a.translate, a.trans.epoch, a.settings.APIKey
+	fn, epoch, cfg, live := a.translate, a.trans.epoch, a.settings, a.trans.current()
+	secret := cfg.APIKey
 	a.spawn(func() {
-		ctx, cancel := context.WithTimeout(context.Background(), translateTimeout)
+		ctx, cancel := context.WithTimeout(live, translateTimeout)
 		defer cancel()
 		var (
 			dst    string
@@ -203,7 +236,9 @@ func (a *App) TranslateAsync(key, text string, alias ...string) {
 		)
 		if fn == nil {
 			errMsg = store.ErrNotConfigured.Error()
-		} else if out, err := fn(ctx, text); err != nil {
+		} else if live.Err() != nil {
+			errMsg = "翻译配置已变更" // 发起后配置就变了：不再发请求，结果也会被丢弃
+		} else if out, err := fn(ctx, cfg, text); err != nil {
 			errMsg = redactSecret(err.Error(), secret)
 		} else if strings.TrimSpace(out) == "" {
 			errMsg = "翻译结果为空"
@@ -228,4 +263,66 @@ func redactSecret(msg, secret string) string {
 		return msg
 	}
 	return strings.ReplaceAll(msg, secret, "***")
+}
+
+// ensureDocTranslation 为技能 name 的全文发起翻译（若需要）：译文模式开着、翻译
+// API 已就绪、全文非空，且缓存里还没有它。begin 保证同一原文只发一次，与
+// ensureTranslations 同一做法：它是受缓存占位保护的任务，不是渲染路径上的副作用。
+func (a *App) ensureDocTranslation(name, src string) {
+	if !a.trans.on || !a.settings.Ready() || strings.TrimSpace(src) == "" {
+		return
+	}
+	a.TranslateDocAsync(docTransKey(name), src)
+}
+
+// TranslateDocAsync 在后台把整份 SKILL.md（src）按段翻译，结果写进 key，全文页读它。
+//
+//   - 发起前先在 UI 线程 begin 占位 pending：同一 key 同一原文只发一次。
+//   - 段与段按顺序请求，同一个翻译接口不并发去打；每段有自己的 translateTimeout。
+//     任何一段失败整份记为失败，错误里注明第几段；译文按空行拼回，结构不变。
+//   - 发起时在 UI 线程固定设置副本，所有段用同一套配置；每段请求之前检查
+//     当前 epoch 的 context，配置变了（reset）就停止，不再发后面的段。
+//   - 与 TranslateAsync 一样：结果经 publish 回到 UI 线程写缓存，配置变了（epoch
+//     不同）的旧结果直接丢弃，错误里的 API key 先抹掉。
+func (a *App) TranslateDocAsync(key, src string) {
+	chunks := store.SplitForTranslation(src, docChunkRunes)
+	if len(chunks) == 0 || !a.trans.begin(key, src) {
+		return
+	}
+	fn, epoch, cfg, live := a.translate, a.trans.epoch, a.settings, a.trans.current()
+	secret := cfg.APIKey
+	a.spawn(func() {
+		var (
+			parts  []string
+			errMsg string
+		)
+		if fn == nil {
+			errMsg = store.ErrNotConfigured.Error()
+		}
+		for i := 0; errMsg == "" && i < len(chunks); i++ {
+			if live.Err() != nil {
+				// 配置已变更：不再发后面的段（已拿到的结果因 epoch 不符被丢弃）。
+				errMsg = "翻译配置已变更"
+				break
+			}
+			ctx, cancel := context.WithTimeout(live, translateTimeout)
+			out, err := fn(ctx, cfg, chunks[i])
+			cancel()
+			switch {
+			case err != nil:
+				errMsg = fmt.Sprintf("第 %d/%d 段：%s", i+1, len(chunks), redactSecret(err.Error(), secret))
+			case strings.TrimSpace(out) == "":
+				errMsg = fmt.Sprintf("第 %d/%d 段：翻译结果为空", i+1, len(chunks))
+			default:
+				parts = append(parts, out)
+			}
+		}
+		dst := strings.Join(parts, "\n\n")
+		a.publish(func() {
+			if epoch != a.trans.epoch {
+				return // 翻译配置已变，这份旧结果不要
+			}
+			a.trans.finish(key, src, dst, errMsg)
+		})
+	})
 }

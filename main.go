@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"os"
 
 	"github.com/ArnoChenFx/kura/internal/selfupdate"
 	"github.com/ArnoChenFx/kura/internal/store"
@@ -50,6 +51,11 @@ func main() {
 		})
 		// 后台任务的磁盘 I/O 结果经 Window.Update 发布回主线程。
 		app.SetWindow(win)
+		// 自动发现本机已有的 agent 框架技能目录（Claude Code、Codex 等）并加入
+		// 列表；每个路径只考虑一次，用户移除后不会再加回来。后台执行，不阻塞窗口。
+		if home, err := os.UserHomeDir(); err == nil {
+			app.DiscoverAgentRootsAsync(home)
+		}
 		// 接线「检查更新」按钮（左栏左下角）：只在这里注入生产实现——
 		// 它依赖已挂载的更新插件（上面 selfupdate.Install()），测试里的
 		// App 保持 nil，绝不触发真实更新检查。
