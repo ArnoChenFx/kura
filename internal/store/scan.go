@@ -2,12 +2,13 @@ package store
 
 import (
 	"errors"
-	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/ArnoChenFx/kura/internal/i18n"
 )
 
 // State 是技能的三种存放状态：根目录（enabled）、disabled、trash。
@@ -84,7 +85,7 @@ func scanDir(dir string, state State) ([]*Skill, error) {
 		if errors.Is(err, fs.ErrNotExist) {
 			return nil, nil
 		}
-		return nil, fmt.Errorf("store: 读取目录 %s 失败: %w", dir, err)
+		return nil, i18n.Wrapf(err, "store.err.readDir", dir)
 	}
 	skills := make([]*Skill, 0, len(entries))
 	for _, e := range entries {

@@ -7,8 +7,9 @@ import (
 	"encoding/json"
 	"errors"
 	"flag"
-	"fmt"
 	"io"
+
+	"github.com/ArnoChenFx/kura/internal/i18n"
 )
 
 // resultJSON 是 disable/enable/remove/restore/add/update --json 的顶层形状，
@@ -30,7 +31,7 @@ func writeJSON(w io.Writer, v any) error {
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
 	if err := enc.Encode(v); err != nil {
-		return fmt.Errorf("cli: JSON 编码失败: %w", err)
+		return i18n.Wrapf(err, "cli.err.jsonEncode")
 	}
 	return nil
 }
@@ -38,7 +39,8 @@ func writeJSON(w io.Writer, v any) error {
 // writeJSONOrErr 输出 JSON；编码失败按内部错误处理（理论不可达，防御分支）。
 func writeJSONOrErr(w io.Writer, v any) int {
 	if err := writeJSON(w, v); err != nil {
-		fmt.Fprintf(io.Discard, "%v", err)
+		// 磁盘/管道写不进去时输出位置本身也可能不可用：结果只用于防御分支的
+		// 返回码，文本不面向用户（错误仍未丢失：返回 ExitError）。
 		return ExitError
 	}
 	return ExitOK
@@ -46,12 +48,10 @@ func writeJSONOrErr(w io.Writer, v any) int {
 
 // usageError 统一处理 flag 解析失败：flag 包已把详情写进 stderr。
 // --json 模式下 flag 包输出的是纯文本，额外追加一条结构化错误，
-// 保证脚本消费方在 stderr 上总能拿到 {"error": ...}。
+// 保证脚本消费方在 stderr 上总能拿到 {"error": ...}。与前置解析共用 badFlags。
 func usageError(stderr io.Writer, err error) int {
 	if errors.Is(err, flag.ErrHelp) {
 		return ExitOK // 用户主动请求 -h，不算错误。
 	}
-	fmt.Fprintf(stderr, "kura: 参数错误: %v（用 kura --help 查看用法）\n", err)
-	_ = writeJSON(stderr, errorJSON{Error: "参数错误: " + err.Error()})
-	return ExitUsage
+	return badFlags(stderr, err)
 }

@@ -23,6 +23,7 @@
 package selfupdate
 
 import (
+	"github.com/ArnoChenFx/kura/internal/i18n"
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/plugins/updater"
 	"github.com/egoist/mygo/plugins/updater/native"
@@ -50,14 +51,12 @@ func CheckForUpdates() {
 }
 
 // appMenuLabel 是应用菜单的名字；Windows/Linux 的菜单栏第一项也用它。
+// 它是产品名，不随界面语言变，所以不进目录。
 const appMenuLabel = "kura"
 
-// aboutLabel 是三端一致的「关于」菜单项文字。
-const aboutLabel = "关于 kura"
-
-// quitLabel 是退出菜单项的文字。带 Role 的条目其 Click 与行为被保留，
-// 只覆盖显示文字（RoleQuit 的默认文字是英文 "Quit"）。
-const quitLabel = "退出 kura"
+// aboutLabel / quitLabel 是菜单项文字，随界面语言变（见 catalog.go 的
+// selfupdate.menu.about / selfupdate.menu.quit）。带 Role 的退出条目其 Click
+// 与行为被保留，只覆盖显示文字（RoleQuit 的默认文字是英文 "Quit"）。
 
 // AppMenu 构建 kura 的应用菜单并交给应用。必须在应用就绪后调用——正确
 // 位置是 mygo.App.WhenReady 的回调（主线程）：updater.MenuItem() 要读
@@ -78,14 +77,14 @@ func appMenu(updateItem *mygo.MenuItem) *mygo.Menu {
 			// macOS：系统标准关于面板（mac-only role，Windows/Linux 自动隐藏）。
 			{Role: mygo.RoleAbout},
 			// 三端一致的「关于」：原生消息框显示名字与版本。
-			{Label: aboutLabel, Click: func(*mygo.MenuItem, *mygo.Window) { showAbout() }},
+			{Label: i18n.T("selfupdate.menu.about"), Click: func(*mygo.MenuItem, *mygo.Window) { showAbout() }},
 			mygo.Separator(),
 			// 「检查更新…」：打开 MyGo 原生更新窗口（检查 → 发布说明 →
 			// 下载进度 → 替换 → 重启）。
 			updateItem,
 			mygo.Separator(),
 			// 退出：保留 RoleQuit 的默认行为，只换文字。
-			{Role: mygo.RoleQuit, Label: quitLabel},
+			{Role: mygo.RoleQuit, Label: i18n.T("selfupdate.menu.quit")},
 		}},
 		// 编辑/窗口菜单保住 Ctrl/Cmd+C、V 等标准快捷键与窗口管理。
 		{Role: mygo.RoleEditMenu},
@@ -102,15 +101,18 @@ func appVersion() string {
 // showAbout 弹出「关于 kura」原生消息框。只在主线程调用（菜单 Click 由
 // MyGo 保证在主线程）；Dialog.Message 阻塞到用户关闭为止，菜单回调里
 // 阻塞弹窗是官方示例的做法（examples/native/main.go 的 Confirm 同款）。
+//
+// 正文由两整段拼成（正文 + 更新说明），版本行按需插在中间：每段都是完整
+// 句子，在目录里各自成条（见 catalog.go），不做词序相关的拼接。
 func showAbout() {
-	msg := "kura — agent 技能管理器（github.com/ArnoChenFx/kura）"
+	msg := i18n.T("selfupdate.about.body")
 	if v := appVersion(); v != "" {
-		msg += "\n版本 " + v
+		msg += i18n.Tf("selfupdate.about.version", v)
 	}
-	msg += "\n\n应用更新由 MyGo 更新器提供：菜单里的「检查更新…」检查新版本。"
+	msg += i18n.T("selfupdate.about.updater")
 	_, _ = mygo.Dialog.Message(mygo.MessageOptions{
-		Title:   "关于 kura",
+		Title:   i18n.T("selfupdate.about.title"),
 		Message: msg,
-		Buttons: []string{"好"},
+		Buttons: []string{i18n.T("selfupdate.about.ok")},
 	})
 }

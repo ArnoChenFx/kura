@@ -1,10 +1,11 @@
 package store
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"time"
+
+	"github.com/ArnoChenFx/kura/internal/i18n"
 )
 
 // Update 从记录的来源重新拉取技能并替换根目录中的内容，等价于只含一个
@@ -34,7 +35,7 @@ func (c *Config) UpdateMany(names []string) []UpdateResult {
 	metas := make([]*Meta, len(names))
 	for i, name := range names {
 		out[i].Name = name
-		meta, err := c.sourceMeta(name, "更新")
+		meta, err := c.sourceMeta(name, msgMetaMissingUpdate)
 		if err != nil {
 			out[i].Err = err
 			continue
@@ -105,36 +106,37 @@ func (c *Config) updateRepo(idx []int, names []string, metas []*Meta, out []Upda
 
 // sourceMeta 读取根目录下技能 name 的元数据并校验来源字段齐全。
 // 技能不存在 → ErrUnknownSkill；元数据缺失/损坏/来源不完整 → 明确报错。
-// verb 用于错误信息（「更新」或「检查更新」）。
-func (c *Config) sourceMeta(name, verb string) (*Meta, error) {
+// missingKey 是「元数据缺失」时的整句文案 key（更新与检查更新各一句，见
+// catalog.go 的 msgMetaMissingUpdate / msgMetaMissingCheck）。
+func (c *Config) sourceMeta(name, missingKey string) (*Meta, error) {
 	src := c.SkillPath(name)
 	if !fileExists(src) {
-		return nil, fmt.Errorf("store: %w: %s", ErrUnknownSkill, name)
+		return nil, fmt.Errorf("%w: %s", ErrUnknownSkill, name)
 	}
 	// 缺失或损坏时无法知道来源，直接报错（不 panic）。
 	res := readMeta(src)
 	if res.Err != nil {
-		return nil, fmt.Errorf("store: %s 的元数据不可读: %w", name, res.Err)
+		return nil, i18n.Wrapf(res.Err, "store.err.metaUnreadable", name)
 	}
 	if !res.Found {
-		return nil, fmt.Errorf("store: %s 缺少 .kura-meta.json，无法%s", name, verb)
+		return nil, i18n.Errorf(missingKey, name)
 	}
 	meta := res.Meta
 	switch meta.Source.Type {
 	case SourceLocal:
 		if meta.Source.Path == "" {
-			return nil, errors.New("store: 元数据缺少 local 来源路径")
+			return nil, i18n.NewError("store.err.metaNoLocalPath")
 		}
 		if !fileExists(meta.Source.Path) {
-			return nil, fmt.Errorf("store: 本地来源不存在: %s", meta.Source.Path)
+			return nil, i18n.Errorf("store.err.localSourceGone", meta.Source.Path)
 		}
 	case SourceGitHub:
 		if meta.Source.URL == "" {
-			return nil, errors.New("store: 元数据缺少 github 来源 URL")
+			return nil, i18n.NewError("store.err.metaNoGithubURL")
 		}
 		meta.Source.SubPath = cleanSubPath(meta.Source.SubPath)
 	default:
-		return nil, fmt.Errorf("store: 未知来源类型 %q", meta.Source.Type)
+		return nil, i18n.Errorf("store.err.unknownSourceType", meta.Source.Type)
 	}
 	return meta, nil
 }
@@ -156,16 +158,16 @@ func (c *Config) replaceSkill(name, newDir string, meta *Meta, commit, tree stri
 	// 技能是仓库根或本地来源本身是 git 仓库时目录里带着 .git，不能装进技能目录。
 	if err := copyTree(newDir, staging, true); err != nil {
 		os.RemoveAll(staging)
-		return nil, fmt.Errorf("store: 准备新内容失败: %w", err)
+		return nil, i18n.Wrapf(err, "store.err.prepareContent")
 	}
 	os.RemoveAll(src)
 	if err := os.Rename(staging, src); err != nil {
 		// 替换失败：从快照恢复旧内容。
 		restoreErr := copyDir(snapDir, src)
 		if restoreErr != nil {
-			return nil, fmt.Errorf("store: 替换失败且自动恢复失败（快照在 %s）: %w", snapDir, err)
+			return nil, i18n.Wrapf(err, "store.err.replaceAndRestore", snapDir)
 		}
-		return nil, fmt.Errorf("store: 替换失败（已从快照恢复）: %w", err)
+		return nil, i18n.Wrapf(err, "store.err.replaceRestored")
 	}
 	// 刷新元数据：保留 installedAt/pluginName/notes，更新 updatedAt、commit、树哈希、内容哈希。
 	meta.UpdatedAt = now.UTC().Format(time.RFC3339)
@@ -177,7 +179,7 @@ func (c *Config) replaceSkill(name, newDir string, meta *Meta, commit, tree stri
 	}
 	meta.ContentHash = hash
 	if err := writeMeta(src, meta); err != nil {
-		return nil, fmt.Errorf("store: 更新元数据失败: %w", err)
+		return nil, i18n.Wrapf(err, "store.err.updateMeta")
 	}
 	return &Result{ID: name, State: StateEnabled, Dir: src, SnapshotDir: snapDir}, nil
 }

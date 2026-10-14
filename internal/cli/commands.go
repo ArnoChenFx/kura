@@ -10,13 +10,14 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/ArnoChenFx/kura/internal/i18n"
 	"github.com/ArnoChenFx/kura/internal/store"
 )
 
 // printError 按模式输出错误：--json 时输出结构化错误，否则输出人类可读文本。
-// 返回 ExitError，调用方直接 `return printError(...)`。
-func printError(g *globalFlags, stderr io.Writer, format string, a ...any) int {
-	msg := fmt.Sprintf(format, a...)
+// msg 已按当前语言取好（含占位符替换后的值，见 catalog.go）；调用方直接
+// `return printError(...)`。返回 ExitError。
+func printError(g *globalFlags, stderr io.Writer, msg string) int {
 	if g.json {
 		_ = writeJSON(stderr, errorJSON{Error: msg})
 	} else {
@@ -86,15 +87,15 @@ func cmdList(args []string, stdout, stderr io.Writer, pre *globalFlags) int {
 		return usageError(stderr, err)
 	}
 	if len(positional) > 0 {
-		return printError(g, stderr, "list 不接受位置参数（得到 %q）", strings.Join(positional, " "))
+		return printError(g, stderr, i18n.Tf("cli.err.listPositional", strings.Join(positional, " ")))
 	}
 	c, err := resolveConfig(g)
 	if err != nil {
-		return printError(g, stderr, "%v", err)
+		return printError(g, stderr, err.Error())
 	}
 	skills, err := c.ScanAll()
 	if err != nil {
-		return printError(g, stderr, "%v", err)
+		return printError(g, stderr, err.Error())
 	}
 	if g.json {
 		items := make([]skillJSON, 0, len(skills))
@@ -111,24 +112,24 @@ func cmdList(args []string, stdout, stderr io.Writer, pre *globalFlags) int {
 func printSkillsText(w io.Writer, c *store.Config, skills []*store.Skill) {
 	fmt.Fprintf(w, "root: %s\n", c.Root)
 	if len(skills) == 0 {
-		fmt.Fprintln(w, "（没有技能）")
+		fmt.Fprintln(w, i18n.T("cli.list.empty"))
 		return
 	}
 	for _, s := range skills {
 		fmt.Fprintf(w, "%s\t[%s]", s.Name, s.State)
 		if s.State == store.StateTrashed {
 			// trash/<name>/<stamp> 容器本身没有 SKILL.md，不告警。
-			fmt.Fprintln(w, "\t(回收站条目，内容在时间戳子目录中)")
+			fmt.Fprintln(w, i18n.T("cli.list.trashed"))
 			continue
 		}
 		if !s.HasSKILLMD {
-			fmt.Fprint(w, "\t⚠ 缺少 SKILL.md")
+			fmt.Fprint(w, i18n.T("cli.list.noSkillMD"))
 		}
 		switch {
 		case s.MetaErr != "":
-			fmt.Fprintf(w, "\t⚠ 元数据损坏: %s", s.MetaErr)
+			fmt.Fprint(w, i18n.Tf("cli.list.metaBroken", s.MetaErr))
 		case s.Meta == nil:
-			fmt.Fprint(w, "\t(无元数据)")
+			fmt.Fprint(w, i18n.T("cli.list.noMeta"))
 		default:
 			fmt.Fprintf(w, "\t%s", s.Meta.Source.Type)
 			if s.Meta.Source.URL != "" {
@@ -156,12 +157,12 @@ func cmdToggle(args []string, stdout, stderr io.Writer, action string, pre *glob
 		return usageError(stderr, err)
 	}
 	if len(positional) != 1 {
-		return printError(g, stderr, "用法: kura %s <NAME>", action)
+		return printError(g, stderr, i18n.Tf("cli.err.usageToggle", action))
 	}
 	name := positional[0]
 	c, err := resolveConfig(g)
 	if err != nil {
-		return printError(g, stderr, "%v", err)
+		return printError(g, stderr, err.Error())
 	}
 	var res *store.Result
 	if action == "disable" {
@@ -170,7 +171,7 @@ func cmdToggle(args []string, stdout, stderr io.Writer, action string, pre *glob
 		res, err = c.Enable(name)
 	}
 	if err != nil {
-		return printError(g, stderr, "%s 失败: %v", action, err)
+		return printError(g, stderr, i18n.Tf("cli.err.actionFailed", action, err))
 	}
 	if g.json {
 		return writeJSONOrErr(stdout, resultJSON{
@@ -188,18 +189,18 @@ func cmdToggle(args []string, stdout, stderr io.Writer, action string, pre *glob
 func cmdRemove(args []string, stdout, stderr io.Writer, pre *globalFlags) int {
 	g := &globalFlags{}
 	fs := newFlagSet("remove", stderr, g, pre)
-	stampVal := fs.String("stamp", "", "回收站/快照时间戳目录名（默认当前时间）")
+	stampVal := fs.String("stamp", "", i18n.T("cli.flag.stampRemove"))
 	positional, err := parseArgs(fs, args)
 	if err != nil {
 		return usageError(stderr, err)
 	}
 	if len(positional) != 1 {
-		return printError(g, stderr, "用法: kura remove <NAME> [--stamp TS]")
+		return printError(g, stderr, i18n.T("cli.err.usageRemove"))
 	}
 	name := positional[0]
 	c, err := resolveConfig(g)
 	if err != nil {
-		return printError(g, stderr, "%v", err)
+		return printError(g, stderr, err.Error())
 	}
 	var res *store.Result
 	if *stampVal == "" {
@@ -208,7 +209,7 @@ func cmdRemove(args []string, stdout, stderr io.Writer, pre *globalFlags) int {
 		res, err = c.RemoveWithStamp(name, *stampVal)
 	}
 	if err != nil {
-		return printError(g, stderr, "remove 失败: %v", err)
+		return printError(g, stderr, i18n.Tf("cli.err.removeFailed", err))
 	}
 	if g.json {
 		return writeJSONOrErr(stdout, resultJSON{
@@ -228,22 +229,22 @@ func cmdRemove(args []string, stdout, stderr io.Writer, pre *globalFlags) int {
 func cmdRestore(args []string, stdout, stderr io.Writer, pre *globalFlags) int {
 	g := &globalFlags{}
 	fs := newFlagSet("restore", stderr, g, pre)
-	stampVal := fs.String("stamp", "", "恢复回收站中指定时间戳的版本（默认最新一次）")
+	stampVal := fs.String("stamp", "", i18n.T("cli.flag.stampRestore"))
 	positional, err := parseArgs(fs, args)
 	if err != nil {
 		return usageError(stderr, err)
 	}
 	if len(positional) != 1 {
-		return printError(g, stderr, "用法: kura restore <NAME> [--stamp TS]")
+		return printError(g, stderr, i18n.T("cli.err.usageRestore"))
 	}
 	name := positional[0]
 	c, err := resolveConfig(g)
 	if err != nil {
-		return printError(g, stderr, "%v", err)
+		return printError(g, stderr, err.Error())
 	}
 	res, err := c.Restore(name, *stampVal)
 	if err != nil {
-		return printError(g, stderr, "restore 失败: %v", err)
+		return printError(g, stderr, i18n.Tf("cli.err.restoreFailed", err))
 	}
 	if g.json {
 		return writeJSONOrErr(stdout, resultJSON{
@@ -274,21 +275,21 @@ type importMetaResult struct {
 func cmdImportMeta(args []string, stdout, stderr io.Writer, pre *globalFlags) int {
 	g := &globalFlags{}
 	fs := newFlagSet("import-meta", stderr, g, pre)
-	dryRun := fs.Bool("dry-run", false, "只分析将要导入哪些技能，不写文件")
-	lockPath := fs.String("lock", "", "lock 文件路径（默认 <root>/../.skill-lock.json）")
+	dryRun := fs.Bool("dry-run", false, i18n.T("cli.flag.dryRun"))
+	lockPath := fs.String("lock", "", i18n.T("cli.flag.lock"))
 	positional, err := parseArgs(fs, args)
 	if err != nil {
 		return usageError(stderr, err)
 	}
 	if len(positional) > 0 {
-		return printError(g, stderr, "import-meta 不接受位置参数")
+		return printError(g, stderr, i18n.T("cli.err.importMetaPositional"))
 	}
 	c, err := resolveConfig(g)
 	if err != nil {
-		return printError(g, stderr, "%v", err)
+		return printError(g, stderr, err.Error())
 	}
 	if !c.CanImportMeta() {
-		return printError(g, stderr, "import-meta 失败: %v: %s", store.ErrImportDefaultOnly, c.Root)
+		return printError(g, stderr, i18n.Tf("cli.err.importMetaFailed", store.ErrImportDefaultOnly, c.Root))
 	}
 	lp := *lockPath
 	if lp == "" {
@@ -297,7 +298,7 @@ func cmdImportMeta(args []string, stdout, stderr io.Writer, pre *globalFlags) in
 	if *dryRun {
 		names, lerr := dryRunImport(c, lp)
 		if lerr != nil {
-			return printError(g, stderr, "%v", lerr)
+			return printError(g, stderr, lerr.Error())
 		}
 		_, found, _ := store.ReadLockFile(lp)
 		return emitImportMeta(stdout, g, importMetaResult{
@@ -308,7 +309,7 @@ func cmdImportMeta(args []string, stdout, stderr io.Writer, pre *globalFlags) in
 	}
 	imported, err := c.ImportMeta(lp)
 	if err != nil {
-		return printError(g, stderr, "import-meta 失败: %v", err)
+		return printError(g, stderr, i18n.Tf("cli.err.importMetaFailedPlain", err))
 	}
 	_, lockFound, _ := store.ReadLockFile(lp)
 	if imported == nil {
@@ -330,22 +331,22 @@ func emitImportMeta(stdout io.Writer, g *globalFlags, r importMetaResult) int {
 		}
 		return writeJSONOrErr(stdout, r)
 	}
-	label := "已导入"
+	label := i18n.T("cli.importMeta.imported")
 	list := r.Imported
 	if r.DryRun {
-		label = "将要导入"
+		label = i18n.T("cli.importMeta.wouldImport")
 		list = r.WouldImport
 	}
 	fmt.Fprintf(stdout, "lock: %s", r.LockPath)
 	if !r.LockFound {
-		fmt.Fprint(stdout, "（不存在）")
+		fmt.Fprint(stdout, i18n.T("cli.importMeta.lockMissing"))
 	}
 	fmt.Fprintln(stdout)
 	if len(list) == 0 {
-		fmt.Fprintln(stdout, "没有需要导入的技能")
+		fmt.Fprintln(stdout, i18n.T("cli.importMeta.nothing"))
 		return ExitOK
 	}
-	fmt.Fprintf(stdout, "%s %d 个技能:\n", label, len(list))
+	fmt.Fprint(stdout, i18n.Tf("cli.importMeta.count", label, len(list)))
 	for _, n := range list {
 		fmt.Fprintf(stdout, "  %s\n", n)
 	}
@@ -406,24 +407,24 @@ func cmdAdd(args []string, stdout, stderr io.Writer, pre *globalFlags) int {
 	g := &globalFlags{}
 	fs := newFlagSet("add", stderr, g, pre)
 	af := &addFlags{}
-	fs.StringVar(&af.local, "local", "", "本地技能目录")
-	fs.StringVar(&af.github, "github", "", "GitHub 仓库，格式 owner/repo")
-	fs.StringVar(&af.subPath, "sub-path", "", "仓库内技能子目录（github 来源可选；省略时自动发现仓库内的技能，多个候选时必填其一）")
-	fs.StringVar(&af.ref, "ref", "", "分支/标签/commit（github 来源可选）")
-	fs.StringVar(&af.name, "name", "", "安装后的技能名（默认取来源目录名）")
+	fs.StringVar(&af.local, "local", "", i18n.T("cli.flag.addLocal"))
+	fs.StringVar(&af.github, "github", "", i18n.T("cli.flag.addGithub"))
+	fs.StringVar(&af.subPath, "sub-path", "", i18n.T("cli.flag.addSubPath"))
+	fs.StringVar(&af.ref, "ref", "", i18n.T("cli.flag.addRef"))
+	fs.StringVar(&af.name, "name", "", i18n.T("cli.flag.addName"))
 	positional, err := parseArgs(fs, args)
 	if err != nil {
 		return usageError(stderr, err)
 	}
 	if len(positional) > 0 {
-		return printError(g, stderr, "add 不接受位置参数")
+		return printError(g, stderr, i18n.T("cli.err.addPositional"))
 	}
 	if (af.local == "") == (af.github == "") {
-		return printError(g, stderr, "用法: kura add --local PATH 或 kura add --github owner/repo（必须且只能提供一个来源）")
+		return printError(g, stderr, i18n.T("cli.err.addUsage"))
 	}
 	c, err := resolveConfig(g)
 	if err != nil {
-		return printError(g, stderr, "%v", err)
+		return printError(g, stderr, err.Error())
 	}
 
 	var res *store.Result
@@ -446,7 +447,7 @@ func cmdAdd(args []string, stdout, stderr io.Writer, pre *globalFlags) int {
 			fmt.Fprintf(stderr, "kura: %s\n", ce.Error())
 			return ExitError
 		}
-		return printError(g, stderr, "add 失败: %v", err)
+		return printError(g, stderr, i18n.Tf("cli.err.addFailed", err))
 	}
 	if g.json {
 		return writeJSONOrErr(stdout, resultJSON{
@@ -470,8 +471,8 @@ func cmdAdd(args []string, stdout, stderr io.Writer, pre *globalFlags) int {
 func cmdUpdate(args []string, stdout, stderr io.Writer, pre *globalFlags) int {
 	g := &globalFlags{}
 	fs := newFlagSet("update", stderr, g, pre)
-	check := fs.Bool("check", false, "预览更新会改什么（不修改任何文件）；有待更新时退出码 3")
-	all := fs.Bool("all", false, "配合 --check：检查根目录全部技能")
+	check := fs.Bool("check", false, i18n.T("cli.flag.check"))
+	all := fs.Bool("all", false, i18n.T("cli.flag.all"))
 	positional, err := parseArgs(fs, args)
 	if err != nil {
 		return usageError(stderr, err)
@@ -479,7 +480,7 @@ func cmdUpdate(args []string, stdout, stderr io.Writer, pre *globalFlags) int {
 	if !*check {
 		// 原有路径：直接更新。
 		if len(positional) != 1 || *all {
-			return printError(g, stderr, "用法: kura update <NAME>")
+			return printError(g, stderr, i18n.T("cli.err.usageUpdate"))
 		}
 		return runUpdateApply(g, positional[0], stdout, stderr)
 	}
@@ -487,16 +488,16 @@ func cmdUpdate(args []string, stdout, stderr io.Writer, pre *globalFlags) int {
 	if *all {
 		if len(positional) != 0 {
 			// 用法错误：--all 不接受 NAME。
-			fmt.Fprintf(stderr, "kura: 用法: kura update --check --all（不能同时给 NAME）\n")
-			_ = writeJSON(stderr, errorJSON{Error: "用法: kura update --check --all（不能同时给 NAME）"})
+			fmt.Fprint(stderr, i18n.T("cli.usage.checkAllWithName"))
+			_ = writeJSON(stderr, errorJSON{Error: i18n.T("cli.err.checkAllWithName")})
 			return ExitUsage
 		}
 		return runUpdateCheckAll(g, stdout, stderr)
 	}
 	if len(positional) != 1 {
 		// 用法错误（缺 NAME）：按约定退出 2，并把用法写进 stderr。
-		fmt.Fprintf(stderr, "kura: 用法: kura update --check <NAME> | kura update --check --all\n")
-		_ = writeJSON(stderr, errorJSON{Error: "用法: kura update --check <NAME> | kura update --check --all"})
+		fmt.Fprint(stderr, i18n.T("cli.usage.checkNeedsName"))
+		_ = writeJSON(stderr, errorJSON{Error: i18n.T("cli.err.checkNeedsName")})
 		return ExitUsage
 	}
 	return runUpdateCheck(g, positional[0], stdout, stderr)
@@ -506,11 +507,11 @@ func cmdUpdate(args []string, stdout, stderr io.Writer, pre *globalFlags) int {
 func runUpdateApply(g *globalFlags, name string, stdout, stderr io.Writer) int {
 	c, err := resolveConfig(g)
 	if err != nil {
-		return printError(g, stderr, "%v", err)
+		return printError(g, stderr, err.Error())
 	}
 	res, err := c.Update(name)
 	if err != nil {
-		return printError(g, stderr, "update 失败: %v", err)
+		return printError(g, stderr, i18n.Tf("cli.err.updateFailed", err))
 	}
 	if g.json {
 		return writeJSONOrErr(stdout, resultJSON{
@@ -584,11 +585,11 @@ func toCheckJSON(p *store.UpdatePreview) checkJSON {
 func runUpdateCheck(g *globalFlags, name string, stdout, stderr io.Writer) int {
 	c, err := resolveConfig(g)
 	if err != nil {
-		return printError(g, stderr, "%v", err)
+		return printError(g, stderr, err.Error())
 	}
 	p, err := c.PreviewUpdate(name)
 	if err != nil {
-		return printError(g, stderr, "check 失败: %v", err)
+		return printError(g, stderr, i18n.Tf("cli.err.checkFailed", err))
 	}
 	cj := toCheckJSON(p)
 	if g.json {
@@ -630,11 +631,11 @@ type checkEntryJSON struct {
 func runUpdateCheckAll(g *globalFlags, stdout, stderr io.Writer) int {
 	c, err := resolveConfig(g)
 	if err != nil {
-		return printError(g, stderr, "%v", err)
+		return printError(g, stderr, err.Error())
 	}
 	skills, err := c.Scan()
 	if err != nil {
-		return printError(g, stderr, "扫描根目录失败: %v", err)
+		return printError(g, stderr, i18n.Tf("cli.err.scanRootFailed", err))
 	}
 	names := make([]string, len(skills))
 	for i, s := range skills {
@@ -661,12 +662,12 @@ func runUpdateCheckAll(g *globalFlags, stdout, stderr io.Writer) int {
 	} else {
 		for _, r := range out.Results {
 			if r.Error != "" {
-				fmt.Fprintf(stdout, "[%s] 检查失败: %s\n", r.Skill, r.Error)
+				fmt.Fprint(stdout, i18n.Tf("cli.checkAll.failed", r.Skill, r.Error))
 				continue
 			}
 			printCheckText(stdout, r.Check)
 		}
-		fmt.Fprintf(stdout, "共 %d 个技能，%d 个有待更新\n", len(out.Results), countPending(out.Results))
+		fmt.Fprint(stdout, i18n.Tf("cli.checkAll.summary", len(out.Results), countPending(out.Results)))
 	}
 	if pending {
 		return ExitDoctorProblem
@@ -691,40 +692,41 @@ func printCheckText(w io.Writer, cj *checkJSON) {
 		note := ""
 		switch cj.Basis {
 		case store.BasisCommit:
-			note = "（上游 commit 未变）"
+			note = i18n.T("cli.check.noteCommit")
 		case store.BasisTree:
-			note = "（上游该目录未变）"
+			note = i18n.T("cli.check.noteTree")
 		}
-		fmt.Fprintf(w, "%s: 已是最新%s\n", cj.Skill, note)
+		fmt.Fprint(w, i18n.Tf("cli.check.upToDate", cj.Skill, note))
 		if cj.LocalModified {
-			fmt.Fprintf(w, "  注意: 本地内容与安装时不一致（被改过）\n")
+			fmt.Fprint(w, i18n.T("cli.check.localModifiedNote"))
 		}
 		return
 	}
-	fmt.Fprintf(w, "%s: %d 个文件有变化（新增 %d · 修改 %d · 删除 %d）\n",
+	fmt.Fprint(w, i18n.Tf("cli.check.changes",
 		cj.Skill, len(cj.Files),
-		statusCount(cj, store.DiffAdded), statusCount(cj, store.DiffChanged), statusCount(cj, store.DiffRemoved))
+		statusCount(cj, store.DiffAdded), statusCount(cj, store.DiffChanged), statusCount(cj, store.DiffRemoved)))
 	for _, f := range cj.Files {
 		fmt.Fprintf(w, "  %-8s +%-4d -%-4d %s\n", statusLabel(f.Status), f.Added, f.Removed, f.Path)
 	}
-	fmt.Fprintf(w, "  哈希: %s -> %s\n", shortHashCLI(cj.OldHash), shortHashCLI(cj.NewHash))
+	fmt.Fprint(w, i18n.Tf("cli.check.hash", shortHashCLI(cj.OldHash), shortHashCLI(cj.NewHash)))
 	if cj.Commit != "" {
-		fmt.Fprintf(w, "  上游 commit: %s\n", cj.Commit)
+		fmt.Fprint(w, i18n.Tf("cli.check.commit", cj.Commit))
 	}
 	if cj.LocalModified {
-		fmt.Fprintf(w, "  注意: 本地内容已被改过，应用更新会覆盖这些改动（旧内容在快照中）\n")
+		fmt.Fprint(w, i18n.T("cli.check.localModifiedWarn"))
 	}
 }
 
-// statusLabel 把差异状态翻译成短标签（对齐 --check 的文本输出）。
+// statusLabel 把差异状态翻译成短标签（对齐 --check 的文本输出；
+// "新增"… 与英文 modified… 都是界面文案，取自目录）。
 func statusLabel(status string) string {
 	switch status {
 	case store.DiffAdded:
-		return "新增"
+		return i18n.T("cli.status.added")
 	case store.DiffRemoved:
-		return "删除"
+		return i18n.T("cli.status.removed")
 	default:
-		return "修改"
+		return i18n.T("cli.status.changed")
 	}
 }
 

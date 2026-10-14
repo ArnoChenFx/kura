@@ -19,6 +19,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/ArnoChenFx/kura/internal/i18n"
 )
 
 // SettingsFileName 是 Home 下设置文件的文件名，与 config.json 同级。
@@ -27,17 +29,17 @@ const SettingsFileName = "settings.json"
 // settings 相关的哨兵错误：调用方可以用 errors.Is 精确分支，而不是匹配错误文本。
 var (
 	// ErrUnknownLang 表示目标语言代码不在支持列表里。
-	ErrUnknownLang = errors.New("store: 不支持的翻译目标语言")
+	ErrUnknownLang = i18n.NewError("store.err.unknownLang")
 	// ErrNotConfigured 表示翻译所需的 BaseURL/APIKey/Model 尚未填齐。
 	// （放进哨兵列表是因为 UI 只需要「弹设置弹窗」这一个分支，不需要看
 	// 具体缺哪项；缺哪项由错误文本说明。）
-	ErrNotConfigured = errors.New("store: 翻译未配置：请先在设置里填写 API 地址、密钥与模型")
+	ErrNotConfigured = i18n.NewError("store.err.notConfigured")
 	// ErrNoSettings 表示 Home 下还没有 settings.json（用户从未保存过设置）。
 	// 与「文件存在但内容零值」区分开：前者通常意味着应该展示空的设置表单，
 	// 后者意味着应该展示已保存的（可能不完整的）值。LoadSettings 不返回它
 	// （文件不存在返回 false 而不是错误）；它是给 UI 在磁盘上探测文件是否存在
 	// 之外、需要明确语义时用的哨兵。
-	ErrNoSettings = errors.New("store: 尚未保存任何设置")
+	ErrNoSettings = i18n.NewError("store.err.noSettings")
 )
 
 // DefaultTargetLang 是 TargetLang 为空串时的默认值（简体中文）。
@@ -83,21 +85,25 @@ var langCanonical = map[string]string{
 	"ru":      "ru",
 }
 
-// langLabel 是 LangLabel 用的可读名字表：键是规范语言码，值是界面显示文本。
-// 与 langCanonical 分开：哪些输入归并到哪个规范码、规范码显示成什么名字，
-// 是两张独立的表，合并会让「显示名」依赖「归并键」的写法。
+// langLabel 是 LangLabel 用的可读名字表的目录 key（键是规范语言码）。
+//
+// 这些名字是语言的**自称**（glossonym）：简体中文在中文界面与英文界面下
+// 都写作「简体中文」，English 在两种界面下也都写作 English。因此 catalog 里
+// 两种语言的取值完全相同；它们仍然进目录（而不是留在代码里）只有一个原因：
+// 「界面文案不硬编码」这条守卫只能有一个标准（见 internal/i18n 的
+// TestNoHardcodedCJK）。
 var langLabel = map[string]string{
-	"en":    "English",
-	"zh-CN": "简体中文",
-	"en-US": "English (US)",
-	"en-GB": "English (UK)",
-	"ja":    "日本語",
-	"ko":    "한국어",
-	"fr":    "Français",
-	"de":    "Deutsch",
-	"es":    "Español",
-	"pt":    "Português",
-	"ru":    "Русский",
+	"en":    "store.langName.en",
+	"zh-CN": "store.langName.zhCN",
+	"en-US": "store.langName.enUS",
+	"en-GB": "store.langName.enGB",
+	"ja":    "store.langName.ja",
+	"ko":    "store.langName.ko",
+	"fr":    "store.langName.fr",
+	"de":    "store.langName.de",
+	"es":    "store.langName.es",
+	"pt":    "store.langName.pt",
+	"ru":    "store.langName.ru",
 }
 
 // settingsPath 返回 Home/settings.json 的路径。路径拼接一律 filepath.Join。
@@ -115,11 +121,11 @@ func LoadSettings(c *Config) (*Settings, bool, error) {
 		return &Settings{}, false, nil
 	}
 	if err != nil {
-		return nil, false, fmt.Errorf("store: 读取 %s 失败: %w", settingsPath(c), err)
+		return nil, false, i18n.Wrapf(err, "store.err.readFile", settingsPath(c))
 	}
 	var s Settings
 	if err := json.Unmarshal(data, &s); err != nil {
-		return nil, false, fmt.Errorf("store: 解析 %s 失败（JSON 已损坏）: %w", settingsPath(c), err)
+		return nil, false, i18n.Wrapf(err, "store.err.parseJSON", settingsPath(c))
 	}
 	return &s, true, nil
 }
@@ -135,7 +141,7 @@ func LoadSettings(c *Config) (*Settings, bool, error) {
 // settings.json 的并发路径，必须先引入锁再改。
 func SaveSettings(c *Config, s *Settings) error {
 	if s == nil {
-		return errors.New("store: 设置不能为空")
+		return i18n.NewError("store.err.emptySettings")
 	}
 	if err := c.ensureDirs(); err != nil {
 		return err
@@ -145,11 +151,11 @@ func SaveSettings(c *Config, s *Settings) error {
 	}
 	data, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
-		return fmt.Errorf("store: 序列化设置失败: %w", err)
+		return i18n.Wrapf(err, "store.err.marshalSettings")
 	}
 	// 权限 0o600：含 API key 的文件，比 config.json（0o644）更严。
 	if err := os.WriteFile(settingsPath(c), data, 0o600); err != nil {
-		return fmt.Errorf("store: 写入 %s 失败: %w", settingsPath(c), err)
+		return i18n.Wrapf(err, "store.err.writeFile", settingsPath(c))
 	}
 	return nil
 }
@@ -185,6 +191,7 @@ func (s *Settings) Ready() bool {
 }
 
 // LangLabel 返回目标语言的可读名字（如 zh-CN → 简体中文），给界面显示用。
+// 名字是语言的**自称**：两种界面语言下都一样（见 langLabel 的注释）。
 // 空串与未登记的代码原样返回（未登记不是错误：NormalizeTargetLang 已经
 // 把输入拦在受支持列表里，走到这里的未知值只可能来自手改的设置文件）。
 func (s *Settings) LangLabel() string {
@@ -192,8 +199,8 @@ func (s *Settings) LangLabel() string {
 	if lang == "" {
 		lang = DefaultTargetLang
 	}
-	if label, ok := langLabel[lang]; ok {
-		return label
+	if key, ok := langLabel[lang]; ok {
+		return i18n.T(key)
 	}
 	return lang
 }

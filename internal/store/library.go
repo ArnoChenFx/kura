@@ -10,7 +10,6 @@ package store
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -19,6 +18,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/ArnoChenFx/kura/internal/i18n"
 )
 
 // RootsDir 是追加根目录私有状态在 Home 下的父目录名。
@@ -26,17 +27,17 @@ const RootsDir = "roots"
 
 var (
 	// ErrRootExists 表示要添加的根目录已在列表里。
-	ErrRootExists = errors.New("store: 该目录已在列表中")
+	ErrRootExists = i18n.NewError("store.err.rootExists")
 	// ErrUnknownRoot 表示要移除的根目录不在列表里。
-	ErrUnknownRoot = errors.New("store: 列表中没有该目录")
+	ErrUnknownRoot = i18n.NewError("store.err.unknownRoot")
 	// ErrDefaultRoot 表示试图移除默认根目录。
-	ErrDefaultRoot = errors.New("store: 默认技能目录不能移除")
+	ErrDefaultRoot = i18n.NewError("store.err.defaultRoot")
 	// ErrNotDir 表示要添加的路径不存在或不是文件夹。
-	ErrNotDir = errors.New("store: 路径不存在或不是文件夹")
+	ErrNotDir = i18n.NewError("store.err.notDir")
 	// ErrUnknownTheme 表示外观偏好不是 system、light 或 dark。
-	ErrUnknownTheme = errors.New("store: 外观只能是 system、light 或 dark")
+	ErrUnknownTheme = i18n.NewError("store.err.unknownTheme")
 	// ErrUnknownView 表示排列模式不是 grid 或 list。
-	ErrUnknownView = errors.New("store: 排列模式只能是 grid 或 list")
+	ErrUnknownView = i18n.NewError("store.err.unknownView")
 )
 
 // 外观偏好的取值（config.json 的 theme）。
@@ -169,7 +170,7 @@ func (l *Library) Configs() []*Config {
 func (l *Library) AddRoot(root string) error {
 	abs, err := filepath.Abs(root)
 	if err != nil {
-		return fmt.Errorf("store: 无法解析路径 %s: %w", root, err)
+		return i18n.Wrapf(err, "store.err.resolvePath", root)
 	}
 	info, err := os.Stat(abs)
 	if err != nil || !info.IsDir() {
@@ -211,7 +212,7 @@ func (l *Library) MoveRoot(root string, to int) error {
 		case i == 0 || to == 0:
 			return nil, ErrDefaultRoot
 		case to < 0 || to >= len(cur):
-			return nil, fmt.Errorf("store: 位置 %d 超出列表范围", to)
+			return nil, i18n.Errorf("store.err.posOutOfRange", to)
 		}
 		moved := cur[i]
 		return slices.Insert(slices.Delete(cur, i, i+1), to, moved), nil

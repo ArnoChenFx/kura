@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/ArnoChenFx/kura/internal/i18n"
 )
 
 // Result 是所有变更操作的返回值：技能 id + 操作后的新状态。
@@ -30,7 +32,7 @@ func (c *Config) snapshotSkill(name, dir string, now time.Time) (string, error) 
 	}
 	dst := c.SnapshotPath(name, stamp(now))
 	if err := copyDir(dir, dst); err != nil {
-		return "", fmt.Errorf("store: 快照 %s 失败: %w", name, err)
+		return "", i18n.Wrapf(err, "store.err.snapshot", name)
 	}
 	return dst, nil
 }
@@ -42,17 +44,17 @@ func (c *Config) Enable(name string) (*Result, error) {
 	}
 	src := c.DisabledPath(name)
 	if !fileExists(src) {
-		return nil, fmt.Errorf("store: %w: %s", ErrUnknownSkill, name)
+		return nil, fmt.Errorf("%w: %s", ErrUnknownSkill, name)
 	}
 	dst := c.SkillPath(name)
 	if fileExists(dst) {
-		return nil, fmt.Errorf("store: 根目录已存在同名技能 %s", name)
+		return nil, i18n.Errorf("store.err.skillExists", name)
 	}
 	if err := os.MkdirAll(c.Root, 0o755); err != nil {
-		return nil, fmt.Errorf("store: 创建根目录失败: %w", err)
+		return nil, i18n.Wrapf(err, "store.err.createRootDir")
 	}
 	if err := moveDir(src, dst); err != nil {
-		return nil, fmt.Errorf("store: 启用 %s 失败: %w", name, err)
+		return nil, i18n.Wrapf(err, "store.err.enableFailed", name)
 	}
 	return &Result{ID: name, State: StateEnabled, Dir: dst}, nil
 }
@@ -64,17 +66,17 @@ func (c *Config) Disable(name string) (*Result, error) {
 	}
 	src := c.SkillPath(name)
 	if !fileExists(src) {
-		return nil, fmt.Errorf("store: %w: %s", ErrUnknownSkill, name)
+		return nil, fmt.Errorf("%w: %s", ErrUnknownSkill, name)
 	}
 	dst := c.DisabledPath(name)
 	if fileExists(dst) {
-		return nil, fmt.Errorf("store: disabled 中已存在同名技能 %s", name)
+		return nil, i18n.Errorf("store.err.disabledExists", name)
 	}
 	if err := c.ensureDirs(); err != nil {
 		return nil, err
 	}
 	if err := moveDir(src, dst); err != nil {
-		return nil, fmt.Errorf("store: 禁用 %s 失败: %w", name, err)
+		return nil, i18n.Wrapf(err, "store.err.disableFailed", name)
 	}
 	return &Result{ID: name, State: StateDisabled, Dir: dst}, nil
 }
@@ -87,7 +89,7 @@ func (c *Config) Remove(name string) (*Result, error) {
 	}
 	src := c.SkillPath(name)
 	if !fileExists(src) {
-		return nil, fmt.Errorf("store: %w: %s", ErrUnknownSkill, name)
+		return nil, fmt.Errorf("%w: %s", ErrUnknownSkill, name)
 	}
 	now := time.Now()
 	snapDir, err := c.snapshotSkill(name, src, now)
@@ -99,10 +101,10 @@ func (c *Config) Remove(name string) (*Result, error) {
 	}
 	dst := filepath.Join(c.TrashRoot(), name, stamp(now))
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
-		return nil, fmt.Errorf("store: 创建回收站目录失败: %w", err)
+		return nil, i18n.Wrapf(err, "store.err.createTrashDir")
 	}
 	if err := moveDir(src, dst); err != nil {
-		return nil, fmt.Errorf("store: 移入回收站失败 (%s): %w", name, err)
+		return nil, i18n.Wrapf(err, "store.err.moveToTrash", name)
 	}
 	return &Result{ID: name, State: StateTrashed, Dir: dst, SnapshotDir: snapDir}, nil
 }
@@ -114,11 +116,11 @@ func (c *Config) Restore(name, stampName string) (*Result, error) {
 		return nil, err
 	}
 	if stampName != "" && !ValidStampName(stampName) {
-		return nil, fmt.Errorf("%w: 时间戳目录名 %q", ErrInvalidName, stampName)
+		return nil, sentinelErr(ErrInvalidName, "store.err.invalidStampName", stampName)
 	}
 	trashDir := filepath.Join(c.TrashRoot(), name)
 	if !fileExists(trashDir) {
-		return nil, fmt.Errorf("store: %w: %s（回收站中不存在）", ErrUnknownSkill, name)
+		return nil, sentinelErr(ErrUnknownSkill, "store.err.unknownSkillInTrash", name)
 	}
 	if stampName == "" {
 		latest, err := latestSubdir(trashDir)
@@ -130,13 +132,13 @@ func (c *Config) Restore(name, stampName string) (*Result, error) {
 	src := filepath.Join(trashDir, stampName)
 	dst := c.SkillPath(name)
 	if fileExists(dst) {
-		return nil, fmt.Errorf("store: 根目录已存在同名技能 %s", name)
+		return nil, i18n.Errorf("store.err.skillExists", name)
 	}
 	if err := os.MkdirAll(c.Root, 0o755); err != nil {
-		return nil, fmt.Errorf("store: 创建根目录失败: %w", err)
+		return nil, i18n.Wrapf(err, "store.err.createRootDir")
 	}
 	if err := moveDir(src, dst); err != nil {
-		return nil, fmt.Errorf("store: 恢复 %s 失败: %w", name, err)
+		return nil, i18n.Wrapf(err, "store.err.restoreFailed", name)
 	}
 	// 清理 trash/<name> 空壳目录：os.Remove 只能删空目录，若同一技能还有
 	// 其他时间戳副本则会失败并忽略（保留它们是正确的）。
@@ -156,16 +158,16 @@ func (c *Config) Purge(name string) (*Result, error) {
 	}
 	trashDir := filepath.Join(c.TrashRoot(), name)
 	if !fileExists(trashDir) {
-		return nil, fmt.Errorf("store: %w: %s（回收站中不存在）", ErrUnknownSkill, name)
+		return nil, sentinelErr(ErrUnknownSkill, "store.err.unknownSkillInTrash", name)
 	}
 	// 防御：即使名字校验漏过什么，RemoveAll 的目标也必须仍在回收站之内
 	// （解析符号链接后比较），否则什么都不删。
 	if !within(c.TrashRoot(), trashDir) {
-		return nil, fmt.Errorf("%w: %q 解析后不在回收站内，未删除", ErrInvalidName, name)
+		return nil, sentinelErr(ErrInvalidName, "store.err.escapesTrash", name)
 	}
 	entries, err := os.ReadDir(trashDir)
 	if err != nil {
-		return nil, fmt.Errorf("store: 读取回收站中的 %s 失败: %w", name, err)
+		return nil, i18n.Wrapf(err, "store.err.trashRead", name)
 	}
 	if err := c.ensureDirs(); err != nil {
 		return nil, err
@@ -182,7 +184,7 @@ func (c *Config) Purge(name string) (*Result, error) {
 		snapDir = dst
 	}
 	if err := os.RemoveAll(trashDir); err != nil {
-		return nil, fmt.Errorf("store: 永久删除 %s 失败: %w", name, err)
+		return nil, i18n.Wrapf(err, "store.err.purgeFailed", name)
 	}
 	return &Result{ID: name, SnapshotDir: snapDir}, nil
 }
@@ -201,15 +203,15 @@ func (c *Config) Purge(name string) (*Result, error) {
 func (c *Config) ensureSnapshot(name, stampName, src string) (string, error) {
 	want, err := HashDir(src)
 	if err != nil {
-		return "", fmt.Errorf("store: 计算回收站副本 %s 的内容哈希失败，未删除: %w", name, err)
+		return "", i18n.Wrapf(err, "store.err.hashTrashCopy", name)
 	}
 	dst := c.SnapshotPath(name, stampName)
 	info, err := os.Lstat(dst)
 	switch {
 	case err == nil && info.Mode()&(os.ModeSymlink|os.ModeIrregular) != 0:
-		return "", fmt.Errorf("store: 快照位置 %s 是符号链接，不能当作快照，未删除 %s", dst, name)
+		return "", i18n.Errorf("store.err.snapshotIsSymlink", dst, name)
 	case err == nil && !info.IsDir():
-		return "", fmt.Errorf("store: 快照位置 %s 被文件占用，未删除 %s", dst, name)
+		return "", i18n.Errorf("store.err.snapshotIsFile", dst, name)
 	case err == nil:
 		if got, herr := HashDir(dst); herr == nil && got == want {
 			return dst, nil
@@ -221,16 +223,16 @@ func (c *Config) ensureSnapshot(name, stampName, src string) (string, error) {
 			}
 		}
 	case !errors.Is(err, os.ErrNotExist):
-		return "", fmt.Errorf("store: 检查快照位置 %s 失败，未删除 %s: %w", dst, name, err)
+		return "", i18n.Wrapf(err, "store.err.snapshotCheck", dst, name)
 	}
 	if err := copyDir(src, dst); err != nil {
 		// dst 之前不存在或是空目录，这里只清掉写到一半的部分副本。
 		os.RemoveAll(dst)
-		return "", fmt.Errorf("store: 永久删除前快照 %s 失败，未删除: %w", name, err)
+		return "", i18n.Wrapf(err, "store.err.snapshotBeforePurge", name)
 	}
 	if got, err := HashDir(dst); err != nil || got != want {
 		os.RemoveAll(dst)
-		return "", fmt.Errorf("store: 永久删除前快照 %s 校验失败，未删除", name)
+		return "", i18n.Errorf("store.err.snapshotVerify", name)
 	}
 	return dst, nil
 }
@@ -243,7 +245,7 @@ func (c *Config) freshSnapshotPath(name, stampName string) (string, error) {
 			return p, nil
 		}
 	}
-	return "", fmt.Errorf("store: 找不到可用的快照位置 (%s/%s)，未删除", name, stampName)
+	return "", i18n.Errorf("store.err.noSnapshotPath", name, stampName)
 }
 
 // within 报告 p 是否在 root 之内（不含 root 本身）：两边都先解析符号链接，
@@ -269,7 +271,7 @@ func within(root, p string) bool {
 func latestSubdir(dir string) (string, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		return "", fmt.Errorf("store: 读取 %s 失败: %w", dir, err)
+		return "", i18n.Wrapf(err, "store.err.readFile", dir)
 	}
 	var best string
 	for _, e := range entries {
@@ -278,7 +280,7 @@ func latestSubdir(dir string) (string, error) {
 		}
 	}
 	if best == "" {
-		return "", errors.New("store: 目录下没有子目录")
+		return "", i18n.NewError("store.err.noSubdir")
 	}
 	return best, nil
 }

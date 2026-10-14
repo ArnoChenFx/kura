@@ -5,16 +5,17 @@ package store
 // 仍然只在这里发生）。
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/ArnoChenFx/kura/internal/i18n"
 )
 
 // ErrInvalidName 表示技能名不是单一的目录名（含路径分隔符、"." / ".." 等），
 // 拼进路径会越出根目录、disabled、trash 或 snapshots。
-var ErrInvalidName = errors.New("store: 非法的技能名")
+var ErrInvalidName = i18n.NewError("store.err.invalidName")
 
 // ValidName 校验技能名是否是单一的目录名：非空、不是 "." 或 ".."、不含 / 或 \
 // 与 ".."，且 filepath.Base(name) == name。Enable、Disable、Remove、Restore、
@@ -52,7 +53,7 @@ func ValidStampName(s string) bool {
 func (c *Config) snapshotSkillAt(name, dir, stampName string) (string, error) {
 	dst := c.SnapshotPath(name, stampName)
 	if err := copyDir(dir, dst); err != nil {
-		return "", fmt.Errorf("store: 快照 %s 失败: %w", name, err)
+		return "", i18n.Wrapf(err, "store.err.snapshot", name)
 	}
 	return dst, nil
 }
@@ -65,11 +66,11 @@ func (c *Config) RemoveWithStamp(name, stampName string) (*Result, error) {
 		return nil, err
 	}
 	if !ValidStampName(stampName) {
-		return nil, fmt.Errorf("store: 非法的时间戳目录名 %q", stampName)
+		return nil, i18n.Errorf("store.err.invalidStamp", stampName)
 	}
 	src := c.SkillPath(name)
 	if !fileExists(src) {
-		return nil, fmt.Errorf("store: %w: %s", ErrUnknownSkill, name)
+		return nil, fmt.Errorf("%w: %s", ErrUnknownSkill, name)
 	}
 	if err := c.ensureDirs(); err != nil {
 		return nil, err
@@ -80,13 +81,13 @@ func (c *Config) RemoveWithStamp(name, stampName string) (*Result, error) {
 	}
 	dst := filepath.Join(c.TrashRoot(), name, stampName)
 	if fileExists(dst) {
-		return nil, fmt.Errorf("store: 回收站中已存在 %s/%s", name, stampName)
+		return nil, i18n.Errorf("store.err.trashExists", name, stampName)
 	}
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
-		return nil, fmt.Errorf("store: 创建回收站目录失败: %w", err)
+		return nil, i18n.Wrapf(err, "store.err.createTrashDir")
 	}
 	if err := moveDir(src, dst); err != nil {
-		return nil, fmt.Errorf("store: 移入回收站失败 (%s): %w", name, err)
+		return nil, i18n.Wrapf(err, "store.err.moveToTrash", name)
 	}
 	return &Result{ID: name, State: StateTrashed, Dir: dst, SnapshotDir: snapDir}, nil
 }

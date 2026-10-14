@@ -4,6 +4,7 @@ import (
 	"log"
 	"os"
 
+	"github.com/ArnoChenFx/kura/internal/i18n"
 	"github.com/ArnoChenFx/kura/internal/selfupdate"
 	"github.com/ArnoChenFx/kura/internal/store"
 	kuraui "github.com/ArnoChenFx/kura/internal/ui"
@@ -23,6 +24,9 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	// 界面语言必须在 NewApp / 菜单构建之前定下来，否则第一帧就已经是错的
+	// 语言。
+	initLanguage(cfg)
 	app := kuraui.NewApp(cfg)
 	// 外观偏好（~/.kura/config.json 的 theme）在 App.Run 之前同步给 MyGo
 	// （MyGo 允许这样用已存的偏好），原生标题栏与系统菜单从第一帧起就是
@@ -67,4 +71,18 @@ func main() {
 	if err := mygo.App.Run(); err != nil {
 		log.Fatal(err)
 	}
+}
+
+// initLanguage 按 config.json 的 lang 设置进程语言：首选是固定语言（zh/en），
+// 缺省与 "system" 则跟随系统 locale——中文系统用中文，其余一律英文。
+//
+// 只在启动时调用一次（用户在界面里改语言走 UI 的 SetLangAsync + i18n.Set）。
+// config.json 读不到或损坏时按跟随系统处理：语言偏好是容错项，不是致命
+// 错误（与 store.LoadLibrary 的口径一致，界面会自己报告配置问题）。
+func initLanguage(cfg *store.Config) {
+	lib, err := store.LoadLibrary(cfg)
+	if err != nil {
+		lib = &store.Library{Lang: store.LangSystem}
+	}
+	i18n.Set(i18n.Resolve(store.LangPref(lib.Lang), i18n.SystemLocale()))
 }

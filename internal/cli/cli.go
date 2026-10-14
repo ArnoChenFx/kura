@@ -8,6 +8,9 @@
 // 全局约定：
 //   - 所有子命令都支持 --json（机器可读输出）、--root/--home（目录覆盖）；
 //     环境变量 KURA_ROOT/KURA_HOME 等价于对应 flag，命令行参数优先级更高；
+//   - 界面语言由 --lang（或 KURA_LANG）切换：flag > 环境变量 > config.json 的
+//     lang > 跟随系统 locale（见 lang.go）；文案一律经 i18n 取（见 catalog.go），
+//     中文与英文两套；
 //   - 退出码：0 成功；1 操作失败（技能不存在、同名冲突、IO 错误等）；
 //     2 用法错误（未知命令、flag 解析失败、参数个数不对）；3 doctor 发现问题。
 //
@@ -27,6 +30,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/ArnoChenFx/kura/internal/i18n"
 	"github.com/ArnoChenFx/kura/internal/store"
 )
 
@@ -44,16 +48,24 @@ const (
 // Run 解析 args（不含程序名）并执行对应子命令，返回进程退出码。
 // stdout/stderr 由调用方注入，便于测试捕获；本函数绝不调用 os.Exit。
 //
-// 全局 flag（--json/--root/--home）允许出现在子命令之前或之后：
+// 全局 flag（--json/--root/--home/--lang）允许出现在子命令之前或之后：
 // 先用一个前置 FlagSet 把子命令前的全局 flag 剥掉，剩下的第一个 token
 // 就是子命令；子命令内部的 FlagSet 再以这些值为默认值解析它自己的参数，
 // 因此 `kura --json list` 与 `kura list --json` 等价。
+//
+// --lang 比较特殊：它的值由 applyLanguage 在最前面从完整参数里预扫并应用
+// （见 lang.go），这里注册只是为了让 flag 包认识它、写在哪儿都不报错。
 func Run(args []string, stdout, stderr io.Writer) int {
+	// 界面语言必须在任何输出之前定下来（--lang > KURA_LANG > config.json >
+	// 跟随系统）；写坏的语言值在这里就报用法错误。
+	if code := applyLanguage(args, os.Getenv, stderr); code != ExitOK {
+		return code
+	}
 	if len(args) == 0 {
 		printUsage(stderr)
 		return ExitUsage
 	}
-	// 前置 flag 解析：只认 --json/--root/--home，遇到子命令即停。
+	// 前置 flag 解析：只认 --json/--root/--home/--lang，遇到子命令即停。
 	// flag 包停在第一个非 flag token 上并把它留在 NArg 里，正合需要。
 	pre := &globalFlags{}
 	preFS := flag.NewFlagSet("kura", flag.ContinueOnError)
@@ -61,15 +73,14 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	preFS.BoolVar(&pre.json, "json", false, "")
 	preFS.StringVar(&pre.root, "root", "", "")
 	preFS.StringVar(&pre.home, "home", "", "")
+	preFS.StringVar(&pre.lang, "lang", "", "")
 	if err := preFS.Parse(args); err != nil {
 		// flag 包对 -h/--help 有内建处理：未定义该 flag 时返回 ErrHelp。
 		if errors.Is(err, flag.ErrHelp) {
 			printUsage(stdout)
 			return ExitOK
 		}
-		fmt.Fprintf(stderr, "kura: 参数错误: %v（用 kura --help 查看用法）\n", err)
-		_ = writeJSON(stderr, errorJSON{Error: "参数错误: " + err.Error()})
-		return ExitUsage
+		return badFlags(stderr, err)
 	}
 	rest := preFS.Args()
 	if len(rest) == 0 {
@@ -109,19 +120,30 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	case "doctor":
 		return cmdDoctor(sub, stdout, stderr, pre)
 	default:
-		fmt.Fprintf(stderr, "kura: 未知命令 %q\n\n", cmd)
+		fmt.Fprint(stderr, i18n.Tf("cli.err.unknownCommand", cmd))
 		printUsage(stderr)
 		return ExitUsage
 	}
 }
 
+// badFlags 报「全局 flag 解析失败」：人类可读的一行加（--json 时）stderr 上的
+// 结构化错误。文本与结构化错误都从目录取，两种语言下都完整成句。
+func badFlags(stderr io.Writer, err error) int {
+	fmt.Fprint(stderr, i18n.Tf("cli.err.badFlag", err))
+	_ = writeJSON(stderr, errorJSON{Error: i18n.Tf("cli.err.badFlagJSON", err)})
+	return ExitUsage
+}
+
 // globalFlags 是所有子命令共享的 flag 集合。
 // 前置解析（子命令之前）得到 pre 值；子命令自己的 FlagSet 以它为默认值，
 // 于是子命令之后的同名字 flag 可以覆盖前置值。
+// lang 只需能解析（写在哪一处都行）：它的值已由 applyLanguage 预扫并应用，
+// 这里注册只是为了让 flag 包认识这个 flag。
 type globalFlags struct {
 	json bool
 	root string
 	home string
+	lang string
 }
 
 // newFlagSet 构造带全局 flag 的 FlagSet（解析错误输出到 stderr）。
@@ -132,12 +154,14 @@ func newFlagSet(name string, stderr io.Writer, g *globalFlags, pre *globalFlags)
 	fs := flag.NewFlagSet("kura "+name, flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	defJSON, defRoot, defHome := false, "", ""
+	defLang := ""
 	if pre != nil {
-		defJSON, defRoot, defHome = pre.json, pre.root, pre.home
+		defJSON, defRoot, defHome, defLang = pre.json, pre.root, pre.home, pre.lang
 	}
-	fs.BoolVar(&g.json, "json", defJSON, "以 JSON 输出（错误也以 JSON 输出到 stderr）")
-	fs.StringVar(&g.root, "root", defRoot, "技能根目录（默认 $KURA_ROOT 或 ~/.agents/skills）")
-	fs.StringVar(&g.home, "home", defHome, "kura 数据目录（默认 $KURA_HOME 或 ~/.kura）")
+	fs.BoolVar(&g.json, "json", defJSON, i18n.T("cli.flag.json"))
+	fs.StringVar(&g.root, "root", defRoot, i18n.T("cli.flag.root"))
+	fs.StringVar(&g.home, "home", defHome, i18n.T("cli.flag.home"))
+	fs.StringVar(&g.lang, "lang", defLang, i18n.T("cli.flag.lang"))
 	return fs
 }
 
@@ -201,84 +225,7 @@ func parseArgs(fs *flag.FlagSet, args []string) ([]string, error) {
 }
 
 // printUsage 打印帮助文本（命令列表、全局 flag、退出码与 JSON 契约摘要）。
+// 全文按当前界面语言取（见 catalog.go 的 cli.usage.text）。
 func printUsage(w io.Writer) {
-	fmt.Fprint(w, usageText)
+	fmt.Fprint(w, i18n.T("cli.usage.text"))
 }
-
-const usageText = `kura —— agent skills 管理器（无界面命令行）
-
-用法:
-  kura <命令> [参数] [flags]
-
-命令:
-  list                 列出全部技能（enabled + disabled + trashed）
-  scan                 同 list（别名，习惯上配合 --root 覆盖根目录）
-  disable <NAME>       禁用技能（移动到 <home>/disabled/，纯移动）
-  enable <NAME>        启用技能（从 disabled/ 移回根目录）
-  remove <NAME> [--stamp TS]
-                       移入回收站（先写快照）；--stamp 指定回收站时间戳目录名
-  restore <NAME> [--stamp TS]
-                       从回收站恢复；--stamp 省略时取最新一次
-  import-meta [--dry-run] [--lock PATH]
-                       依据根目录同级的 .skill-lock.json 补写缺失的
-                       .kura-meta.json；--dry-run 只分析不写文件；
-                       只适用于默认目录，界面里追加的目录会被拒绝（退出码 1）
-  add --local PATH [--name N]
-                       从本地目录安装技能
-  add --github owner/repo [--sub-path P] [--ref R] [--name N]
-                       从 GitHub 仓库安装技能；不给 --sub-path 时自动发现
-                       仓库内的技能：唯一候选直接安装，多个候选列出清单
-                       并以退出码 1 失败，请用 --sub-path 指定其中一个
-  update <NAME>        按元数据记录的来源重新拉取并替换内容（先快照）
-  update --check <NAME>
-                       预览 NAME 的更新会改什么（不修改任何文件）；
-                       有待更新退出码 3，无变化退出码 0
-  update --check --all
-                       预览根目录全部技能的更新（每个技能一段结果）
-  doctor               只读体检：缺元数据 / 元数据损坏 / 内容漂移 /
-                       缺 SKILL.md / disabled 与 trash 中的残留条目
-  version              打印版本
-
-全局 flags（可写在任何子命令之后）:
-  --json        输出 JSON；出错时错误信息以 {"error": "..."} 输出到 stderr
-  --root PATH   技能根目录（默认 $KURA_ROOT 或 ~/.agents/skills）
-  --home PATH   kura 数据目录（默认 $KURA_HOME 或 ~/.kura）
-
-退出码:
-  0  成功
-  1  操作失败（技能不存在、同名冲突、IO 错误等）
-  2  用法错误（未知命令、flag 解析失败、参数个数不对）
-  3  doctor 发现问题（明细见其输出）
-
-JSON 输出形状（--json 时）:
-  list/scan   {"root": string, "skills": [{name, state, hasSkillMd, dir,
-              sourceType?, sourceURL?, ref?, subPath?, pluginName?,
-              updatedAt?, metaError?}]}
-  变更命令     {"id": string, "state": string, "dir": string,
-              "snapshotDir"?: string}
-  doctor      {"root": string, "problems": [{kind, skill, detail}]}
-              kind ∈ not-a-dir | no-meta | meta-parse | hash-drift |
-                      no-skillmd | leftover
-  import-meta {"root": string, "lockPath": string, "dryRun": bool,
-              "wouldImport"?: [string], "imported"?: [string]}
-  add（多候选） {"error": string, "repo": string,
-              "candidates": [string]}（输出到 stderr，退出码 1）
-  update --check NAME
-              {"skill": string, "sourceType": string, "commit"?: string,
-              "hasChanges": bool, "basis": string, "localModified": bool,
-              "oldHash": string, "newHash": string,
-              "files": [{path, status, added, removed, oldHash?, newHash?}],
-              "unchanged": int}
-              status ∈ added | changed | removed；files 只含差异文件，
-              无变化时为 []。退出码：有待更新 3，无变化 0。
-              basis ∈ commit | tree | content：git 来源先用 git ls-remote
-              比对上游 commit（commit），commit 变了再比对该技能目录的树哈希
-              （tree），这两种都不下载文件；其余情况才逐文件比较（content）。
-              localModified 为 true 表示已安装内容被改过（上游没变时不算
-              有更新，但应用更新会覆盖这些改动）。
-  update --check --all
-              {"root": string,
-              "results": [{skill, error?, check?}]}
-              check 的形状同上；任一技能有待更新退出码 3。同一仓库的技能
-              共用一次检查与 clone。
-`

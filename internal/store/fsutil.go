@@ -1,10 +1,11 @@
 package store
 
 import (
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+
+	"github.com/ArnoChenFx/kura/internal/i18n"
 )
 
 // copyDir 递归复制目录（保留普通文件与子目录；不跟随符号链接，遇符号链接
@@ -43,7 +44,7 @@ func copyTree(src, dst string, skipGit bool) error {
 		}
 		defer out.Close()
 		if _, err := io.Copy(out, in); err != nil {
-			return fmt.Errorf("store: 复制 %s 失败: %w", rel, err)
+			return i18n.Wrapf(err, "store.err.copyFile", rel)
 		}
 		return nil
 	})

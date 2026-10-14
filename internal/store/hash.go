@@ -3,11 +3,12 @@ package store
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"sort"
+
+	"github.com/ArnoChenFx/kura/internal/i18n"
 )
 
 // HashDir 计算一个目录的内容哈希：sha256，输入为「相对路径 + 文件内容」的
@@ -35,7 +36,7 @@ func HashDir(dir string) (string, error) {
 		return nil
 	})
 	if err != nil {
-		return "", fmt.Errorf("store: 遍历 %s 失败: %w", dir, err)
+		return "", i18n.Wrapf(err, "store.err.walkDir", dir)
 	}
 	sort.Strings(paths)
 	h := sha256.New()
@@ -44,7 +45,7 @@ func HashDir(dir string) (string, error) {
 		h.Write([]byte{0})
 		data, err := os.ReadFile(filepath.Join(dir, rel))
 		if err != nil {
-			return "", fmt.Errorf("store: 读取 %s 失败: %w", rel, err)
+			return "", i18n.Wrapf(err, "store.err.readFile", rel)
 		}
 		h.Write(data)
 		h.Write([]byte{0})
