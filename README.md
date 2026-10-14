@@ -79,11 +79,3 @@ CGO_ENABLED=0 go build ./...
 ## Development and docs
 
 [AGENTS.md](AGENTS.md) has this repository's engineering rules (package boundaries, the UI thread contract, verification, test isolation); [REQUIREMENTS.md](REQUIREMENTS.md) has what kura must do, edge cases and non-goals included. [CHANGELOG.md](CHANGELOG.md) is the source of release notes, and each release needs a `## <version>` heading because the updater shows that section. Development notes live in [docs/note/](docs/note/).
-
-## Status
-
-kura is at `0.1.x`. The window's text is Chinese only. Release builds carry no Developer ID or Authenticode signature and are not notarised, so macOS and Windows may warn; the self-update path is not verified end to end: [docs/note/updates.md](docs/note/updates.md).
-
-## License
-
-No license is declared in this repository.

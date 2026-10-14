@@ -79,11 +79,3 @@ CGO_ENABLED=0 go build ./...
 ## 参与开发与文档
 
 [AGENTS.md](AGENTS.md) 是仓库的工程约定（包边界、UI 线程契约、验证要求、测试隔离）； [REQUIREMENTS.md](REQUIREMENTS.md) 是 kura 必须做到什么，含边界情况与非目标。 [CHANGELOG.md](CHANGELOG.md) 是发布说明的来源，且每个版本都要有 `## <版本号>` 标题，因为更新器会展示那一小节。开发笔记都在 [docs/note/](docs/note/)。
-
-## 现状
-
-kura 处于 `0.1.x`。窗口里的文字目前只有中文。发布产物没有 Developer ID 或 Authenticode 签名，也没有公证，因此 macOS 与 Windows 可能弹出未签名应用的常见提示。自更新链路尚未端到端验证，见 [docs/note/updates.md](docs/note/updates.md)。
-
-## 许可
-
-本仓库未声明许可证。
