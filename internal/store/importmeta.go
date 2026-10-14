@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/ArnoChenFx/kura/internal/i18n"
 )
 
 // LockEntry 是 .skill-lock.json 里一个技能条目的字段（v3 格式）。
@@ -35,11 +37,11 @@ func ReadLockFile(path string) (*LockFile, bool, error) {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil, false, nil
 		}
-		return nil, false, fmt.Errorf("store: 读取 %s 失败: %w", path, err)
+		return nil, false, i18n.Wrapf(err, "store.err.readFile", path)
 	}
 	var lf LockFile
 	if err := json.Unmarshal(data, &lf); err != nil {
-		return nil, false, fmt.Errorf("store: 解析 %s 失败: %w", path, err)
+		return nil, false, i18n.Wrapf(err, "store.err.parseFile", path)
 	}
 	return &lf, true, nil
 }
@@ -48,7 +50,7 @@ func ReadLockFile(path string) (*LockFile, bool, error) {
 func DefaultLockPath() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return "", fmt.Errorf("store: 无法确定用户主目录: %w", err)
+		return "", i18n.Wrapf(err, "store.err.userHome")
 	}
 	return filepath.Join(home, ".agents", ".skill-lock.json"), nil
 }
@@ -68,7 +70,7 @@ func lockSubPath(e LockEntry) string {
 
 // ErrImportDefaultOnly 表示对追加的根目录做「导入元数据」：.skill-lock.json
 // 只描述默认根目录，别的目录不能用它导入。
-var ErrImportDefaultOnly = errors.New("store: .skill-lock.json 只描述默认技能目录，导入元数据只适用于默认目录")
+var ErrImportDefaultOnly = i18n.NewError("store.err.importDefaultOnly")
 
 // CanImportMeta 报告该根目录能否「导入元数据」：只有默认根目录可以。
 // 追加的根目录（Library.Config 给它们非空的 Scope）不行。界面与命令行
@@ -125,7 +127,7 @@ func (c *Config) ImportMeta(lockPath string) ([]string, error) {
 			continue
 		}
 		if err := writeMeta(s.Dir, m); err != nil {
-			return imported, fmt.Errorf("store: 写入 %s 的元数据失败: %w", s.Name, err)
+			return imported, i18n.Wrapf(err, "store.err.importMetaWrite", s.Name)
 		}
 		imported = append(imported, s.Name)
 	}

@@ -1,8 +1,9 @@
 package store
 
 import (
-	"fmt"
 	"os"
+
+	"github.com/ArnoChenFx/kura/internal/i18n"
 )
 
 // moveDir 把 src 目录移动到 dst，是所有「移动技能目录」操作的统一入口
@@ -33,20 +34,20 @@ func moveDir(src, dst string) error {
 	staging := dst + moveTmpSuffix
 	// 清掉上次崩溃可能遗留的同名 staging，避免复制进脏目录。
 	if err := os.RemoveAll(staging); err != nil {
-		return fmt.Errorf("store: 清理跨卷移动的临时目录 %s 失败: %w", staging, err)
+		return i18n.Wrapf(err, "store.err.cleanStaging", staging)
 	}
 	if err := copyDir(src, staging); err != nil {
 		os.RemoveAll(staging)
-		return fmt.Errorf("store: 跨卷移动 %s：复制到 %s 失败（原目录未改动）: %w", src, staging, err)
+		return i18n.Wrapf(err, "store.err.crossVolumeCopy", src, staging)
 	}
 	if err := os.Rename(staging, dst); err != nil {
 		os.RemoveAll(staging)
-		return fmt.Errorf("store: 跨卷移动 %s：落位 %s 失败（原目录未改动）: %w", src, dst, err)
+		return i18n.Wrapf(err, "store.err.crossVolumeRename", src, dst)
 	}
 	// 复制与落位都成功后才删源目录。这一步失败不回滚（数据已在 dst），
 	// 只把残留状态说清楚，由调用方报给用户。
 	if err := os.RemoveAll(src); err != nil {
-		return fmt.Errorf("store: 跨卷移动完成，但删除源目录 %s 失败（内容已在 %s）: %w", src, dst, err)
+		return i18n.Wrapf(err, "store.err.crossVolumeSource", src, dst)
 	}
 	return nil
 }

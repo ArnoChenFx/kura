@@ -3,9 +3,10 @@ package store
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/ArnoChenFx/kura/internal/i18n"
 )
 
 // Source 描述技能的安装来源。
@@ -61,11 +62,11 @@ func readMeta(dir string) metaReadResult {
 		if errors.Is(err, os.ErrNotExist) {
 			return metaReadResult{Found: false}
 		}
-		return metaReadResult{Found: true, Err: fmt.Errorf("store: 读取 %s 失败: %w", path, err)}
+		return metaReadResult{Found: true, Err: i18n.Wrapf(err, "store.err.readFile", path)}
 	}
 	var m Meta
 	if err := json.Unmarshal(data, &m); err != nil {
-		return metaReadResult{Found: true, Err: fmt.Errorf("store: 解析 %s 失败（JSON 损坏）: %w", path, err)}
+		return metaReadResult{Found: true, Err: i18n.Wrapf(err, "store.err.parseMeta", path)}
 	}
 	return metaReadResult{Found: true, Meta: &m}
 }
@@ -73,17 +74,17 @@ func readMeta(dir string) metaReadResult {
 // writeMeta 把 m 写入 dir/.kura-meta.json（缩进两格）。写入前固化 metaVersion=1。
 func writeMeta(dir string, m *Meta) error {
 	if m == nil {
-		return errors.New("store: 不能写入空元数据")
+		return i18n.NewError("store.err.emptyMeta")
 	}
 	m.MetaVersion = MetaVersion
 	data, err := json.MarshalIndent(m, "", "  ")
 	if err != nil {
-		return fmt.Errorf("store: 序列化元数据失败: %w", err)
+		return i18n.Wrapf(err, "store.err.marshalMeta")
 	}
 	path := filepath.Join(dir, MetaFileName)
 	// 末尾补一个换行，符合常见文本文件习惯。
 	if err := os.WriteFile(path, append(data, '\n'), 0o644); err != nil {
-		return fmt.Errorf("store: 写入 %s 失败: %w", path, err)
+		return i18n.Wrapf(err, "store.err.writeFile", path)
 	}
 	return nil
 }

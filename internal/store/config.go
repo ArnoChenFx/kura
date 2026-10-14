@@ -12,9 +12,10 @@ package store
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/ArnoChenFx/kura/internal/i18n"
 )
 
 // Config 是 kura 的全部目录建模：一个技能根目录 + kura 自有数据目录。
@@ -43,16 +44,16 @@ const (
 )
 
 // ErrUnknownSkill 表示请求的技能在根目录（或对应位置）不存在。
-var ErrUnknownSkill = errors.New("store: 未找到该技能")
+var ErrUnknownSkill = i18n.NewError("store.err.unknownSkill")
 
 // NewConfig 构造自定义配置；root 或 home 为空时返回错误（root 不可为空，
 // home 为空时调用方应使用 DefaultConfig）。
 func NewConfig(root, home string) (*Config, error) {
 	if root == "" {
-		return nil, errors.New("store: root 不能为空")
+		return nil, i18n.NewError("store.err.emptyRoot")
 	}
 	if home == "" {
-		return nil, errors.New("store: home 不能为空（可改用 DefaultConfig）")
+		return nil, i18n.NewError("store.err.emptyHome")
 	}
 	return &Config{Root: root, Home: home}, nil
 }
@@ -62,7 +63,7 @@ func NewConfig(root, home string) (*Config, error) {
 func DefaultConfig() (*Config, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return nil, fmt.Errorf("store: 无法确定用户主目录: %w", err)
+		return nil, i18n.Wrapf(err, "store.err.userHome")
 	}
 	return &Config{
 		Root: filepath.Join(home, ".agents", "skills"),
@@ -103,7 +104,7 @@ func (c *Config) SnapshotPath(name, stamp string) string {
 func (c *Config) ensureDirs() error {
 	for _, dir := range []string{c.Home, c.DisabledRoot(), c.TrashRoot(), c.SnapshotsRoot()} {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
-			return fmt.Errorf("store: 创建目录 %s 失败: %w", dir, err)
+			return i18n.Wrapf(err, "store.err.createDir", dir)
 		}
 	}
 	return nil
@@ -117,11 +118,11 @@ func LoadHomeConfig(c *Config) (*HomeConfig, bool, error) {
 		return &HomeConfig{}, false, nil
 	}
 	if err != nil {
-		return nil, false, fmt.Errorf("store: 读取 %s 失败: %w", c.ConfigPath(), err)
+		return nil, false, i18n.Wrapf(err, "store.err.readFile", c.ConfigPath())
 	}
 	var hc HomeConfig
 	if err := json.Unmarshal(data, &hc); err != nil {
-		return nil, false, fmt.Errorf("store: 解析 %s 失败（JSON 已损坏）: %w", c.ConfigPath(), err)
+		return nil, false, i18n.Wrapf(err, "store.err.parseJSON", c.ConfigPath())
 	}
 	return &hc, true, nil
 }
@@ -133,10 +134,10 @@ func SaveHomeConfig(c *Config, hc *HomeConfig) error {
 	}
 	data, err := json.MarshalIndent(hc, "", "  ")
 	if err != nil {
-		return fmt.Errorf("store: 序列化配置失败: %w", err)
+		return i18n.Wrapf(err, "store.err.marshalConfig")
 	}
 	if err := os.WriteFile(c.ConfigPath(), data, 0o644); err != nil {
-		return fmt.Errorf("store: 写入 %s 失败: %w", c.ConfigPath(), err)
+		return i18n.Wrapf(err, "store.err.writeFile", c.ConfigPath())
 	}
 	return nil
 }

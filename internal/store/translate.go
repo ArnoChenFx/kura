@@ -16,12 +16,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/ArnoChenFx/kura/internal/i18n"
 )
 
 // errSnippetMax 是非 2xx 时错误信息里携带的响应体最大字节数。截断是为了
@@ -61,6 +61,10 @@ type chatResponse struct {
 //   - 只输出译文本体，不要解释、不要前后缀、不要加引号；
 //   - 保持 markdown 结构（标题/列表/代码块围栏）不变；
 //   - 代码块内容不翻译——技能文档里的命令、配置、代码翻译了会失效。
+//
+// 这是发给**模型**的指令，不是界面文案：它必须稳定、可测试，不能随界面语言
+// 变，所以有意留在代码里而不进 catalog（catalog 只管用户能看到的文字）。
+// translate.go 因此被 internal/i18n 的 TestNoHardcodedCJK 列入允许清单。
 const systemPrompt = "你是一名技术文档翻译引擎。把用户发来的内容完整翻译成目标语言，" +
 	"严格遵守：\n" +
 	"1. 只输出译文，不要任何解释、说明或前后缀，也不要给译文加引号。\n" +
@@ -75,8 +79,8 @@ const systemPrompt = "你是一名技术文档翻译引擎。把用户发来的�
 //   - ctx 用来取消与超时，调用方负责挂超时；本实现不额外设 Client.Timeout。
 //   - s.Ready() 为假时**不发请求**，返回 ErrNotConfigured（errors.Is 可判断）。
 //   - text 为空串时返回 ("", nil)——空文本没有翻译价值，省一次 API 调用。
-//   - 失败返回以「store: 」开头的中文错误；错误信息里**绝不包含 API key**
-//     （请求头从不打印）。
+//   - 失败返回以「store: 」开头的错误（文字随界面语言变，见 catalog）。
+//     错误信息里**绝不包含 API key**（请求头从不打印）。
 func (s *Settings) Translate(ctx context.Context, text string) (string, error) {
 	if !s.Ready() {
 		return "", ErrNotConfigured
@@ -97,20 +101,21 @@ func (s *Settings) Translate(ctx context.Context, text string) (string, error) {
 		Model: s.Model,
 		Messages: []chatMessage{
 			// 目标语言在系统提示里点名，避免和正文混在一起被当成待译内容。
+			// 「目标语言：」是系统提示的一部分（发给模型的指令），同样留在代码里。
 			{Role: "system", Content: systemPrompt + "目标语言：" + lang + "。"},
 			{Role: "user", Content: text},
 		},
 		Temperature: 0,
 	})
 	if err != nil {
-		// 结构体是静态的，正常不会走到这里；兜住并给中文错误。
-		return "", fmt.Errorf("store: 构造翻译请求失败: %w", err)
+		// 结构体是静态的，正常不会走到这里；兜住并给出目录里的错误。
+		return "", i18n.Wrapf(err, "store.err.translateRequest")
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 	if err != nil {
 		// URL 非法等构造期错误；带上端点便于用户发现 BaseURL 填错。
-		return "", fmt.Errorf("store: 构造翻译请求失败（请检查 API 地址 %s）: %w", endpoint, err)
+		return "", i18n.Wrapf(err, "store.err.translateEndpoint", endpoint)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	// Authorization 只进请求头；本函数的任何错误路径都不会打印 req。
@@ -120,7 +125,7 @@ func (s *Settings) Translate(ctx context.Context, text string) (string, error) {
 	if err != nil {
 		// 网络错误 / ctx 超时：原样包装，带上原因（*url.Error 已含取消语义）。
 		// 不打印 req（里面有 Authorization 头）。
-		return "", fmt.Errorf("store: 翻译请求失败: %w", err)
+		return "", i18n.Wrapf(err, "store.err.translateDo")
 	}
 	defer resp.Body.Close() //nolint:errcheck // 只读响应体，关闭失败无可恢复
 
@@ -129,27 +134,27 @@ func (s *Settings) Translate(ctx context.Context, text string) (string, error) {
 	// 会是空，短响应体会被截成空串导致 JSON 解析失败（这里曾有此 bug）。
 	full, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
 	if err != nil {
-		return "", fmt.Errorf("store: 读取翻译响应失败: %w", err)
+		return "", i18n.Wrapf(err, "store.err.translateRead")
 	}
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
 		// 错误信息只带响应体前 errSnippetMax 字节：够看清 401/429 的 JSON
 		// 错误说明，又不会把整页 HTML 错误页塞进弹窗。
-		return "", fmt.Errorf("store: 翻译接口返回 %d: %s", resp.StatusCode, snippetOf(full))
+		return "", i18n.Errorf("store.err.translateStatus", resp.StatusCode, snippetOf(full))
 	}
 
 	var cr chatResponse
 	if err := json.Unmarshal(full, &cr); err != nil {
 		// 响应不是合法 JSON（常见于网关返回 HTML 或被代理劫持的页面）。
-		return "", fmt.Errorf("store: 解析翻译响应失败（不是合法 JSON）: %w", err)
+		return "", i18n.Wrapf(err, "store.err.translateParse")
 	}
 	if len(cr.Choices) == 0 {
 		// 合法 JSON 但没有 choices：模型拒绝输出、或服务端行为异常。
-		return "", errors.New("store: 翻译响应里没有 choices（服务端未返回译文）")
+		return "", i18n.NewError("store.err.translateNoChoices")
 	}
 	content := cr.Choices[0].Message.Content
 	if strings.TrimSpace(content) == "" {
 		// 有 choices 但内容为空：不把空串当成功返回，UI 会当成翻译消失。
-		return "", errors.New("store: 翻译响应内容为空")
+		return "", i18n.NewError("store.err.translateEmpty")
 	}
 	return content, nil
 }
@@ -176,7 +181,7 @@ func snippetOf(data []byte) string {
 	out := b.String()
 	out = strings.TrimSpace(out)
 	if len(data) >= errSnippetMax && out != "" {
-		out += "…（已截断）"
+		out += i18n.T("store.term.truncated")
 	}
 	return out
 }

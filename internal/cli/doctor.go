@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/ArnoChenFx/kura/internal/i18n"
 	"github.com/ArnoChenFx/kura/internal/store"
 )
 
@@ -59,11 +60,11 @@ func cmdDoctor(args []string, stdout, stderr io.Writer, pre *globalFlags) int {
 		return usageError(stderr, err)
 	}
 	if len(positional) > 0 {
-		return printError(g, stderr, "doctor 不接受位置参数")
+		return printError(g, stderr, i18n.T("cli.err.doctorPositional"))
 	}
 	c, err := resolveConfig(g)
 	if err != nil {
-		return printError(g, stderr, "%v", err)
+		return printError(g, stderr, err.Error())
 	}
 	result := runDoctor(c)
 	hasProblems := len(result.Problems) > 0
@@ -92,10 +93,10 @@ func runDoctor(c *store.Config) doctorResult {
 	enabled, scanErr := c.Scan()
 	if scanErr != nil {
 		result.Problems = append(result.Problems, Problem{
-			Kind: KindNotADir, Detail: fmt.Sprintf("扫描根目录失败: %v", scanErr),
+			Kind: KindNotADir, Detail: i18n.Tf("cli.err.scanRootFailed", scanErr),
 		})
 	} else {
-		result.Problems = append(result.Problems, checkSkills(enabled, "根目录")...)
+		result.Problems = append(result.Problems, checkSkills(enabled, i18n.T("cli.term.rootDir"))...)
 	}
 	result.Problems = append(result.Problems, checkDisabled(c)...)
 	result.Problems = append(result.Problems, checkTrash(c)...)
@@ -113,7 +114,7 @@ func checkRootEntries(c *store.Config) []Problem {
 		}
 		return []Problem{{
 			Kind:   KindNotADir,
-			Detail: fmt.Sprintf("根目录不可读: %v", err),
+			Detail: i18n.Tf("cli.doctor.rootUnreadable", err),
 		}}
 	}
 	var problems []Problem
@@ -125,7 +126,7 @@ func checkRootEntries(c *store.Config) []Problem {
 			problems = append(problems, Problem{
 				Kind:   KindNotADir,
 				Skill:  e.Name(),
-				Detail: "根目录下存在同名普通文件，技能必须是目录",
+				Detail: i18n.T("cli.doctor.rootFileNotDir"),
 			})
 		}
 	}
@@ -134,7 +135,8 @@ func checkRootEntries(c *store.Config) []Problem {
 
 // checkSkills 对一组 store.Skill 做完整检查：缺元数据 / 元数据损坏 /
 // 缺 SKILL.md / 内容哈希漂移。任何单点失败都转化为问题记录，绝不 panic。
-// where 仅用于人类可读文案（"根目录"/"disabled"）。
+// where 是已按当前语言取好的人类可读位置名（“根目录”/“the root folder”，
+// 或固定的 "disabled"、"trash"）。
 func checkSkills(skills []*store.Skill, where string) []Problem {
 	var problems []Problem
 	for _, s := range skills {
@@ -151,7 +153,7 @@ func checkSkills(skills []*store.Skill, where string) []Problem {
 			problems = append(problems, Problem{
 				Kind:   KindNoMeta,
 				Skill:  s.Name,
-				Detail: fmt.Sprintf("%s 的技能缺少 .kura-meta.json（可用 kura import-meta 从 lock 文件补齐）", where),
+				Detail: i18n.Tf("cli.doctor.metaMissing", where),
 			})
 		}
 		// 缺少 SKILL.md。
@@ -159,7 +161,7 @@ func checkSkills(skills []*store.Skill, where string) []Problem {
 			problems = append(problems, Problem{
 				Kind:   KindNoSkillMD,
 				Skill:  s.Name,
-				Detail: fmt.Sprintf("%s 的技能缺少 SKILL.md", where),
+				Detail: i18n.Tf("cli.doctor.skillMDMissing", where),
 			})
 		}
 		// 内容漂移：仅在元数据可读且有记录哈希时核对。
@@ -169,13 +171,13 @@ func checkSkills(skills []*store.Skill, where string) []Problem {
 				problems = append(problems, Problem{
 					Kind:   KindNoMeta,
 					Skill:  s.Name,
-					Detail: "元数据缺少 contentHash，无法检测内容漂移",
+					Detail: i18n.T("cli.doctor.noContentHash"),
 				})
 			case s.ContentHash != expected:
 				problems = append(problems, Problem{
 					Kind:  KindHashDrift,
 					Skill: s.Name,
-					Detail: fmt.Sprintf("内容与元数据不符: 当前 %s，记录 %s（可用 kura update 刷新）",
+					Detail: i18n.Tf("cli.doctor.hashDrift",
 						shortHash(s.ContentHash), shortHash(expected)),
 				})
 			}
@@ -193,7 +195,7 @@ func checkDisabled(c *store.Config) []Problem {
 	skills, err := c.ScanDisabled()
 	if err != nil {
 		problems = append(problems, Problem{
-			Kind: KindNotADir, Detail: fmt.Sprintf("扫描 disabled 目录失败: %v", err),
+			Kind: KindNotADir, Detail: i18n.Tf("cli.doctor.scanDisabledFailed", err),
 		})
 		return problems
 	}
@@ -211,7 +213,7 @@ func checkDisabled(c *store.Config) []Problem {
 		problems = append(problems, Problem{
 			Kind:   KindLeftover,
 			Skill:  s.Name,
-			Detail: fmt.Sprintf("disabled 中有已禁用的技能（可用 kura enable %s 恢复）", s.Name),
+			Detail: i18n.Tf("cli.doctor.disabledLeftover", s.Name),
 		})
 	}
 	return problems
@@ -225,7 +227,7 @@ func checkTrash(c *store.Config) []Problem {
 	names, err := c.ScanTrash()
 	if err != nil {
 		problems = append(problems, Problem{
-			Kind: KindNotADir, Detail: fmt.Sprintf("扫描 trash 目录失败: %v", err),
+			Kind: KindNotADir, Detail: i18n.Tf("cli.doctor.scanTrashFailed", err),
 		})
 		return problems
 	}
@@ -235,7 +237,7 @@ func checkTrash(c *store.Config) []Problem {
 			problems = append(problems, Problem{
 				Kind:   KindNotADir,
 				Skill:  n.Name,
-				Detail: fmt.Sprintf("回收站条目不可读: %v", derr),
+				Detail: i18n.Tf("cli.doctor.trashEntryUnreadable", derr),
 			})
 			continue
 		}
@@ -246,7 +248,7 @@ func checkTrash(c *store.Config) []Problem {
 			problems = append(problems, Problem{
 				Kind:  KindLeftover,
 				Skill: n.Name,
-				Detail: fmt.Sprintf("回收站中保留着 %s/%s（可用 kura restore %s --stamp %s 恢复）",
+				Detail: i18n.Tf("cli.doctor.trashLeftover",
 					n.Name, st.Name(), n.Name, st.Name()),
 			})
 		}
@@ -262,7 +264,7 @@ func checkSideEntries(dir, label string) []Problem {
 		if os.IsNotExist(err) {
 			return nil // 目录不存在：从未禁用/删除过，正常。
 		}
-		return []Problem{{Kind: KindNotADir, Detail: fmt.Sprintf("读取 %s 失败: %v", dir, err)}}
+		return []Problem{{Kind: KindNotADir, Detail: i18n.Tf("cli.doctor.readFailed", dir, err)}}
 	}
 	var problems []Problem
 	for _, e := range entries {
@@ -273,7 +275,7 @@ func checkSideEntries(dir, label string) []Problem {
 			problems = append(problems, Problem{
 				Kind:   KindNotADir,
 				Skill:  e.Name(),
-				Detail: fmt.Sprintf("%s 下存在同名普通文件，技能必须是目录", label),
+				Detail: i18n.Tf("cli.doctor.sideFileNotDir", label),
 			})
 		}
 	}
@@ -303,10 +305,10 @@ func sortProblems(ps []Problem) {
 func printDoctorText(w io.Writer, c *store.Config, result doctorResult) {
 	fmt.Fprintf(w, "root: %s\n", c.Root)
 	if len(result.Problems) == 0 {
-		fmt.Fprintln(w, "一切正常（没有发现问题）")
+		fmt.Fprintln(w, i18n.T("cli.doctor.allGood"))
 		return
 	}
-	fmt.Fprintf(w, "发现 %d 个问题:\n", len(result.Problems))
+	fmt.Fprint(w, i18n.Tf("cli.doctor.problemCount", len(result.Problems)))
 	for _, p := range result.Problems {
 		fmt.Fprintf(w, "  [%s] %s: %s\n", p.Kind, skillOrDash(p.Skill), p.Detail)
 	}

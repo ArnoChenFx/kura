@@ -202,21 +202,59 @@ func TestNoHardcodedCJK(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	allowed := allowedPaths(root)
 	for _, f := range found {
-		rel, _ := filepath.Rel(root, strings.SplitN(f, ":", 2)[0])
-		line := strings.SplitN(f, ":", 2)[1]
-		t.Errorf("%s:%s 有硬编码中文界面文案；请移进 catalog 并用 i18n.T 取用",
-			filepath.ToSlash(rel), line)
+		// CJKLiterals 的每条结果是「绝对路径:行号: 字面量」（路径里可能有
+		// 盘符的 ':'），所以只能按前缀判允许，不能按 ':' 切路径。
+		if hasAllowedPrefix(f, allowed) {
+			continue
+		}
+		// 报错时把绝对路径缩成仓库相对路径，消息好读。
+		t.Errorf("%s 有硬编码中文界面文案；请移进 catalog 并用 i18n.T 取用",
+			strings.TrimPrefix(filepath.ToSlash(f), filepath.ToSlash(root)+"/"))
 	}
 }
 
-// allowedFiles 是允许出现中文界面的文件名：各包的目录文件，以及它们自己的
-// 测试。
+// allowedFiles 是允许出现中文的文件名（i18n.CJKLiterals 按文件名匹配，
+// 所以这里只能给文件名）：各包的目录文件、i18n 包自己的实现与测试
+// （「文本不存在」这类错误是对程序员的，不是界面文案）。
+//
+// 加进这个清单的每个名字都要想清楚：它会放行**所有包**里的同名文件。
+// 要精确到某一个文件就用 allowedPaths。不要为了让它过而放宽别的判断
+// （例如整目录排除）。
 func allowedFiles() []string {
 	return []string{
 		"catalog.go", "catalog_zh.go", "catalog_en.go",
 		"i18n.go", "i18n_test.go", "locale_windows.go", "locale_other.go",
 	}
+}
+
+// allowedPaths 是按完整路径（仓库相对、/ 分隔）允许含中文的文件，返回带
+// 结尾 ':' 的前缀（与 CJKLiterals 结果里的「路径:行号」对齐），给「文件名
+// 不够精确」的场合用：
+//
+//   - internal/store/translate.go：systemPrompt（以及拼在它后面的「目标
+//     语言：」）是发给**模型**的指令，不是界面文案：它必须稳定、可测试，
+//     不能随界面语言变，所以有意留在代码里（见该文件的注释）。
+//     这里写路径而不是把 "translate.go" 加进 allowedFiles：internal/ui/
+//     translate.go 是普通界面代码，那里的中文仍要被守卫拦下。
+func allowedPaths(root string) []string {
+	rel := []string{"internal/store/translate.go"}
+	out := make([]string, 0, len(rel))
+	for _, p := range rel {
+		out = append(out, filepath.ToSlash(filepath.Join(root, filepath.FromSlash(p)))+":")
+	}
+	return out
+}
+
+// hasAllowedPrefix 报告一条 CJKLiterals 结果是否落在允许列表里的某个文件。
+func hasAllowedPrefix(finding string, allowed []string) bool {
+	for _, p := range allowed {
+		if strings.HasPrefix(finding, p) {
+			return true
+		}
+	}
+	return false
 }
 
 func repoRoot(t *testing.T) string {

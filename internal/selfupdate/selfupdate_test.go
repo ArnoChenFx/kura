@@ -16,6 +16,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/ArnoChenFx/kura/internal/i18n"
 	"github.com/ArnoChenFx/kura/internal/store"
 	kuraui "github.com/ArnoChenFx/kura/internal/ui"
 	"github.com/egoist/mygo"
@@ -33,6 +34,7 @@ func TestInstallRegistersPlugin(t *testing.T) {
 // TestAppMenuStructure 验证应用菜单模板：顶层 kura/编辑/窗口三个菜单；
 // kura 子菜单依次为 关于 role、关于 kura、分隔线、更新项、分隔线、退出。
 // 更新项用替身注入（生产环境此处是 updater.MenuItem()，见 appMenu 注释）。
+// 菜单文字从目录取（i18n.T），所以断言与当前语言无关：两边都读目录。
 func TestAppMenuStructure(t *testing.T) {
 	stub := &mygo.MenuItem{Label: "检查更新…"}
 	m := appMenu(stub)
@@ -54,8 +56,8 @@ func TestAppMenuStructure(t *testing.T) {
 	if sub[0].Role != mygo.RoleAbout {
 		t.Errorf("第 1 项应为 RoleAbout，得到 role=%q label=%q", sub[0].Role, sub[0].Label)
 	}
-	if sub[1].Label != aboutLabel || sub[1].Click == nil {
-		t.Errorf("第 2 项应为 %q 且有 Click，得到 %+v", aboutLabel, sub[1])
+	if sub[1].Label != i18n.T("selfupdate.menu.about") || sub[1].Click == nil {
+		t.Errorf("第 2 项应为 %q 且有 Click，得到 %+v", i18n.T("selfupdate.menu.about"), sub[1])
 	}
 	if sub[2].Type != mygo.MenuItemSeparator || sub[4].Type != mygo.MenuItemSeparator {
 		t.Errorf("第 3/5 项应为分隔线，得到 %q / %q", sub[2].Type, sub[4].Type)
@@ -63,8 +65,9 @@ func TestAppMenuStructure(t *testing.T) {
 	if sub[3].Label != stub.Label || sub[3].Click != nil {
 		t.Errorf("第 4 项应为注入的更新项（label=%q，替身无 Click），得到 %+v", stub.Label, sub[3])
 	}
-	if sub[5].Label != quitLabel || sub[5].Role != mygo.RoleQuit {
-		t.Errorf("第 6 项应为 %q（RoleQuit），得到 label=%q role=%q", quitLabel, sub[5].Label, sub[5].Role)
+	if sub[5].Label != i18n.T("selfupdate.menu.quit") || sub[5].Role != mygo.RoleQuit {
+		t.Errorf("第 6 项应为 %q（RoleQuit），得到 label=%q role=%q",
+			i18n.T("selfupdate.menu.quit"), sub[5].Label, sub[5].Role)
 	}
 }
 

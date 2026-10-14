@@ -17,12 +17,13 @@ package store
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/ArnoChenFx/kura/internal/i18n"
 )
 
 // git 命令的整体超时。ls-remote 只交换 ref 列表；clone 只取树；检出按需取文件。
@@ -44,7 +45,7 @@ var stallArgs = []string{"-c", "http.lowSpeedLimit=1000", "-c", "http.lowSpeedTi
 var cloneHook func(url string)
 
 // ErrGitTimeout 表示 git 命令在限定时间内没有完成（多半是网络卡住）。
-var ErrGitTimeout = errors.New("store: git 操作超时")
+var ErrGitTimeout = i18n.NewError("store.err.gitTimeout")
 
 // gitOutput 在 dir 下执行 git（dir 为空时用当前目录），stdin 非空时作为标准
 // 输入，返回原样的 stdout。失败时错误里带上 stderr；超时返回 ErrGitTimeout。
@@ -66,10 +67,11 @@ func gitOutput(timeout time.Duration, dir, stdin string, args ...string) (string
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
 	if ctx.Err() == context.DeadlineExceeded {
-		return "", fmt.Errorf("%w（%s 超过 %s）", ErrGitTimeout, gitVerb(args), timeout)
+		return "", sentinelErr(ErrGitTimeout, "store.err.gitTimeoutAfter", gitVerb(args), timeout)
 	}
 	if err != nil {
-		return "", fmt.Errorf("store: git %s 失败: %w: %s", gitVerb(args), err, strings.TrimSpace(stderr.String()))
+		msg := i18n.Tf("store.err.gitFailed", gitVerb(args), strings.TrimSpace(stderr.String()))
+		return "", fmt.Errorf("%s: %w", msg, err)
 	}
 	return string(out), nil
 }
@@ -139,9 +141,9 @@ func remoteHead(url, ref string) (string, error) {
 		}
 	}
 	if ref == "" {
-		return "", fmt.Errorf("store: 远端 %s 没有默认分支", url)
+		return "", i18n.Errorf("store.err.noDefaultBranch", url)
 	}
-	return "", fmt.Errorf("store: 远端 %s 不存在分支或标签 %s", url, ref)
+	return "", i18n.Errorf("store.err.noSuchRef", url, ref)
 }
 
 // upstream 是一次「只取树」的浅 clone，按需稀疏检出技能子目录。
@@ -159,7 +161,7 @@ func cloneUpstream(url, ref string) (*upstream, error) {
 	}
 	tmp, err := os.MkdirTemp("", "kura-upstream-")
 	if err != nil {
-		return nil, fmt.Errorf("store: 创建临时目录失败: %w", err)
+		return nil, i18n.Wrapf(err, "store.err.tempDir")
 	}
 	args := []string{"clone", "-q", "--depth", "1", "--filter=blob:none", "--no-checkout"}
 	if ref != "" {
@@ -201,7 +203,7 @@ func (u *upstream) Trees(subPaths []string) (map[string]treeResult, error) {
 			continue
 		}
 		if strings.ContainsAny(sub, "\n\r") {
-			res[sub] = treeResult{Err: fmt.Errorf("store: 仓库内不存在目录 %s", p)}
+			res[sub] = treeResult{Err: i18n.Errorf("store.err.noDirInRepo", p)}
 			continue
 		}
 		res[sub] = treeResult{}
@@ -231,7 +233,7 @@ func (u *upstream) Trees(subPaths []string) (map[string]treeResult, error) {
 			res[key] = treeResult{Tree: f[0]}
 			continue
 		}
-		res[key] = treeResult{Err: fmt.Errorf("store: 仓库内不存在目录 %s", key)}
+		res[key] = treeResult{Err: i18n.Errorf("store.err.noDirInRepo", key)}
 	}
 	return res, nil
 }
@@ -258,7 +260,7 @@ func (u *upstream) Checkout(subPaths []string) error {
 		}
 		// 模式文件按行分隔：路径里的换行会注入额外的模式（比如把整个仓库检出来）。
 		if strings.ContainsAny(sub, "\n\r") {
-			return fmt.Errorf("store: 仓库内不存在目录 %s", p)
+			return i18n.Errorf("store.err.noDirInRepo", p)
 		}
 		patterns.WriteString("/" + escapeSparse(sub) + "/\n")
 	}
@@ -280,10 +282,10 @@ func (u *upstream) CheckoutDiscovery() error { return u.applySparse(discoverySpa
 func (u *upstream) applySparse(patterns string) error {
 	info := filepath.Join(u.dir, ".git", "info")
 	if err := os.MkdirAll(info, 0o755); err != nil {
-		return fmt.Errorf("store: 准备稀疏检出失败: %w", err)
+		return i18n.Wrapf(err, "store.err.sparseCheckout")
 	}
 	if err := os.WriteFile(filepath.Join(info, "sparse-checkout"), []byte(patterns), 0o644); err != nil {
-		return fmt.Errorf("store: 准备稀疏检出失败: %w", err)
+		return i18n.Wrapf(err, "store.err.sparseCheckout")
 	}
 	for _, kv := range [][2]string{{"core.sparseCheckout", "true"}, {"core.sparseCheckoutCone", "false"}} {
 		if _, err := runGit(lsRemoteTimeout, u.dir, "config", kv[0], kv[1]); err != nil {
