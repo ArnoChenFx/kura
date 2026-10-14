@@ -4,6 +4,8 @@ A desktop manager for agent skills, built with [MyGo](https://github.com/egoist/
 
 [中文说明](README-zh.md)
 
+![Screenshot](docs/screenshot.png)
+
 ## What it does
 
 - **Several skill roots at once.** `~/.agents/skills` is the default and always first; any other folder can be added in the UI. Each root keeps its own disabled/trash/snapshot state, so same-named skills never interfere.

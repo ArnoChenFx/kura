@@ -4,6 +4,8 @@
 
 [English README](README.md)
 
+![Screenshot](docs/screenshot.png)
+
 ## 它能做什么
 
 - **同时管理多个技能根目录**。默认根目录是 `~/.agents/skills`，永远排在列表第一位；任何其他文件夹都能在界面里加进来。每个根目录有各自的停用/回收站/快照数据，不同根目录里的同名技能互不干扰。
