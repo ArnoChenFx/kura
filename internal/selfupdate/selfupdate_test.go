@@ -12,6 +12,7 @@
 package selfupdate
 
 import (
+	"os"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -22,6 +23,14 @@ import (
 	"github.com/egoist/mygo"
 	myui "github.com/egoist/mygo/ui"
 )
+
+// TestMain 把界面语言固定成中文再跑本包测试：TestWindowStillBuilds 断言的是
+// 中文界面文字（「全部检查」「检查更新」），不该随开发机或 CI 的系统 locale
+// 变化（i18n 的默认值是英文）。菜单类断言读目录（i18n.T），与语言无关。
+func TestMain(m *testing.M) {
+	i18n.Set(i18n.ZH)
+	os.Exit(m.Run())
+}
 
 // TestInstallRegistersPlugin 冒烟：Install（挂 native.Plugin）在测试进程
 // 里只做内存注册与 WhenReady 排队，不等待主线程，可以安全调用。

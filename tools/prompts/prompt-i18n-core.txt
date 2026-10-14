@@ -1,0 +1,127 @@
+# 任务：把 kura 的界面文案搬进 i18n 目录，实现中英双语（第一批：store + cli + selfupdate + main）
+
+仓库：仓库根就是当前目录（worktree 已在其中）。先读 `AGENTS.md`（工程约定）与
+`REQUIREMENTS.md`，再看 `internal/i18n/i18n.go` 的包注释——那是这套机制的权威说明。
+
+## 背景
+
+kura 现在界面只有中文。用户要求：**下一版支持中英双语，第一次打开时跟随系统
+语言——系统是中文就用中文，否则一律英文**。
+
+基础已经由我（主管）写好并提交：
+
+- `internal/i18n`：进程级当前语言 + 各包自己的文案目录（catalog）。`i18n.T(key)`
+  / `i18n.Tf(key, args...)` 取文案；`i18n.Set(lang)` / `i18n.Current()`；
+  错误用 `i18n.NewError(key, args...)` / `i18n.Errorf(key, args...)` /
+  `i18n.Wrapf(err, key, args...)`（身份稳定、文字随语言变，`errors.Is` 可用）。
+  语言解析规则已经实现并测过：`i18n.Resolve(pref, locale)` 与 `i18n.FromLocale`
+  ——`zh*` 是中文，**其余（含空、C、POSIX、ja、de…）一律英文**。
+- `internal/store` 已有 `NormalizeLang` / `LangPref` / `Library.SetLang`，
+  `config.json` 的 `lang` 字段（system | zh | en）已接线。
+- `internal/i18n` 里有一个守卫测试 `TestNoHardcodedCJK`：**非测试的 Go 文件里
+  只要还有中文界面字面量，它就失败并逐条列出**。它是你这份活的验收尺子。
+
+## 你要做的事（只碰下面列的文件，别的包的活由别人并行做）
+
+把用户能看到的文案搬进目录，并把代码改成用 `i18n.T` / `Tf` 取。范围：
+
+1. `internal/store/*.go`（非测试文件）——所有**用户可见**的中文：错误文案
+   （`store: …` 前缀保留在中文值里，英文值用 `store: …`）、CLI 输出里用到的
+   文案、`doctor` 的 kind 说明、翻译器的系统提示词（见下）、`targetLangs` 的
+   显示名（`简体中文`/`English`… 这些是**语言自称**，两种界面语言下都一样，
+   可以留在代码里，但要用注释说明理由，并加进守卫的允许清单——见第 3 点）。
+2. `internal/cli/*.go`、`internal/cli/doctor.go`——命令行输出、`--help` 全文、
+   退出码说明。
+3. `internal/selfupdate/selfupdate.go`——应用菜单文案（「关于 kura」「检查更新…」
+   「退出 kura」等）。
+4. `main.go`——只处理它自己的文案；窗口接线不算你的活。
+
+### 硬性要求
+
+- **中文取值必须与现状逐字一致**（既有测试与用户习惯都不变）。英文取值要自然、
+  简短，不要逐字硬译；`%s`/`%d` 占位符两种语言顺序必须一致。整句进目录，**不拼接**。
+- **key 命名**：`<领域>.<分类>.<名字>`，全小写 ASCII、点分隔，例如
+  `store.err.skillExists`、`cli.usage.title`、`cli.err.unknownCommand`、
+  `selfupdate.menu.about`。
+- **目录文件**：每个包一个 `catalog.go`，形如
+  ```go
+  package store
+
+  import "github.com/ArnoChenFx/kura/internal/i18n"
+
+  // 中文文案：与改造前的界面文字逐字一致。
+  var catalogZH = map[string]string{
+      "store.err.skillExists": "store: 已存在同名技能: %s",
+      // …
+  }
+
+  // 英文文案：key 与中文一一对应（含同样的占位符）。
+  var catalogEN = map[string]string{
+      "store.err.skillExists": "store: a skill with this name already exists: %s",
+      // …
+  }
+
+  func init() { i18n.RegisterZH(catalogZH); i18n.RegisterEN(catalogEN) }
+  ```
+  两个 map 的 key 集合必须完全一致。
+- **哨兵错误**：`var ErrX = errors.New("store: …")` 这类改成
+  `var ErrX = i18n.NewError("store.err.x")`，这样 `errors.Is` 照样能用、文字随
+  语言变。**注意**：`errors.New` 造的错误被 `fmt.Errorf("%w: %q", ErrX, v)` 包住
+  时，格式串也要走目录。
+- **翻译器的系统提示词**（`internal/store/translate.go` 的 `systemPrompt`）：它是发给
+  AI 的指令，**不随界面语言变**（翻译行为必须稳定、可测试）。留在代码里，用注释
+  说明「这是发给模型的指令，不是界面文案，故不进目录」，并把它加入第 3 点的允许清单。
+- **`targetLangs` 的显示名**（`简体中文`、`日本語`、`Français`…）：语言的自称，
+  两种界面语言下都应显示自称。同样留在代码里 + 注释 + 允许清单。
+
+### 第 3 点：守卫测试的允许清单
+
+`internal/i18n/i18n_test.go` 里的 `allowedFiles()` 是「允许含中文的文件名」清单。
+把 **`translate.go`**（系统提示词）与 **`catalog.go`** 加进它——`catalog.go` 已经
+在里面。加的时候用注释写明每个文件为什么被允许。**不要**为了让它过而放宽别的
+判断（例如把整个目录排除）。
+
+## 验证（必须自己跑，贴原始输出）
+
+1. `gofmt`（本仓库 `core.autocrlf=true`，工作区是 CRLF，判断格式要
+   `tr -d '\r' < 文件 > /tmp/x.go && gofmt -l /tmp/x.go`）。
+2. `go vet ./...`、`go test -count=1 ./...`（全绿；既有测试断言的中文文案不能改）。
+3. `CGO_ENABLED=0 go test -count=1 ./...`、`CGO_ENABLED=0 go build ./...`。
+4. `go test -count=1 -run TestNoHardcodedCJK ./internal/i18n/` —— 你负责的文件必须
+   全部干净（症状：它只应剩下**别的包**（`internal/ui`）的条目）。
+5. **新测试**：在 `internal/store/catalog_test.go` 与 `internal/cli/catalog_test.go`
+   各写几条，验证：
+   - 中文与英文取值都取得到、key 集合一致（可复用一个 helper）；
+   - 切到英文后，之前的中文错误文案变成英文（`i18n.Set(i18n.EN)` 后
+     `err.Error()` 里没有中文字符），切回中文恢复；
+   - 至少一条 `errors.Is` 在英文下仍然成立（证明身份没被语言影响）。
+   测试结束时把语言设回默认，避免影响同包其它测试。
+6. **真实命令行的双语实测**（这是用户会直接看到的）：用隔离的 HOME 跑
+   `go run ./cmd/kura --help`、`kura list`、制造一个错误（如 `kura disable 不存在的技能`），
+   **中文与英文各一遍**，贴两次的原始输出。英文用 `KURA_LANG` 或你实现的开关
+   （见下）触发。
+
+## 语言开关（CLI 部分）
+
+CLI 也要能切：加一个全局 `--lang system|zh|en` 或环境变量 `KURA_LANG`（两者都
+支持更好；flag 优先）。优先级：**flag > 环境变量 > config.json 的 lang > 跟随系统**。
+CLI 里没有窗口，系统 locale 用 `i18n.SystemLocale()`。把这段解析写成一个函数并
+加测试（表驱动：各种组合）。
+
+## 不要做
+
+- **不要 git commit / push / tag**（改动留在工作区，我review后自己提交）。
+- 不碰 `internal/ui/**`（另一个 agent 正在做那边）。
+- 不改 `internal/i18n/i18n.go` 的对外 API（除非发现有 bug，那就先报告）。
+- 不改 `AGENTS.md`、`REQUIREMENTS.md`、`README*`、`CHANGELOG.md`。
+- 不加新的第三方依赖（只用标准库 + 现有 MyGo）。
+- 不要为了少写几行而把多条文案拼成一条（占位符语义会打架）。
+- 不要动 `internal/store/translate.go` 里 `systemPrompt` 的文字内容。
+
+## 交付报告（最后一条消息里给出）
+
+1. 改了哪些文件（每个文件一句话）。
+2. 目录里新增多少 key（中文/英文各多少）。
+3. 上面 6 项验证的原始输出（关键行；`go test` 要贴 `ok` 那几行）。
+4. 有没有为了通过守卫而放宽判断的地方（要求「没有」，如果有必须明说）。
+5. 明确写出哪些没验证（例如英文界面在真实窗口里的观感）。
