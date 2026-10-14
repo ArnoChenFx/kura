@@ -98,13 +98,18 @@ type Library struct {
 	// View 是读取时 config.json 里的排列模式（已规范，缺省为 ViewGrid）。
 	// 与 Theme 一样只在启动时读；改排列模式走 SetView，它直接读写文件。
 	View string
+	// Lang 是读取时 config.json 里的界面语言偏好（已规范，缺省为
+	// LangSystem，即跟随系统）。启动时由 main.go / CLI 解析成具体语言并
+	// 交给 i18n.Set；改语言走 SetLang。
+	Lang string
 }
 
 // LoadLibrary 以 base 的根目录为默认根目录、base.Home 为数据目录，读取
 // config.json 里追加的根目录。配置文件不存在时只有默认根目录；文件损坏时
 // 同样返回只含默认根目录的 Library，并附带错误，调用方可继续使用。
 func LoadLibrary(base *Config) (*Library, error) {
-	l := &Library{Home: base.Home, Roots: []string{filepath.Clean(base.Root)}, Theme: ThemeSystem, View: ViewGrid}
+	l := &Library{Home: base.Home, Roots: []string{filepath.Clean(base.Root)},
+		Theme: ThemeSystem, View: ViewGrid, Lang: LangSystem}
 	hc, _, err := LoadHomeConfig(base)
 	if err != nil {
 		return l, err
@@ -117,6 +122,8 @@ func LoadLibrary(base *Config) (*Library, error) {
 	if v, verr := NormalizeView(hc.View); verr == nil {
 		l.View = v
 	}
+	// 语言偏好同理：缺失或不认识都按跟随系统处理。
+	l.Lang = langFromHome(hc)
 	l.Roots = mergeRoots(base.Root, hc.Roots)
 	return l, nil
 }
