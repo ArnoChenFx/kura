@@ -11,6 +11,7 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/ArnoChenFx/kura/internal/i18n"
 	"github.com/ArnoChenFx/kura/internal/store"
 	myui "github.com/egoist/mygo/ui"
 )
@@ -184,19 +185,19 @@ func (s *installState) canInstall() bool {
 // 子目录、本地文件夹、唯一候选）与候选失效后维持原来的「安装」。
 func installButtonLabel(s *installState) string {
 	if !s.candsLive() || s.manualSubPath() {
-		return "安装"
+		return i18n.T("ui.install.button")
 	}
 	n := len(s.selected())
 	if n == 0 {
-		return "安装选中的技能"
+		return i18n.T("ui.install.buttonSelect")
 	}
-	return "安装选中的 " + itoa(n) + " 个"
+	return i18n.Tf("ui.install.buttonSelected", n)
 }
 
 // candidateLabel 是给用户看的技能标识：仓库根本身是技能时子目录为空。
 func candidateLabel(sub string) string {
 	if sub == "" {
-		return "仓库根"
+		return i18n.T("ui.install.repoRoot")
 	}
 	return sub
 }
@@ -286,7 +287,7 @@ func startInstall(a *App, opts *store.AddOptions) {
 	s := &a.install
 	s.busy, s.err = true, ""
 	cfg, gen := a.cfg, a.gen
-	a.status, a.statusErr = "正在安装…", false
+	a.status, a.statusErr = i18n.T("ui.status.installing"), false
 	a.spawn(func() {
 		res, err := cfg.Add(opts)
 		skills, scanErr := cfg.ScanAll()
@@ -299,11 +300,11 @@ func startInstall(a *App, opts *store.AddOptions) {
 					s.cands = candidatesFromPaths(ce.Paths)
 					s.candRepo, s.candRef = opts.Repo, opts.Ref
 					s.err = ""
-					a.status, a.statusErr = "仓库里有 "+itoa(len(ce.Paths))+" 个技能，请勾选要安装的", true
+					a.status, a.statusErr = i18n.Tf("ui.status.candidates", len(ce.Paths)), true
 					return
 				}
 				s.err = err.Error()
-				a.status, a.statusErr = "安装失败", true
+				a.status, a.statusErr = i18n.T("ui.status.installFailed"), true
 				return
 			}
 			*s = installState{source: s.source}
@@ -311,7 +312,7 @@ func startInstall(a *App, opts *store.AddOptions) {
 				a.applyScan(skills, scanErr)
 				a.selName, a.filter, a.query = res.ID, filterAll, ""
 			}
-			a.status, a.statusErr = "已安装 "+res.ID, false
+			a.status, a.statusErr = i18n.Tf("ui.status.installed", res.ID), false
 		})
 	})
 }
@@ -352,7 +353,7 @@ func (a *App) InstallSelectedAsync() {
 	}
 	s.busy, s.err = true, ""
 	cfg, gen := a.cfg, a.gen
-	a.status, a.statusErr = "正在安装…", false
+	a.status, a.statusErr = i18n.T("ui.status.installing"), false
 	a.spawn(func() {
 		results := cfg.AddMany(repo, ref, specs)
 		skills, scanErr := cfg.ScanAll()
@@ -365,7 +366,7 @@ func (a *App) InstallSelectedAsync() {
 			for _, r := range results {
 				if r.Err != nil {
 					failCount++
-					failed = append(failed, candidateLabel(r.SubPath)+"："+r.Err.Error())
+					failed = append(failed, i18n.Tf("ui.install.failItem", candidateLabel(r.SubPath), r.Err.Error()))
 					failedPaths[r.SubPath] = true
 					continue
 				}
@@ -381,9 +382,9 @@ func (a *App) InstallSelectedAsync() {
 					a.selName, a.filter, a.query = lastID, filterAll, ""
 				}
 				if okCount == 1 {
-					a.status, a.statusErr = "已安装 "+lastID, false
+					a.status, a.statusErr = i18n.Tf("ui.status.installed", lastID), false
 				} else {
-					a.status, a.statusErr = "已安装 "+itoa(okCount)+" 个技能", false
+					a.status, a.statusErr = i18n.Tf("ui.status.installedCount", okCount), false
 				}
 				return
 			}
@@ -395,9 +396,9 @@ func (a *App) InstallSelectedAsync() {
 				a.applyScan(skills, scanErr)
 			}
 			if okCount == 0 {
-				a.status, a.statusErr = "安装失败", true
+				a.status, a.statusErr = i18n.T("ui.status.installFailed"), true
 			} else {
-				a.status, a.statusErr = "已安装 "+itoa(okCount)+" 个，"+itoa(failCount)+" 个失败", true
+				a.status, a.statusErr = i18n.Tf("ui.status.installedPartial", okCount, failCount), true
 			}
 		})
 	})
@@ -421,7 +422,7 @@ func (a *App) DiscoverInstallCandidatesAsync() {
 	repo, ref := opts.Repo, opts.Ref
 	cfg, gen := a.cfg, a.gen
 	s.busy, s.err = true, ""
-	a.status, a.statusErr = "正在查找仓库里的技能…", false
+	a.status, a.statusErr = i18n.T("ui.status.discovering"), false
 	a.spawn(func() {
 		cands, err := cfg.DiscoverRepoSkills(repo, ref)
 		a.publish(func() {
@@ -435,36 +436,36 @@ func (a *App) DiscoverInstallCandidatesAsync() {
 			// candsLive()：单候选这条路径上 s.cands 是空的，candsLive() 恒为假，
 			// 判不了「是不是同一个仓库」。
 			if cur := s.installOptions(); cur.Repo != repo || cur.Ref != ref {
-				a.status, a.statusErr = "仓库或分支已改，点「安装」重新发现技能。", false
+				a.status, a.statusErr = i18n.T("ui.status.repoChanged"), false
 				return
 			}
 			if err != nil {
 				s.err = err.Error()
-				a.status, a.statusErr = "查找失败", true
+				a.status, a.statusErr = i18n.T("ui.status.discoveryFailed"), true
 				return
 			}
 			if len(cands) == 1 {
 				if s.manualSubPath() {
 					// 用户在发现期间自己填了子目录：他的输入优先，不覆盖、不自动装
 					// （「手填子目录就装那一个」这条既有行为）。
-					a.status, a.statusErr = "已填子目录，点「安装」装它", false
+					a.status, a.statusErr = i18n.T("ui.status.subPathFilled"), false
 					return
 				}
 				// 唯一候选：填进子目录直接装，用户不用再点一次。
 				s.subPath = cands[0]
-				a.status = "发现技能 " + cands[0]
+				a.status = i18n.Tf("ui.status.skillFound", cands[0])
 				startInstall(a, s.installOptions())
 				return
 			}
 			if len(cands) == 0 {
 				// 零候选：报清楚原因，弹窗保持打开让用户改输入。
-				s.err = "store: 仓库内未找到含 SKILL.md 的技能目录"
-				a.status, a.statusErr = "查找失败", true
+				s.err = i18n.T("ui.install.noCandidates")
+				a.status, a.statusErr = i18n.T("ui.status.discoveryFailed"), true
 				return
 			}
 			s.cands = candidatesFromPaths(cands)
 			s.candRepo, s.candRef = repo, ref
-			a.status, a.statusErr = "仓库里有 "+itoa(len(cands))+" 个技能，请勾选要安装的", false
+			a.status, a.statusErr = i18n.Tf("ui.status.candidates", len(cands)), false
 		})
 	})
 }
@@ -482,7 +483,7 @@ func (a *App) PickInstallFolderAsync() {
 			s.picking = false
 			switch {
 			case err != nil:
-				s.err = "选择文件夹失败: " + err.Error()
+				s.err = i18n.Tf("ui.status.pickFolderFailed", err.Error())
 			case dir != "":
 				s.local = dir
 			}
@@ -507,45 +508,44 @@ func (a *App) viewInstallModal(c *myui.Context) {
 	myui.Modal(c, &s.open, func() {
 		myui.Column(c).Width(520).Gap(t.Space(3)).Children(func() {
 			myui.Column(c).Gap(t.Space(1)).Children(func() {
-				myui.Text(c, "安装技能").FontSize(t.FontSize + 3).Bold()
-				myui.Text(c, "安装到 "+a.cfg.Root).SingleLine().FontSize(t.FontSize - 1).TextColor(t.TextMuted)
+				myui.Text(c, i18n.T("ui.action.install")).FontSize(t.FontSize + 3).Bold()
+				myui.Text(c, i18n.Tf("ui.install.subtitle", a.cfg.Root)).SingleLine().FontSize(t.FontSize - 1).TextColor(t.TextMuted)
 			})
-			myui.Segmented(c, &s.source, "GitHub 仓库", "本地文件夹")
+			myui.Segmented(c, &s.source, i18n.T("ui.install.sourceGitHub"), i18n.T("ui.install.sourceLocal"))
 			myui.Form(c, func() {
 				if s.source == installLocal {
-					myui.Field(c, "文件夹", func() {
+					myui.Field(c, i18n.T("ui.install.folder"), func() {
 						myui.Row(c).FillWidth().Gap(t.Space(2)).Children(func() {
 							myui.TextInput(c, &s.local).Background(a.pal.canvas).Grow(1).MinWidth(0).
-								Placeholder("包含 SKILL.md 的文件夹").Label("本地文件夹")
-							if myui.Button(c, "选择…").Disabled(s.picking).Clicked() {
+								Placeholder(i18n.T("ui.install.folderPlaceholder")).Label(i18n.T("ui.install.sourceLocal"))
+							if myui.Button(c, i18n.T("ui.install.choose")).Disabled(s.picking).Clicked() {
 								a.PickInstallFolderAsync()
 							}
 						})
 					})
 				} else {
-					myui.Field(c, "仓库", func() {
+					myui.Field(c, i18n.T("ui.install.repo"), func() {
 						myui.TextInput(c, &s.repo).Background(a.pal.canvas).FillWidth().
-							Placeholder("owner/repo，或粘贴 GitHub 网址").Label("仓库")
+							Placeholder(i18n.T("ui.install.repoPlaceholder")).Label(i18n.T("ui.install.repo"))
 					})
-					myui.Field(c, "子目录", func() {
+					myui.Field(c, i18n.T("ui.install.subPath"), func() {
 						myui.TextInput(c, &s.subPath).Background(a.pal.canvas).FillWidth().
-							Placeholder("可选，留空自动发现").Label("子目录")
+							Placeholder(i18n.T("ui.install.subPathPlaceholder")).Label(i18n.T("ui.install.subPath"))
 					})
-					myui.Field(c, "分支/标签", func() {
+					myui.Field(c, i18n.T("ui.install.ref"), func() {
 						myui.TextInput(c, &s.ref).Background(a.pal.canvas).FillWidth().
-							Placeholder("可选，默认分支").Label("分支/标签")
+							Placeholder(i18n.T("ui.install.refPlaceholder")).Label(i18n.T("ui.install.ref"))
 					})
 				}
-				myui.Field(c, "安装名称", func() {
+				myui.Field(c, i18n.T("ui.install.name"), func() {
 					myui.TextInput(c, &s.name).Background(a.pal.canvas).FillWidth().
-						Placeholder("可选，默认取 SKILL.md 的 name").Label("安装名称")
+						Placeholder(i18n.T("ui.install.namePlaceholder")).Label(i18n.T("ui.install.name"))
 				})
 			})
 			if s.source == installGitHub {
-				hint := "会用本机的 git 克隆仓库；子目录留空时自动发现仓库里的技能。"
+				hint := i18n.T("ui.install.hintGitHub")
 				if len(s.cands) > 0 {
-					hint = "勾选要安装的技能（可多选），点下面的按钮一次装完；" +
-						"名字取各自 SKILL.md 里的 name（勾选一个时用上面的「安装名称」）。"
+					hint = i18n.T("ui.install.hintCandidates")
 				}
 				myui.Text(c, hint).FontSize(t.FontSize - 1).TextColor(t.TextMuted)
 			}
@@ -554,7 +554,7 @@ func (a *App) viewInstallModal(c *myui.Context) {
 			} else if len(s.cands) > 0 && s.source == installGitHub {
 				// 候选还在内存里、但已不对当前表单有效（用户改了仓库/分支）：
 				// 不显示它们，下一次点「安装」会按表单重新发现（见 candsLive）。
-				myui.Text(c, "仓库或分支已改，点「安装」重新发现技能。").
+				myui.Text(c, i18n.T("ui.install.repoOrBranchChanged")).
 					FontSize(t.FontSize - 1).TextColor(t.TextMuted)
 			}
 			if s.err != "" {
@@ -566,14 +566,14 @@ func (a *App) viewInstallModal(c *myui.Context) {
 			myui.Row(c).FillWidth().Gap(t.Space(2)).AlignItems(myui.Center).Children(func() {
 				if s.busy {
 					myui.Spinner(c)
-					myui.Text(c, "正在安装…").TextColor(t.TextMuted)
+					myui.Text(c, i18n.T("ui.status.installing")).TextColor(t.TextMuted)
 				}
 				myui.Spacer(c)
-				if myui.Button(c, "取消").Disabled(s.busy).Clicked() {
+				if myui.Button(c, i18n.T("ui.common.cancel")).Disabled(s.busy).Clicked() {
 					s.open = false
 				}
 				// 无障碍名称写成「确认安装」，与详情栏里的「安装」时间字段区分。
-				ib := myui.PrimaryButton(c, installButtonLabel(s)).Label("确认安装").Disabled(!s.canInstall())
+				ib := myui.PrimaryButton(c, installButtonLabel(s)).Label(i18n.T("ui.install.confirmA11y")).Disabled(!s.canInstall())
 				if ib.Clicked() {
 					a.submitInstall()
 				}
@@ -594,12 +594,12 @@ func (a *App) viewInstallCandidates(c *myui.Context) {
 	}
 	myui.Column(c).FillWidth().Gap(t.Space(1)).Children(func() {
 		myui.Row(c).FillWidth().AlignItems(myui.Center).Children(func() {
-			myui.Text(c, "共 "+itoa(len(s.cands))+" 个技能").
+			myui.Text(c, i18n.Tf("ui.install.total", len(s.cands))).
 				FontSize(t.FontSize - 1).TextColor(t.TextMuted)
 			myui.Spacer(c)
-			label := "全选"
+			label := i18n.T("ui.install.selectAll")
 			if s.allSelected() {
-				label = "全不选"
+				label = i18n.T("ui.install.selectNone")
 			}
 			if myui.Button(c, label).Clicked() {
 				s.toggleAll()
