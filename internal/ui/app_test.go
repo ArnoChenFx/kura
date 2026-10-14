@@ -235,8 +235,8 @@ func TestSwitchOnRowToggles(t *testing.T) {
 // TestSearchFilters 验证：搜索框输入即时过滤列表。
 func TestSearchFilters(t *testing.T) {
 	a, cfg := newTestApp(t)
-	seedSkill(t, cfg, "yixin-api", nil)
-	seedSkill(t, cfg, "modlens", nil)
+	seedSkill(t, cfg, "notes-api", nil)
+	seedSkill(t, cfg, "pdf-tools", nil)
 
 	tt := newTester(a, 980, 640)
 	a.settle()
@@ -248,15 +248,15 @@ func TestSearchFilters(t *testing.T) {
 	if err := tt.Click("搜索技能"); err != nil {
 		t.Fatal(err)
 	}
-	tt.Type("yixin")
+	tt.Type("notes")
 	a.settle()
 	tt.Frame()
 
-	if tt.HasText("modlens") {
-		t.Errorf("搜索 yixin 后不应显示 modlens，文本 %v", tt.Texts())
+	if tt.HasText("pdf-tools") {
+		t.Errorf("搜索 notes 后不应显示 pdf-tools，文本 %v", tt.Texts())
 	}
-	if !tt.HasText("yixin-api") {
-		t.Errorf("搜索 yixin 后应显示 yixin-api，文本 %v", tt.Texts())
+	if !tt.HasText("notes-api") {
+		t.Errorf("搜索 notes 后应显示 notes-api，文本 %v", tt.Texts())
 	}
 
 	// 清空搜索（Ctrl+A 全选后 Backspace）恢复全部。
@@ -264,8 +264,8 @@ func TestSearchFilters(t *testing.T) {
 	tt.Key(0, myui.KeyBackspace)
 	a.settle()
 	tt.Frame()
-	if !tt.HasText("modlens") {
-		t.Errorf("清空搜索后应恢复显示 modlens，文本 %v", tt.Texts())
+	if !tt.HasText("pdf-tools") {
+		t.Errorf("清空搜索后应恢复显示 pdf-tools，文本 %v", tt.Texts())
 	}
 }
 

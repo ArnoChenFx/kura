@@ -36,7 +36,7 @@ func seedDesignApp(t *testing.T) *App {
 	local := &store.Meta{ID: "pdf-tools", Source: store.Source{Type: store.SourceLocal, Path: `D:\skills\pdf-tools`}}
 
 	a, cfg := newTestApp(t)
-	seedDescribed(t, cfg, "yixin-api", "调用易信开放平台 API：发消息、查群成员、管理机器人。需要 YIXIN_TOKEN 环境变量。", gh("yixin-api"))
+	seedDescribed(t, cfg, "notes-api", "调用笔记服务 API：发消息、查成员、管理机器人。需要 NOTES_TOKEN 环境变量。", gh("notes-api"))
 	seedDescribed(t, cfg, "tdd", "以测试驱动的方式实现功能：先写失败的测试，再写最少的代码让它通过，最后重构。", gh("tdd"))
 	seedDescribed(t, cfg, "pdf-tools", "读取、合并、拆分 PDF，提取表格与图片。", local)
 	seedDescribed(t, cfg, "git-guardrails", "在执行 git push --force、reset --hard 等危险命令前拦截并确认。", gh("git-guardrails"))
@@ -94,7 +94,7 @@ func TestRenderDesignShots(t *testing.T) {
 		}
 	}
 	render("1-grid", 1280, 800, nil)
-	render("2-selected", 1280, 800, func() { a.selName = "yixin-api" })
+	render("2-selected", 1280, 800, func() { a.selName = "notes-api" })
 	render("3-narrow", 960, 640, func() { a.selName = "tdd" })
 	render("4-trash", 1280, 800, func() { a.selName = "legacy-lint"; a.filter = filterTrashed })
 	render("5-install-github", 1280, 800, func() {
@@ -106,7 +106,7 @@ func TestRenderDesignShots(t *testing.T) {
 			err: "store: 已存在同名技能: pdf-tools"}
 	})
 	// 悬停：指针停在 tdd 的卡片上（未选中的卡片亮一档），以及停在 pdf-tools 的开关上。
-	render("7-hover-card", 1280, 800, func() { a.selName, a.filter, a.install = "yixin-api", filterAll, installState{} }, func(tt *myui.Tester) {
+	render("7-hover-card", 1280, 800, func() { a.selName, a.filter, a.install = "notes-api", filterAll, installState{} }, func(tt *myui.Tester) {
 		r, _ := tt.Find("tdd")
 		tt.Move(r.X+40, r.Y+60)
 	})
@@ -125,7 +125,7 @@ func TestRenderDesignShots(t *testing.T) {
 		f := &fakeTranslator{}
 		a.translate = f.translate
 		a.settings = trReadySettings()
-		a.selName, a.filter, a.install = "yixin-api", filterAll, installState{}
+		a.selName, a.filter, a.install = "notes-api", filterAll, installState{}
 	}, func(tt *myui.Tester) {
 		// detClickTab 完整跑两轮（全文先读盘、再翻译），截图才是译文而不是「翻译全文中…」。
 		detClickTab(t, a, tt, "译文")

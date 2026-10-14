@@ -83,7 +83,7 @@ func TestAvatarPaletteAvoidsBlueViolet(t *testing.T) {
 
 // TestAvatarInitial 验证头像里的字：英文大写首字母、汉字原样、空名字用问号。
 func TestAvatarInitial(t *testing.T) {
-	for in, want := range map[string]string{"yixin-api": "Y", "Tdd": "T", "写作助手": "写", "": "?", "9lives": "9"} {
+	for in, want := range map[string]string{"notes-api": "N", "Tdd": "T", "写作助手": "写", "": "?", "9lives": "9"} {
 		if got := avatarInitial(in); got != want {
 			t.Errorf("avatarInitial(%q) = %q，想要 %q", in, got, want)
 		}
