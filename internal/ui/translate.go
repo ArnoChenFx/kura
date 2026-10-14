@@ -17,10 +17,10 @@ package ui
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"time"
 
+	"github.com/ArnoChenFx/kura/internal/i18n"
 	"github.com/ArnoChenFx/kura/internal/store"
 )
 
@@ -237,11 +237,11 @@ func (a *App) TranslateAsync(key, text string, alias ...string) {
 		if fn == nil {
 			errMsg = store.ErrNotConfigured.Error()
 		} else if live.Err() != nil {
-			errMsg = "翻译配置已变更" // 发起后配置就变了：不再发请求，结果也会被丢弃
+			errMsg = i18n.T("ui.translate.configChanged") // 发起后配置就变了：不再发请求，结果也会被丢弃
 		} else if out, err := fn(ctx, cfg, text); err != nil {
 			errMsg = redactSecret(err.Error(), secret)
 		} else if strings.TrimSpace(out) == "" {
-			errMsg = "翻译结果为空"
+			errMsg = i18n.T("ui.translate.emptyResult")
 		} else {
 			dst = out
 		}
@@ -302,7 +302,7 @@ func (a *App) TranslateDocAsync(key, src string) {
 		for i := 0; errMsg == "" && i < len(chunks); i++ {
 			if live.Err() != nil {
 				// 配置已变更：不再发后面的段（已拿到的结果因 epoch 不符被丢弃）。
-				errMsg = "翻译配置已变更"
+				errMsg = i18n.T("ui.translate.configChanged")
 				break
 			}
 			ctx, cancel := context.WithTimeout(live, translateTimeout)
@@ -310,9 +310,9 @@ func (a *App) TranslateDocAsync(key, src string) {
 			cancel()
 			switch {
 			case err != nil:
-				errMsg = fmt.Sprintf("第 %d/%d 段：%s", i+1, len(chunks), redactSecret(err.Error(), secret))
+				errMsg = i18n.Tf("ui.translate.chunkFailed", i+1, len(chunks), redactSecret(err.Error(), secret))
 			case strings.TrimSpace(out) == "":
-				errMsg = fmt.Sprintf("第 %d/%d 段：翻译结果为空", i+1, len(chunks))
+				errMsg = i18n.Tf("ui.translate.chunkEmpty", i+1, len(chunks))
 			default:
 				parts = append(parts, out)
 			}

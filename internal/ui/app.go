@@ -11,13 +11,13 @@ import (
 	"cmp"
 	"context"
 	"errors"
-	"fmt"
 	"os"
 	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
 
+	"github.com/ArnoChenFx/kura/internal/i18n"
 	"github.com/ArnoChenFx/kura/internal/store"
 	"github.com/egoist/mygo"
 	myui "github.com/egoist/mygo/ui"
@@ -108,6 +108,8 @@ type App struct {
 	themeMu        sync.Mutex      // 串行化同步原生外观与写 config.json
 	viewMode       string          // 技能区排列模式：store.ViewGrid / store.ViewList
 	viewSeq        atomic.Int64    // 排列模式切换的序号：后台任务只执行最新一次
+	langPref       string          // 界面语言偏好：store.LangSystem / LangZH / LangEN
+	langSeq        atomic.Int64    // 语言切换的序号：后台任务只执行最新一次
 	review         reviewState     // 更新评审面板（Modal）
 
 	// 翻译设置与译文（翻译只用于界面显示，绝不写技能目录，见 translate.go）。
@@ -160,6 +162,12 @@ func NewApp(cfg *store.Config) *App {
 	if a.viewMode == "" {
 		a.viewMode = store.ViewGrid
 	}
+	// 界面语言偏好：具体语言的解析（system → zh/en）在 main.go / CLI 里做，
+	// 窗口侧只记住偏好，切语言走 SetLangAsync。
+	a.langPref = lib.Lang
+	if a.langPref == "" {
+		a.langPref = store.LangSystem
+	}
 	// 翻译设置：读取失败不致命（只报告），界面照常可用。
 	if st, _, err := store.LoadSettings(cfg); err != nil {
 		a.settingsErr = err.Error()
@@ -182,7 +190,8 @@ func NewApp(cfg *store.Config) *App {
 		win := a.win
 		a.mu.Unlock()
 		paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{
-			Parent: win, Title: "添加技能目录", ButtonLabel: "添加", Directory: true,
+			Parent: win, Title: i18n.T("ui.fileDialog.addRootTitle"),
+			ButtonLabel: i18n.T("ui.fileDialog.addRootButton"), Directory: true,
 		})
 		if err != nil || len(paths) == 0 {
 			return "", err
@@ -339,7 +348,7 @@ func (a *App) applyScan(skills []*store.Skill, err error) {
 	}
 	a.loadErr = ""
 	if _, serr := os.Stat(a.cfg.Root); os.IsNotExist(serr) {
-		a.loadErr = "技能目录不存在: " + a.cfg.Root
+		a.loadErr = i18n.Tf("ui.status.rootMissing", a.cfg.Root)
 	}
 	a.skills = skills
 	n := 0
@@ -416,7 +425,7 @@ func (a *App) reload(announce bool) {
 			case announce:
 				// 与筛选栏的「全部」、状态条的总数一致：不含回收站。
 				en, dis, _ := a.counts()
-				a.status, a.statusErr = fmt.Sprintf("已扫描 %d 个技能", en+dis), false
+				a.status, a.statusErr = i18n.Tf("ui.status.scanned", en+dis), false
 			}
 		})
 	})
@@ -425,11 +434,11 @@ func (a *App) reload(announce bool) {
 // ToggleAsync 切换技能的启用状态；wantOn 是切换后的目标状态。
 // 实际的移动在后台执行，期间该卡片显示忙碌状态。
 func (a *App) ToggleAsync(name string, wantOn bool) {
-	okMsg := "已停用 " + name
+	okMsg := i18n.Tf("ui.status.disabled", name)
 	if wantOn {
-		okMsg = "已启用 " + name
+		okMsg = i18n.Tf("ui.status.enabled", name)
 	}
-	a.runOp(name, "正在切换 "+name+"…", okMsg, func(cfg *store.Config) error {
+	a.runOp(name, i18n.Tf("ui.status.toggling", name), okMsg, func(cfg *store.Config) error {
 		var err error
 		if wantOn {
 			_, err = cfg.Enable(name)
@@ -442,7 +451,7 @@ func (a *App) ToggleAsync(name string, wantOn bool) {
 
 // RemoveAsync 把技能移入回收站（后台执行）。
 func (a *App) RemoveAsync(name string) {
-	a.runOp(name, "正在移入回收站 "+name+"…", "已移入回收站 "+name, func(cfg *store.Config) error {
+	a.runOp(name, i18n.Tf("ui.status.movingToTrash", name), i18n.Tf("ui.status.movedToTrash", name), func(cfg *store.Config) error {
 		_, err := cfg.Remove(name)
 		return err
 	})
@@ -450,7 +459,7 @@ func (a *App) RemoveAsync(name string) {
 
 // RestoreAsync 把回收站中最新一次的技能移回技能目录（后台执行）。
 func (a *App) RestoreAsync(name string) {
-	a.runOp(name, "正在恢复 "+name+"…", "已恢复 "+name, func(cfg *store.Config) error {
+	a.runOp(name, i18n.Tf("ui.status.restoring", name), i18n.Tf("ui.status.restored", name), func(cfg *store.Config) error {
 		_, err := cfg.Restore(name, "")
 		return err
 	})
@@ -458,7 +467,7 @@ func (a *App) RestoreAsync(name string) {
 
 // PurgeAsync 从回收站永久删除技能 name（后台执行；删除前 store 先写快照）。
 func (a *App) PurgeAsync(name string) {
-	a.runOp(name, "正在永久删除 "+name+"…", "已永久删除 "+name, func(cfg *store.Config) error {
+	a.runOp(name, i18n.Tf("ui.status.purging", name), i18n.Tf("ui.status.purged", name), func(cfg *store.Config) error {
 		_, err := cfg.Purge(name)
 		return err
 	})
@@ -484,9 +493,9 @@ func (a *App) ImportAsync() {
 	cfg, gen := a.cfg, a.gen
 	a.spawn(func() {
 		ids, err := cfg.ImportMeta(a.path)
-		okMsg := fmt.Sprintf("已导入 %d 条元数据", len(ids))
+		okMsg := i18n.Tf("ui.status.imported", len(ids))
 		if err == nil && len(ids) == 0 {
-			okMsg = "没有可导入的元数据（lock 文件不存在或技能已有元数据）"
+			okMsg = i18n.T("ui.status.nothingToImport")
 		}
 		a.publishAfterWork(cfg, gen, "", err, okMsg)
 	})
@@ -532,7 +541,7 @@ func (a *App) AddRootAsync() {
 				a.lib, a.libErr = lib, ""
 				a.SelectRoot(lib.Config(dir).Root)
 				if !existed {
-					a.status, a.statusErr = "已添加目录 "+a.cfg.Root, false
+					a.status, a.statusErr = i18n.Tf("ui.status.rootAdded", a.cfg.Root), false
 				}
 			}
 		})
@@ -557,7 +566,7 @@ func (a *App) RemoveRootAsync(root string) {
 			if root == a.cfg.Root {
 				a.SelectRoot(lib.Default())
 			}
-			a.status, a.statusErr = "已从列表移除 "+root+"（文件夹未改动）", false
+			a.status, a.statusErr = i18n.Tf("ui.status.rootRemoved", root), false
 		})
 	})
 }
@@ -595,7 +604,7 @@ func (a *App) DiscoverAgentRootsAsync(home string) {
 		}
 		a.publish(func() {
 			if err != nil {
-				a.status, a.statusErr = "自动发现技能目录失败："+err.Error(), true
+				a.status, a.statusErr = i18n.Tf("ui.status.discoverRootsFailed", err.Error()), true
 				return
 			}
 			if len(added) == 0 {
@@ -605,14 +614,17 @@ func (a *App) DiscoverAgentRootsAsync(home string) {
 			for r, n := range counts {
 				a.rootCounts[r] = n
 			}
-			a.status, a.statusErr = fmt.Sprintf("已自动加入 %d 个 agent 技能目录", len(added)), false
+			a.status, a.statusErr = i18n.Tf("ui.status.rootsDiscovered", len(added)), false
 		})
 	})
 }
 
-// libCopy 复制目录列表交给后台修改，成功后再在 UI 线程换上。
+// libCopy 复制目录列表交给后台修改，成功后再在 UI 线程换上。带上主题、
+// 排列与语言偏好：后台的 SetTheme / SetView / SetLang 都是 config.json 的
+// 「读—改—写」，副本缺了哪一项都可能把它当成空值写回去。
 func (a *App) libCopy() *store.Library {
-	return &store.Library{Home: a.lib.Home, Roots: append([]string(nil), a.lib.Roots...), Theme: a.themeMode, View: a.viewMode}
+	return &store.Library{Home: a.lib.Home, Roots: append([]string(nil), a.lib.Roots...),
+		Theme: a.themeMode, View: a.viewMode, Lang: a.langPref}
 }
 
 // OpenPathAsync 用系统默认方式打开 path：文件夹用文件管理器，SKILL.md 用
@@ -620,7 +632,7 @@ func (a *App) libCopy() *store.Library {
 func (a *App) OpenPathAsync(path string) {
 	a.spawn(func() {
 		if err := a.openPath(path); err != nil {
-			a.publish(func() { a.status, a.statusErr = "无法打开 "+path+"："+err.Error(), true })
+			a.publish(func() { a.status, a.statusErr = i18n.Tf("ui.status.openFailed", path, err.Error()), true })
 		}
 	})
 }
@@ -635,6 +647,14 @@ func (a *App) RevealAsync(path string) {
 // 界面本身不依赖它：皮肤由 themeMode 决定。
 func (a *App) SyncTheme() { a.setSource(a.themeMode) }
 
+// SyncLang 按语言偏好与系统 locale 定下界面语言：偏好是 system 时看系统，
+// 中文（zh*）用中文、其余一律英文。main.go 在 mygo.App.Run 之前调用（与
+// SyncTheme 同型）；界面本身不依赖它——文案由每帧的 i18n.T 现取，切语言走
+// SetLangAsync。
+func (a *App) SyncLang() {
+	i18n.Set(i18n.Resolve(store.LangPref(a.langPref), i18n.SystemLocale()))
+}
+
 // CheckAppUpdateAsync 响应「检查更新」按钮：立刻在状态行给一句反馈
 // （更新检查与窗口都由 MyGo 更新插件异步完成，点击后界面不能毫无反应），
 // 然后经 checkUpdates 钩子打开原生更新窗口。钩子在后台调用（它立即
@@ -644,11 +664,11 @@ func (a *App) CheckAppUpdateAsync() {
 		return
 	}
 	if a.checkUpdates == nil {
-		a.status, a.statusErr = "更新功能未就绪（开发构建未挂载更新插件）", true
+		a.status, a.statusErr = i18n.T("ui.status.appUpdateNotReady"), true
 		return
 	}
 	a.checkingUpdate = true
-	a.status, a.statusErr = "正在检查 kura 更新…", false
+	a.status, a.statusErr = i18n.T("ui.status.appUpdateChecking"), false
 	a.spawn(func() {
 		a.checkUpdates()
 		a.publish(func() { a.checkingUpdate = false })
@@ -679,7 +699,7 @@ func (a *App) SetThemeAsync(mode string) {
 		}
 		a.setSource(mode)
 		if err := lib.SetTheme(mode); err != nil {
-			a.publish(func() { a.status, a.statusErr = "外观偏好没能保存："+err.Error(), true })
+			a.publish(func() { a.status, a.statusErr = i18n.Tf("ui.status.themeSaveFailed", err.Error()), true })
 		}
 	})
 }
@@ -708,7 +728,39 @@ func (a *App) SetViewAsync(mode string) {
 			return
 		}
 		if err := lib.SetView(mode); err != nil {
-			a.publish(func() { a.status, a.statusErr = "排列模式没能保存："+err.Error(), true })
+			a.publish(func() { a.status, a.statusErr = i18n.Tf("ui.status.viewSaveFailed", err.Error()), true })
+		}
+	})
+}
+
+// SetLangAsync 切换界面语言偏好为 pref（store.LangSystem / LangZH / LangEN）。
+// 界面立刻换文案——语言解析（system → zh/en）在 UI 线程当场做，下一帧的
+// i18n.T 就取到新语言；写 config.json 在后台做，写盘失败只在状态行报告，
+// 不回滚已换的语言（同 SetThemeAsync / SetViewAsync）。相同的偏好直接返回
+// （幂等），连续切换只有最新一次写盘。
+func (a *App) SetLangAsync(pref string) {
+	pref, err := store.NormalizeLang(pref)
+	if err != nil {
+		a.status, a.statusErr = err.Error(), true
+		return
+	}
+	if pref == a.langPref {
+		return
+	}
+	a.langPref = pref
+	i18n.Set(i18n.Resolve(store.LangPref(pref), i18n.SystemLocale()))
+	seq := a.langSeq.Add(1)
+	lib := a.libCopy()
+	a.spawn(func() {
+		// 与外观、排列共用同一把锁：三者都是 config.json 的「读—改—写」，
+		// 串行执行才不会互相覆盖。
+		a.themeMu.Lock()
+		defer a.themeMu.Unlock()
+		if a.langSeq.Load() != seq {
+			return
+		}
+		if err := lib.SetLang(pref); err != nil {
+			a.publish(func() { a.status, a.statusErr = i18n.Tf("ui.status.langSaveFailed", err.Error()), true })
 		}
 	})
 }

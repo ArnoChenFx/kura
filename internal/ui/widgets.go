@@ -3,6 +3,7 @@
 package ui
 
 import (
+	"github.com/ArnoChenFx/kura/internal/i18n"
 	"github.com/ArnoChenFx/kura/internal/store"
 	myui "github.com/egoist/mygo/ui"
 )
@@ -11,11 +12,11 @@ import (
 func stateText(s store.State) string {
 	switch s {
 	case store.StateDisabled:
-		return "已停用"
+		return i18n.T("ui.state.disabled")
 	case store.StateTrashed:
-		return "回收站"
+		return i18n.T("ui.state.trashed")
 	default:
-		return "已启用"
+		return i18n.T("ui.state.enabled")
 	}
 }
 
@@ -86,15 +87,15 @@ func itoa(n int) string {
 // sourceText 概括技能的来源类型。
 func sourceText(s *store.Skill) string {
 	if s.Meta == nil {
-		return "无元数据"
+		return i18n.T("ui.source.noMeta")
 	}
 	switch s.Meta.Source.Type {
 	case store.SourceGitHub:
 		return "GitHub"
 	case store.SourceLocal:
-		return "本地"
+		return i18n.T("ui.source.local")
 	case "":
-		return "未知来源"
+		return i18n.T("ui.source.unknown")
 	default:
 		return s.Meta.Source.Type
 	}
@@ -109,7 +110,7 @@ func sourceURLText(m *store.Meta) string {
 		return m.Source.Path
 	default:
 		if m.Source.Type == "" {
-			return "未知"
+			return i18n.T("ui.source.unknownType")
 		}
 		return m.Source.Type
 	}
@@ -167,7 +168,7 @@ func metaField(c *myui.Context, k, v string, wrap bool, render func()) {
 // 可选中的普通文本（所在「元数据」组已是 Selectable，见 detailGroup）。
 func metaFieldLink(c *myui.Context, m *store.Meta) {
 	url := sourceURLText(m)
-	myui.Field(c, "来源", func() {
+	myui.Field(c, i18n.T("ui.detail.source"), func() {
 		if m.Source.Type == store.SourceGitHub {
 			myui.Link(c, url, url).FontSize(c.Theme().FontSize)
 			return
@@ -180,12 +181,21 @@ func metaFieldLink(c *myui.Context, m *store.Meta) {
 func diffStatusText(status string) string {
 	switch status {
 	case store.DiffAdded:
-		return "新增"
+		return i18n.T("ui.diff.added")
 	case store.DiffRemoved:
-		return "删除"
+		return i18n.T("ui.diff.removed")
 	default:
-		return "修改"
+		return i18n.T("ui.diff.modified")
 	}
+}
+
+// diffStatusWidth 是评审面板里差异状态列的宽度（DIP）：中文标签是两个字，
+// 英文（Modified）更长，列宽按当前语言取，避免英文被截断。
+func diffStatusWidth() float32 {
+	if i18n.Current() == i18n.EN {
+		return 76
+	}
+	return 44
 }
 
 // diffStatusColor 返回差异标签的颜色：新增绿、删除红、修改琥珀。
@@ -224,7 +234,7 @@ func searchBox(c *myui.Context, query *string, bg myui.Color) myui.Element {
 	row.Children(func() {
 		myui.Icon(c, iconSearch).TextColor(t.TextMuted)
 		in := myui.TextInput(c, query).Grow(1).MinWidth(t.Space(15)).
-			Placeholder("搜索技能").Label("搜索技能").
+			Placeholder(i18n.T("ui.search.placeholder")).Label(i18n.T("ui.search.placeholder")).
 			// 外框由 row 画：输入框自身不再画边框与底色，避免框中套框。
 			Border(0, myui.Color{}).Background(myui.Color{}).Padding(0)
 		// 焦点在输入框里时 Escape 清空（与 SearchField 的行为一致）。
@@ -269,9 +279,9 @@ func shortTime(s string) string {
 func cardSource(s *store.Skill) string {
 	if s.Meta == nil {
 		if s.MetaErr != "" {
-			return "元数据损坏"
+			return i18n.T("ui.pill.badMeta")
 		}
-		return "无元数据"
+		return i18n.T("ui.source.noMeta")
 	}
 	src := sourceText(s)
 	if s.Meta.Source.Type == store.SourceGitHub {

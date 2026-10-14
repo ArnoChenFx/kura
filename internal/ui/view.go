@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/ArnoChenFx/kura/internal/i18n"
 	"github.com/ArnoChenFx/kura/internal/store"
 	"github.com/ArnoChenFx/kura/resources"
 	myui "github.com/egoist/mygo/ui"
@@ -46,7 +47,7 @@ var appIcon = mustDecodeBitmap(resources.IconPNG)
 func mustDecodeBitmap(data []byte) *myui.Bitmap {
 	bm, err := myui.DecodeBitmap(data)
 	if err != nil {
-		panic("ui: 应用图标解码失败: " + err.Error())
+		panic(i18n.Tf("ui.panic.iconDecode", err))
 	}
 	return bm
 }
@@ -109,13 +110,13 @@ func (a *App) View(c *myui.Context) {
 
 	// 「移入回收站」与「永久删除」共用一个确认框；最后一个按钮是默认按钮（回车触发），
 	// Escape 或点按钮后 *open 置 false。
-	title, message, ok := "移入回收站？",
-		"技能 "+a.confirm.name+" 将从技能目录移入 kura 回收站，可随时恢复；移动前会自动写入内容快照。", "确认移入"
+	title, message, ok := i18n.T("ui.confirm.trashTitle"),
+		i18n.Tf("ui.confirm.trashMessage", a.confirm.name), i18n.T("ui.confirm.trashOK")
 	if a.confirm.purge {
-		title, ok = "永久删除？", "永久删除"
-		message = "技能 " + a.confirm.name + " 将从回收站永久删除，无法恢复。删除前会先写入一份内容快照，快照保留在 kura 的数据目录里。"
+		title, ok = i18n.T("ui.confirm.purgeTitle"), i18n.T("ui.action.purge")
+		message = i18n.Tf("ui.confirm.purgeMessage", a.confirm.name)
 	}
-	if n := myui.AlertDialog(c, &a.confirm.open, title, message, "取消", ok); n == 1 {
+	if n := myui.AlertDialog(c, &a.confirm.open, title, message, i18n.T("ui.common.cancel"), ok); n == 1 {
 		if a.confirm.purge {
 			a.PurgeAsync(a.confirm.name)
 		} else {
@@ -248,7 +249,7 @@ func dragWidth(cur, delta, lo, hi float32) float32 {
 func (a *App) viewRoots(c *myui.Context) {
 	t := c.Theme()
 	myui.Column(c).Width(a.rootsEff).Shrink(0).FillHeight().Background(a.pal.sidebar).Children(func() {
-		myui.Text(c, "技能目录").FontSize(t.FontSize-1).FontWeight(600).TextColor(t.TextMuted).
+		myui.Text(c, i18n.T("ui.roots.title")).FontSize(t.FontSize-1).FontWeight(600).TextColor(t.TextMuted).
 			Padding(t.Space(4), t.Space(5), t.Space(1.5), t.Space(5))
 		myui.Scroll(c).Grow(1).FillWidth().Children(func() {
 			myui.Column(c).FillWidth().Padding(0, t.Space(2.5)).Gap(t.Space(0.5)).Children(func() {
@@ -258,16 +259,16 @@ func (a *App) viewRoots(c *myui.Context) {
 			})
 		})
 		if a.libErr != "" {
-			myui.Text(c, "目录列表读取失败："+a.libErr).MaxLines(3).
+			myui.Text(c, i18n.Tf("ui.roots.loadFailed", a.libErr)).MaxLines(3).
 				FontSize(t.FontSize-2).TextColor(t.Danger).Padding(t.Space(1), t.Space(4))
 		}
 		if a.settingsErr != "" {
-			myui.Text(c, "设置读取失败："+a.settingsErr).MaxLines(3).
+			myui.Text(c, i18n.Tf("ui.roots.settingsLoadFailed", a.settingsErr)).MaxLines(3).
 				FontSize(t.FontSize-2).TextColor(t.Danger).Padding(t.Space(1), t.Space(4))
 		}
 		myui.Column(c).FillWidth().Padding(t.Space(2), t.Space(3), t.Space(3), t.Space(3)).
 			Gap(t.Space(3)).Children(func() {
-			ab := myui.ButtonBase(c).Label("添加文件夹").FillWidth().Disabled(a.adding).
+			ab := myui.ButtonBase(c).Label(i18n.T("ui.roots.addFolder")).FillWidth().Disabled(a.adding).
 				Justify(myui.Start).Gap(t.Space(2)).Padding(t.Space(2), t.Space(3)).
 				Radius(t.Radius).Border(1, t.Border).TextColor(a.pal.textMid)
 			if ab.Hovered() {
@@ -275,7 +276,7 @@ func (a *App) viewRoots(c *myui.Context) {
 			}
 			ab.Children(func() {
 				myui.Icon(c, iconPlus)
-				myui.Text(c, "添加文件夹")
+				myui.Text(c, i18n.T("ui.roots.addFolder"))
 			})
 			if ab.Clicked() {
 				a.AddRootAsync()
@@ -285,14 +286,15 @@ func (a *App) viewRoots(c *myui.Context) {
 	})
 }
 
-// themeModes 是外观开关的三个选项，顺序即分段顺序。
+// themeModes 是外观开关的三个选项，顺序即分段顺序。key 是显示名的目录 key：
+// 文案每帧现取（见 viewThemeSwitch），语言一切就跟着变。
 var themeModes = []struct {
-	mode, label string
-	icon        *myui.SVG
+	mode, key string
+	icon      *myui.SVG
 }{
-	{store.ThemeSystem, "跟随系统", iconMonitor},
-	{store.ThemeLight, "浅色", iconSun},
-	{store.ThemeDark, "深色", iconMoon},
+	{store.ThemeSystem, "ui.theme.system", iconMonitor},
+	{store.ThemeLight, "ui.theme.light", iconSun},
+	{store.ThemeDark, "ui.theme.dark", iconMoon},
 }
 
 // themeIndex 返回外观模式在 themeModes 里的位置，不认识的当作跟随系统。
@@ -314,8 +316,8 @@ func (a *App) viewRootsFooter(c *myui.Context) {
 	myui.Row(c).FillWidth().AlignItems(myui.Center).Gap(t.Space(1)).Children(func() {
 		a.viewThemeSwitch(c)
 		myui.Spacer(c)
-		railButton(c, iconUpdate, "检查更新", "检查 kura 应用更新", a.checkingUpdate, a.CheckAppUpdateAsync)
-		railButton(c, iconSettings, "设置", "翻译 API 与目标语言", false, a.OpenSettings)
+		railButton(c, iconUpdate, i18n.T("ui.action.checkUpdate"), i18n.T("ui.rail.checkUpdateTip"), a.checkingUpdate, a.CheckAppUpdateAsync)
+		railButton(c, iconSettings, i18n.T("ui.settings.title"), i18n.T("ui.rail.settingsTip"), false, a.OpenSettings)
 	})
 }
 
@@ -346,10 +348,10 @@ func (a *App) viewThemeSwitch(c *myui.Context) {
 	t := c.Theme()
 	sel := themeIndex(a.themeMode)
 	seg := myui.SegmentedBase(c, &sel, len(themeModes))
-	track := seg.Track.Label("外观").Padding(t.Space(0.5)).Gap(t.Space(0.5)).
+	track := seg.Track.Label(i18n.T("ui.theme.label")).Padding(t.Space(0.5)).Gap(t.Space(0.5)).
 		Radius(t.Radius).Background(a.pal.card).Border(1, a.pal.line).Shrink(0).Children(func() {
 		for i, m := range themeModes {
-			b := seg.Segment(i).Label(m.label).Tooltip(m.label).
+			b := seg.Segment(i).Label(i18n.T(m.key)).Tooltip(i18n.T(m.key)).
 				Padding(t.Space(1.25), t.Space(2)).Radius(t.Radius - 2).TextColor(t.TextMuted)
 			switch {
 			case i == sel:
@@ -413,15 +415,15 @@ func (a *App) rootItem(c *myui.Context, root string, isDefault bool) {
 // rootMenu 是左栏目录项的右键菜单：打开文件夹、复制路径；追加的目录还能
 // 从列表移除（只改 config.json，不动文件夹）。右键不切换目录。
 func (a *App) rootMenu(c *myui.Context, m *myui.Menu, root string, isDefault bool) {
-	if m.Item("打开文件夹").Chosen() {
+	if m.Item(i18n.T("ui.menu.openFolder")).Chosen() {
 		a.OpenPathAsync(root)
 	}
-	if m.Item("复制路径").Chosen() {
+	if m.Item(i18n.T("ui.menu.copyPath")).Chosen() {
 		a.copyPath(c, root)
 	}
 	if !isDefault {
 		m.Separator()
-		if m.Item("从列表移除").Chosen() {
+		if m.Item(i18n.T("ui.menu.removeFromList")).Chosen() {
 			a.RemoveRootAsync(root)
 		}
 	}
@@ -430,7 +432,7 @@ func (a *App) rootMenu(c *myui.Context, m *myui.Menu, root string, isDefault boo
 // copyPath 把路径放进剪贴板，状态行说一声。只在菜单项被选中的那一帧调用。
 func (a *App) copyPath(c *myui.Context, path string) {
 	c.WriteClipboard(path)
-	a.status, a.statusErr = "已复制路径 "+path, false
+	a.status, a.statusErr = i18n.Tf("ui.status.pathCopied", path), false
 }
 
 // rootLabel 是目录在左栏里的名字：最后两级路径（如 .agents/skills），
@@ -461,19 +463,19 @@ func (a *App) viewMainHeader(c *myui.Context) {
 		if a.scanning || a.checkingAll || a.checking != "" {
 			myui.Spinner(c)
 		}
-		ghostButton(c, iconRefresh, "刷新", a.scanning, a.ReloadAsync)
-		ghostButton(c, iconCheckAll, "全部检查", a.checkingAll || a.checking != "", a.CheckAllAsync)
+		ghostButton(c, iconRefresh, i18n.T("ui.action.refresh"), a.scanning, a.ReloadAsync)
+		ghostButton(c, iconCheckAll, i18n.T("ui.action.checkAll"), a.checkingAll || a.checking != "", a.CheckAllAsync)
 		// .skill-lock.json 只描述默认目录里的技能。
 		if isDefault {
-			ghostButton(c, iconImport, "导入元数据", false, a.ImportAsync)
+			ghostButton(c, iconImport, i18n.T("ui.action.importMeta"), false, a.ImportAsync)
 		} else {
-			ghostButton(c, iconUnlink, "从列表移除此目录", false, func() { a.RemoveRootAsync(a.cfg.Root) })
+			ghostButton(c, iconUnlink, i18n.T("ui.action.removeRoot"), false, func() { a.RemoveRootAsync(a.cfg.Root) })
 		}
 		myui.Box(c).Width(t.Space(2))
-		ib := myui.PrimaryButton(c, "").Label("安装技能")
+		ib := myui.PrimaryButton(c, "").Label(i18n.T("ui.action.install"))
 		ib.Children(func() {
 			myui.Icon(c, iconPlus)
-			myui.Text(c, "安装技能").FontWeight(600)
+			myui.Text(c, i18n.T("ui.action.install")).FontWeight(600)
 		})
 		if ib.Clicked() {
 			a.OpenInstall()
@@ -491,21 +493,22 @@ func (a *App) viewFilterBar(c *myui.Context) {
 		searchBox(c, &a.query, a.pal.card).Grow(1).Basis(t.Space(50)).MaxWidth(t.Space(80))
 		myui.Spacer(c)
 		myui.Segmented(c, &a.filter,
-			"全部 "+itoa(en+dis), "启用 "+itoa(en), "停用 "+itoa(dis), "回收站 "+itoa(trash)).
+			i18n.Tf("ui.filter.all", en+dis), i18n.Tf("ui.filter.enabled", en),
+			i18n.Tf("ui.filter.disabled", dis), i18n.Tf("ui.filter.trashed", trash)).
 			Shrink(0)
 		myui.Box(c).Width(t.Space(1))
 		a.viewModeSwitch(c)
 	})
 }
 
-// viewModes 是排列模式开关的各个分段，顺序即分段顺序。
+// viewModes 是排列模式开关的各个分段，顺序即分段顺序。key 是显示名的目录
+// key：文案每帧现取（见 viewModeSwitch），语言一切就跟着变。
 var viewModes = []struct {
-	mode  string
-	label string
-	icon  *myui.SVG
+	mode, key string
+	icon      *myui.SVG
 }{
-	{store.ViewGrid, "卡片网格", iconGrid},
-	{store.ViewList, "列表", iconRows},
+	{store.ViewGrid, "ui.view.grid", iconGrid},
+	{store.ViewList, "ui.view.list", iconRows},
 }
 
 // viewIndex 返回排列模式在 viewModes 里的位置，不认识的当作卡片网格。
@@ -527,10 +530,10 @@ func (a *App) viewModeSwitch(c *myui.Context) {
 	t := c.Theme()
 	sel := viewIndex(a.viewMode)
 	seg := myui.SegmentedBase(c, &sel, len(viewModes))
-	track := seg.Track.Label("排列").Padding(t.Space(0.5)).Gap(t.Space(0.5)).
+	track := seg.Track.Label(i18n.T("ui.view.label")).Padding(t.Space(0.5)).Gap(t.Space(0.5)).
 		Radius(t.Radius).Background(a.pal.card).Border(1, a.pal.line).Shrink(0).Children(func() {
 		for i, m := range viewModes {
-			b := seg.Segment(i).Label(m.label).Tooltip(m.label).
+			b := seg.Segment(i).Label(i18n.T(m.key)).Tooltip(i18n.T(m.key)).
 				Padding(t.Space(1.5), t.Space(2)).Radius(t.Radius - 2).TextColor(t.TextMuted)
 			switch {
 			case i == sel:
@@ -637,28 +640,28 @@ func (a *App) viewRow(c *myui.Context, s *store.Skill, selected bool) {
 				})
 				// 标签放在控件左侧，不挤压名字：只在有话要说时出现。
 				if a.updates[s.Name] {
-					pill(c, "有更新", t.Accent)
+					pill(c, i18n.T("ui.pill.hasUpdate"), t.Accent)
 				}
 				switch s.State {
 				case store.StateDisabled:
-					pill(c, "已停用", t.Warning)
+					pill(c, i18n.T("ui.state.disabled"), t.Warning)
 				case store.StateTrashed:
-					pill(c, "回收站", t.Danger)
+					pill(c, i18n.T("ui.state.trashed"), t.Danger)
 				}
 				if s.MetaErr != "" {
-					pill(c, "元数据损坏", t.Danger)
+					pill(c, i18n.T("ui.pill.badMeta"), t.Danger)
 				} else if !s.HasSKILLMD && s.State != store.StateTrashed {
-					pill(c, "缺少 SKILL.md", t.Warning)
+					pill(c, i18n.T("ui.pill.noSkillMD"), t.Warning)
 				}
 				switch {
 				case busy:
 					myui.Spinner(c)
 				case s.State == store.StateTrashed:
-					ghostButton(c, iconRestore, "恢复", false, func() { a.RestoreAsync(s.Name) })
+					ghostButton(c, iconRestore, i18n.T("ui.action.restore"), false, func() { a.RestoreAsync(s.Name) })
 				default:
 					// 同卡片：Changed 返回 true 的这次构建里，on 已是目标状态。
 					on := s.State == store.StateEnabled
-					sw := kuraSwitch(c, &on, a.pal.toggle).Label(s.Name + " 开关")
+					sw := kuraSwitch(c, &on, a.pal.toggle).Label(i18n.Tf("ui.card.switchLabel", s.Name))
 					if sw.Changed() {
 						a.ToggleAsync(s.Name, on)
 					}
@@ -667,7 +670,7 @@ func (a *App) viewRow(c *myui.Context, s *store.Skill, selected bool) {
 			// 第 2 行：描述，单行省略；左缩进与名字对齐（头像宽 + 间距）。
 			desc, color := a.descText(translateCardPrefix, s), t.TextMuted
 			if desc == "" {
-				desc, color = "没有描述", t.TextMuted.Alpha(0.6)
+				desc, color = i18n.T("ui.card.noDescription"), t.TextMuted.Alpha(0.6)
 			}
 			// 缩进用占位盒子而不是外边距：FillWidth 加外边距会比父容器宽出缩进，
 			// 省略号就画到行边框之外。
@@ -708,12 +711,22 @@ func (a *App) viewGrid(c *myui.Context, rows []*store.Skill) {
 // 「目录里没有技能」。
 func (a *App) viewGridEmpty(c *myui.Context) {
 	t := c.Theme()
-	msg, hint := "这个目录里还没有技能", "点右上角的「安装技能」，从 GitHub 或本地文件夹安装"
+	msg, hint := i18n.T("ui.empty.noSkills"), i18n.T("ui.empty.noSkillsHint")
 	switch {
 	case a.query != "":
-		msg, hint = "没有匹配「"+a.query+"」的技能", "换个关键词试试"
+		msg, hint = i18n.Tf("ui.empty.noMatch", a.query), i18n.T("ui.empty.noMatchHint")
 	case a.filter != filterAll:
-		msg, hint = "没有"+stateText(filterState(a.filter))+"的技能", ""
+		// 三种筛选各一条完整文案（不拿状态标签拼接：英文里句子中间不该插
+		// 一个大写开头的标签）。
+		hint = ""
+		switch a.filter {
+		case filterEnabled:
+			msg = i18n.T("ui.empty.noEnabled")
+		case filterDisabled:
+			msg = i18n.T("ui.empty.noDisabled")
+		default:
+			msg = i18n.T("ui.empty.noTrashed")
+		}
 	}
 	myui.Box(c).Grow(1).FillWidth().Center().Children(func() {
 		myui.Column(c).Gap(t.Space(3)).AlignItems(myui.Center).Children(func() {
@@ -784,12 +797,12 @@ func (a *App) viewCard(c *myui.Context, s *store.Skill, selected bool) {
 			case busy:
 				myui.Spinner(c)
 			case s.State == store.StateTrashed:
-				ghostButton(c, iconRestore, "恢复", false, func() { a.RestoreAsync(s.Name) })
+				ghostButton(c, iconRestore, i18n.T("ui.action.restore"), false, func() { a.RestoreAsync(s.Name) })
 			default:
 				// Switch 的输入在构建时应用：Changed 返回 true 的这次构建里，
 				// on 已是切换后的目标状态。
 				on := s.State == store.StateEnabled
-				sw := kuraSwitch(c, &on, a.pal.toggle).Label(s.Name + " 开关")
+				sw := kuraSwitch(c, &on, a.pal.toggle).Label(i18n.Tf("ui.card.switchLabel", s.Name))
 				if sw.Changed() {
 					a.ToggleAsync(s.Name, on)
 				}
@@ -798,23 +811,23 @@ func (a *App) viewCard(c *myui.Context, s *store.Skill, selected bool) {
 		// 译文模式下，选中技能的卡片显示译文（其余卡片仍是原文，见 translate.go）。
 		desc, color := a.descText(translateCardPrefix, s), t.TextMuted
 		if desc == "" {
-			desc, color = "没有描述", t.TextMuted.Alpha(0.6)
+			desc, color = i18n.T("ui.card.noDescription"), t.TextMuted.Alpha(0.6)
 		}
 		myui.Text(c, desc).MaxLines(2).FontSize(t.FontSize - 1).TextColor(color).Grow(1)
 		myui.Row(c).FillWidth().Gap(t.Space(1.5)).AlignItems(myui.Center).Children(func() {
 			if a.updates[s.Name] {
-				pill(c, "有更新", t.Accent)
+				pill(c, i18n.T("ui.pill.hasUpdate"), t.Accent)
 			}
 			switch s.State {
 			case store.StateDisabled:
-				pill(c, "已停用", t.Warning)
+				pill(c, i18n.T("ui.state.disabled"), t.Warning)
 			case store.StateTrashed:
-				pill(c, "回收站", t.Danger)
+				pill(c, i18n.T("ui.state.trashed"), t.Danger)
 			}
 			if s.MetaErr != "" {
-				pill(c, "元数据损坏", t.Danger)
+				pill(c, i18n.T("ui.pill.badMeta"), t.Danger)
 			} else if !s.HasSKILLMD && s.State != store.StateTrashed {
-				pill(c, "缺少 SKILL.md", t.Warning)
+				pill(c, i18n.T("ui.pill.noSkillMD"), t.Warning)
 			}
 		})
 	})
@@ -826,48 +839,48 @@ func (a *App) viewCard(c *myui.Context, s *store.Skill, selected bool) {
 // 恢复。技能正忙时改状态的项置灰。移入回收站仍走确认框。
 func (a *App) cardMenu(c *myui.Context, m *myui.Menu, s *store.Skill) {
 	busy := a.isBusy(s.Name)
-	if m.Item("打开文件夹").Chosen() {
+	if m.Item(i18n.T("ui.menu.openFolder")).Chosen() {
 		a.OpenPathAsync(s.Dir)
 	}
-	if m.Item("在文件夹中显示").Chosen() {
+	if m.Item(i18n.T("ui.menu.revealFolder")).Chosen() {
 		a.RevealAsync(s.Dir)
 	}
 	if s.State != store.StateTrashed {
-		if m.Item("打开 SKILL.md").Disabled(!s.HasSKILLMD).Chosen() {
+		if m.Item(i18n.T("ui.menu.openSkillMD")).Disabled(!s.HasSKILLMD).Chosen() {
 			a.OpenPathAsync(filepath.Join(s.Dir, "SKILL.md"))
 		}
 	}
-	if m.Item("复制路径").Chosen() {
+	if m.Item(i18n.T("ui.menu.copyPath")).Chosen() {
 		a.copyPath(c, s.Dir)
 	}
 	m.Separator()
 	trash := func() {
-		if m.Item("移入回收站…").Disabled(busy).Chosen() {
+		if m.Item(i18n.T("ui.menu.moveTrash")).Disabled(busy).Chosen() {
 			a.confirm = confirmState{open: true, name: s.Name}
 		}
 	}
 	switch s.State {
 	case store.StateEnabled:
-		if m.Item("停用").Disabled(busy).Chosen() {
+		if m.Item(i18n.T("ui.menu.disable")).Disabled(busy).Chosen() {
 			a.ToggleAsync(s.Name, false)
 		}
-		if m.Item("检查更新").Disabled(busy || a.hasCheckTarget()).Chosen() {
+		if m.Item(i18n.T("ui.action.checkUpdate")).Disabled(busy || a.hasCheckTarget()).Chosen() {
 			a.CheckAsync(s.Name)
 		}
 		m.Separator()
 		trash()
 	case store.StateDisabled:
-		if m.Item("启用").Disabled(busy).Chosen() {
+		if m.Item(i18n.T("ui.menu.enable")).Disabled(busy).Chosen() {
 			a.ToggleAsync(s.Name, true)
 		}
 		m.Separator()
 		trash()
 	case store.StateTrashed:
-		if m.Item("恢复到技能目录").Disabled(busy).Chosen() {
+		if m.Item(i18n.T("ui.menu.restore")).Disabled(busy).Chosen() {
 			a.RestoreAsync(s.Name)
 		}
 		m.Separator()
-		if m.Item("永久删除…").Disabled(busy).Chosen() {
+		if m.Item(i18n.T("ui.menu.purge")).Disabled(busy).Chosen() {
 			a.confirm = confirmState{open: true, name: s.Name, purge: true}
 		}
 	}
@@ -898,16 +911,16 @@ func (a *App) viewDetail(c *myui.Context, s *store.Skill) {
 						myui.Row(c).Gap(t.Space(2)).AlignItems(myui.Center).Children(func() {
 							stateBadge(c, s.State)
 							if a.updates[s.Name] {
-								pill(c, "有更新", t.Accent)
+								pill(c, i18n.T("ui.pill.hasUpdate"), t.Accent)
 							}
 						})
 					})
-					ghostButton(c, iconClose, "关闭详情", false, func() { a.selName = "" })
+					ghostButton(c, iconClose, i18n.T("ui.action.closeDetail"), false, func() { a.selName = "" })
 				})
 				a.viewTranslateBar(c)
 				// 概览/全文 tab：绑定 a.detailTab。点选在下一次构建生效，
 				// 两个页面都按 a.detailTab 分支，本帧内的切换下一帧生效。
-				myui.Tabs(c, &a.detailTab, detailTabOverview, detailTabFull).FillWidth()
+				myui.Tabs(c, &a.detailTab, i18n.T("ui.detail.tabOverview"), i18n.T("ui.detail.tabFull")).FillWidth()
 				a.detailBody(c, s)
 			})
 		})
@@ -917,12 +930,6 @@ func (a *App) viewDetail(c *myui.Context, s *store.Skill) {
 		})
 	})
 }
-
-// detailTabLabels 是详情 tab 的两个标签（下标即 detailTab 的取值）。
-const (
-	detailTabOverview = "概览"
-	detailTabFull     = "全文"
-)
 
 // detailBody 按 detailTab 渲染详情正文：概览页是原有的描述与信息块，
 // 全文页是后台读出并渲染的 SKILL.md。
@@ -943,10 +950,10 @@ func (a *App) viewDetailOverview(c *myui.Context, s *store.Skill) {
 		a.viewTranslateNote(c, s)
 	}
 	if !s.HasSKILLMD && s.State != store.StateTrashed {
-		myui.Text(c, "缺少 SKILL.md").TextColor(t.Warning)
+		myui.Text(c, i18n.T("ui.pill.noSkillMD")).TextColor(t.Warning)
 	}
-	a.detailGroup(c, "元数据", true, func() { a.viewDetailMeta(c, s) })
-	a.detailGroup(c, "位置", true, func() {
+	a.detailGroup(c, i18n.T("ui.detail.metaGroup"), true, func() { a.viewDetailMeta(c, s) })
+	a.detailGroup(c, i18n.T("ui.detail.location"), true, func() {
 		myui.Text(c, s.Dir).FontSize(t.FontSize - 1).TextColor(t.TextMuted)
 	})
 }
@@ -963,13 +970,14 @@ func (a *App) viewTranslateBar(c *myui.Context) {
 	myui.Column(c).FillWidth().Gap(t.Space(1.5)).Children(func() {
 		myui.Row(c).FillWidth().AlignItems(myui.Center).Gap(t.Space(2)).Children(func() {
 			myui.Icon(c, iconTranslate).TextColor(t.TextMuted).FontSize(t.FontSize)
-			myui.Text(c, "翻译").SingleLine().FontSize(t.FontSize - 1).TextColor(t.TextMuted)
+			myui.Text(c, i18n.T("ui.translate.label")).SingleLine().FontSize(t.FontSize - 1).TextColor(t.TextMuted)
 			myui.Spacer(c)
 			sel := 0
 			if a.trans.on {
 				sel = 1
 			}
-			if myui.Segmented(c, &sel, "原文", "译文").Label("显示语言").Shrink(0).Changed() {
+			if myui.Segmented(c, &sel, i18n.T("ui.translate.original"), i18n.T("ui.translate.translated")).
+				Label(i18n.T("ui.translate.displayLang")).Shrink(0).Changed() {
 				a.SetTranslateOn(sel == 1)
 				c.Invalidate()
 			}
@@ -981,9 +989,9 @@ func (a *App) viewTranslateBar(c *myui.Context) {
 			myui.Box(c).FillWidth().Padding(t.Space(2), t.Space(3)).Radius(t.Radius).
 				Background(t.Warning.Alpha(0.10)).Border(1, t.Warning.Alpha(0.4)).Children(func() {
 				myui.Column(c).FillWidth().Gap(t.Space(1.5)).Children(func() {
-					myui.Text(c, "先在设置里填翻译 API").TextColor(t.Warning)
+					myui.Text(c, i18n.T("ui.translate.notConfigured")).TextColor(t.Warning)
 					myui.Row(c).FillWidth().Children(func() {
-						if myui.Button(c, "打开设置").Clicked() {
+						if myui.Button(c, i18n.T("ui.translate.openSettings")).Clicked() {
 							a.OpenSettings()
 						}
 					})
@@ -1006,20 +1014,16 @@ func (a *App) viewTranslateNote(c *myui.Context, s *store.Skill) {
 	case !ok || e.pending:
 		myui.Row(c).Gap(t.Space(1.5)).AlignItems(myui.Center).Children(func() {
 			myui.Spinner(c)
-			myui.Text(c, "翻译中…").FontSize(t.FontSize - 1).TextColor(t.TextMuted)
+			myui.Text(c, i18n.T("ui.translate.inProgress")).FontSize(t.FontSize - 1).TextColor(t.TextMuted)
 		})
 	case e.err != "":
-		myui.Text(c, "翻译失败："+e.err+"（切回原文再切到译文可重试）").MaxLines(4).
+		myui.Text(c, i18n.Tf("ui.translate.failed", e.err)).MaxLines(4).
 			FontSize(t.FontSize - 1).TextColor(t.Danger)
 	default:
-		myui.Text(c, "译文 · "+a.settings.LangLabel()+" · 仅界面显示，不改动技能文件").
+		myui.Text(c, i18n.Tf("ui.translate.note", a.settings.LangLabel())).
 			FontSize(t.FontSize - 2).TextColor(t.TextMuted)
 	}
 }
-
-// fullTextLoading 是 skillDocs 里的「正在读」占位值：占位与失败都走
-// err 字段，加载中的提示不染危险色。
-const fullTextLoading = "正在读取 SKILL.md…"
 
 // viewDetailFullText 是全文页：渲染技能的 SKILL.md。
 //
@@ -1028,14 +1032,19 @@ const fullTextLoading = "正在读取 SKILL.md…"
 // 后缓存整体失效（applyScan），docGen 递增让还在路上的旧读盘结果作废。加载中
 // 显示提示；读失败或没有 SKILL.md（回收站里的技能可能没有）显示明确原因，绝不
 // 留白，绝不 panic。译文模式下正文由 viewFullTextBody 决定显示原文还是译文。
+//
+// 读盘结果是语言无关的（loading/noMD/err 三种状态），文案在这里现取：后台
+// 任务跑完时语言可能已经变了（i18n.Error 的文字也是每次 Error() 现取的）。
 func (a *App) viewDetailFullText(c *myui.Context, s *store.Skill) {
 	a.startFullTextLoad(s)
 	doc := a.skillDocs[s.Name]
 	switch {
-	case doc.err == fullTextLoading:
-		myui.Text(c, fullTextLoading).TextColor(c.Theme().TextMuted)
-	case doc.err != "":
-		myui.Text(c, doc.err).TextColor(c.Theme().Danger)
+	case doc.loading:
+		myui.Text(c, i18n.T("ui.detail.loading")).TextColor(c.Theme().TextMuted)
+	case doc.noMD:
+		myui.Text(c, i18n.T("ui.detail.noSkillMD")).TextColor(c.Theme().TextMuted)
+	case doc.err != nil:
+		myui.Text(c, doc.err.Error()).TextColor(c.Theme().Danger)
 	default:
 		// 渲染进外层已有的 Scroll，宽度铺满（renderMarkdown 只管内容列）。
 		a.viewFullTextBody(c, s, doc.src)
@@ -1058,25 +1067,29 @@ func (a *App) viewFullTextBody(c *myui.Context, s *store.Skill, src string) {
 	case !ok || e.pending:
 		myui.Row(c).Gap(t.Space(1.5)).AlignItems(myui.Center).Children(func() {
 			myui.Spinner(c)
-			myui.Text(c, "翻译全文中…").FontSize(t.FontSize - 1).TextColor(t.TextMuted)
+			myui.Text(c, i18n.T("ui.translate.fullInProgress")).FontSize(t.FontSize - 1).TextColor(t.TextMuted)
 		})
 		renderMarkdown(c, src)
 	case e.err != "":
-		myui.Text(c, "全文翻译失败："+e.err+"（切回原文再切到译文可重试）").MaxLines(4).
+		myui.Text(c, i18n.Tf("ui.translate.fullFailed", e.err)).MaxLines(4).
 			FontSize(t.FontSize - 1).TextColor(t.Danger)
 		renderMarkdown(c, src)
 	default:
-		myui.Text(c, "译文 · "+a.settings.LangLabel()+" · 仅界面显示，不改动技能文件").
+		myui.Text(c, i18n.Tf("ui.translate.note", a.settings.LangLabel())).
 			FontSize(t.FontSize - 2).TextColor(t.TextMuted)
 		renderMarkdown(c, e.dst)
 	}
 }
 
-// fullTextDoc 是一个技能的 SKILL.md 读盘结果：src 是源文本，err 是提示
-// 文案（含加载中占位与失败原因），两者不会同时有值。
+// fullTextDoc 是一个技能的 SKILL.md 读盘结果，三种状态互斥：
+// src 非空是读到了正文；loading 为真是在后台读；noMD 为真是没有 SKILL.md；
+// err 非空是读盘失败。后三项存的是语言无关的状态而不是文案：后台任务跑完时
+// 语言可能已经变了，文案（含错误里的原因）在 viewDetailFullText 里现取。
 type fullTextDoc struct {
-	src string
-	err string
+	src     string
+	loading bool
+	noMD    bool
+	err     error
 }
 
 // startFullTextLoad 确保技能的 SKILL.md 有一份缓存：没有就去后台读
@@ -1091,14 +1104,16 @@ func (a *App) startFullTextLoad(s *store.Skill) {
 	if _, ok := a.skillDocs[s.Name]; ok {
 		return
 	}
-	a.skillDocs[s.Name] = fullTextDoc{err: fullTextLoading}
+	a.skillDocs[s.Name] = fullTextDoc{loading: true}
 	name, dir, hasMD, gen := s.Name, s.Dir, s.HasSKILLMD, a.docGen
 	a.spawn(func() {
-		doc := fullTextDoc{err: "没有 SKILL.md 可显示"}
+		doc := fullTextDoc{noMD: true}
 		if hasMD {
 			data, err := os.ReadFile(filepath.Join(dir, "SKILL.md"))
 			if err != nil {
-				doc = fullTextDoc{err: "读取 SKILL.md 失败：" + err.Error()}
+				// 错误文字随语言变（i18n.Errorf 到显示时才取文案），
+				// 所以这里存错误本身，不存字符串。
+				doc = fullTextDoc{err: i18n.Errorf("ui.detail.readFailed", err)}
 			} else {
 				doc = fullTextDoc{src: string(data)}
 			}
@@ -1142,10 +1157,10 @@ func (a *App) viewDetailMeta(c *myui.Context, s *store.Skill) {
 	switch {
 	case m != nil:
 	case s.MetaErr != "":
-		myui.Text(c, "元数据读取失败："+s.MetaErr).TextColor(t.Danger)
+		myui.Text(c, i18n.Tf("ui.detail.metaFailed", s.MetaErr)).TextColor(t.Danger)
 		return
 	default:
-		myui.Text(c, "没有 .kura-meta.json（非 kura 安装，或尚未导入元数据）").TextColor(t.TextMuted)
+		myui.Text(c, i18n.T("ui.detail.noMeta")).TextColor(t.TextMuted)
 		return
 	}
 	// 标签用弱化色，值在 metaField 里单独设为正文色，主次分明。
@@ -1169,12 +1184,12 @@ func (a *App) viewDetailMeta(c *myui.Context, s *store.Skill) {
 				metaField(c, "Plugin", m.PluginName, false, nil)
 			}
 			if m.InstalledAt != "" {
-				metaField(c, "安装", shortTime(m.InstalledAt), false, nil)
+				metaField(c, i18n.T("ui.detail.installedAt"), shortTime(m.InstalledAt), false, nil)
 			}
 			if m.UpdatedAt != "" {
-				metaField(c, "更新", shortTime(m.UpdatedAt), false, nil)
+				metaField(c, i18n.T("ui.detail.updatedAt"), shortTime(m.UpdatedAt), false, nil)
 			}
-			metaField(c, "哈希", shortHash(m.ContentHash), false, nil)
+			metaField(c, i18n.T("ui.detail.hash"), shortHash(m.ContentHash), false, nil)
 		})
 	})
 }
@@ -1188,14 +1203,14 @@ func (a *App) viewDetailActions(c *myui.Context, s *store.Skill, busy bool) {
 	if busy {
 		myui.Row(c).Gap(t.Space(2)).AlignItems(myui.Center).Children(func() {
 			myui.Spinner(c)
-			myui.Text(c, "正在操作 "+s.Name+"…").SingleLine().TextColor(t.TextMuted)
+			myui.Text(c, i18n.Tf("ui.detail.busy", s.Name)).SingleLine().TextColor(t.TextMuted)
 		})
 		return
 	}
 	// trashButton 是「移入回收站」：Label 保持「详情:移入回收站」供测试与无障碍。
 	trashButton := func() {
 		myui.Spacer(c)
-		b := myui.ButtonBase(c).Label("详情:移入回收站").Tooltip("移入回收站").
+		b := myui.ButtonBase(c).Label(i18n.T("ui.detail.trashLabel")).Tooltip(i18n.T("ui.action.moveTrash")).
 			Padding(t.Space(1.75)).Radius(t.Radius).TextColor(t.Danger)
 		if b.Hovered() {
 			b.Background(t.Danger.Alpha(0.1))
@@ -1209,42 +1224,42 @@ func (a *App) viewDetailActions(c *myui.Context, s *store.Skill, busy bool) {
 		switch s.State {
 		case store.StateEnabled:
 			// 检查更新：预览上游差异，弹出评审面板（不直接改盘）。
-			ub := myui.PrimaryButton(c, "").Label("详情:检查更新").Disabled(a.hasCheckTarget())
+			ub := myui.PrimaryButton(c, "").Label(i18n.T("ui.detail.checkLabel")).Disabled(a.hasCheckTarget())
 			ub.Children(func() {
 				myui.Icon(c, iconUpdate)
-				myui.Text(c, "检查更新")
+				myui.Text(c, i18n.T("ui.action.checkUpdate"))
 			})
 			if ub.Clicked() {
 				a.CheckAsync(s.Name)
 			}
-			if myui.Button(c, "停用").Clicked() {
+			if myui.Button(c, i18n.T("ui.menu.disable")).Clicked() {
 				a.ToggleAsync(s.Name, false)
 			}
 			trashButton()
 		case store.StateDisabled:
-			if myui.PrimaryButton(c, "启用").Clicked() {
+			if myui.PrimaryButton(c, i18n.T("ui.menu.enable")).Clicked() {
 				a.ToggleAsync(s.Name, true)
 			}
 			trashButton()
 		case store.StateTrashed:
-			rb := myui.PrimaryButton(c, "").Label("恢复到技能目录")
+			rb := myui.PrimaryButton(c, "").Label(i18n.T("ui.menu.restore"))
 			rb.Children(func() {
 				myui.Icon(c, iconRestore)
-				myui.Text(c, "恢复到技能目录")
+				myui.Text(c, i18n.T("ui.menu.restore"))
 			})
 			if rb.Clicked() {
 				a.RestoreAsync(s.Name)
 			}
 			// 永久删除：危险色的文字按钮，靠右放；走确认框，删除前 store 先快照。
 			myui.Spacer(c)
-			pb := myui.ButtonBase(c).Label("详情:永久删除").Tooltip("永久删除回收站里的技能").
+			pb := myui.ButtonBase(c).Label(i18n.T("ui.detail.purgeLabel")).Tooltip(i18n.T("ui.action.purgeTooltip")).
 				Padding(t.Space(1.75), t.Space(2.5)).Radius(t.Radius).TextColor(t.Danger)
 			if pb.Hovered() {
 				pb.Background(t.Danger.Alpha(0.1))
 			}
 			pb.Children(func() {
 				myui.Icon(c, iconTrash).FontSize(t.FontSize + 1)
-				myui.Text(c, "永久删除")
+				myui.Text(c, i18n.T("ui.action.purge"))
 			})
 			if pb.Clicked() {
 				a.confirm = confirmState{open: true, name: s.Name, purge: true}
@@ -1272,7 +1287,7 @@ func (a *App) viewStatusBar(c *myui.Context) {
 		} else {
 			myui.Spacer(c)
 		}
-		myui.Text(c, fmt.Sprintf("共 %d 个技能", en+dis)).
+		myui.Text(c, i18n.Tf("ui.status.total", en+dis)).
 			SingleLine().Shrink(0).FontSize(t.FontSize - 1).TextColor(t.TextMuted)
 	})
 }
@@ -1295,9 +1310,9 @@ func (a *App) viewReviewModal(c *myui.Context) {
 		myui.Column(c).Width(560).Gap(12).Children(func() {
 			switch {
 			case r.all:
-				myui.Text(c, "全部检查").FontSize(16).Bold()
+				myui.Text(c, i18n.T("ui.action.checkAll")).FontSize(16).Bold()
 				if len(r.entries) == 0 {
-					myui.Text(c, "根目录里没有可检查的技能").TextColor(t.TextMuted)
+					myui.Text(c, i18n.T("ui.review.nothingToCheck")).TextColor(t.TextMuted)
 				}
 				myui.Scroll(c).Grow(1).Height(340).Children(func() {
 					myui.Column(c).FillWidth().Gap(10).Children(func() {
@@ -1307,12 +1322,12 @@ func (a *App) viewReviewModal(c *myui.Context) {
 					})
 				})
 				myui.Row(c).Gap(8).Justify(myui.End).Children(func() {
-					if myui.Button(c, "关闭").Clicked() {
+					if myui.Button(c, i18n.T("ui.common.close")).Clicked() {
 						a.CloseReview()
 					}
-					label := "应用全部更新"
+					label := i18n.T("ui.review.applyAll")
 					if r.applyBusy {
-						label = "正在应用…"
+						label = i18n.T("ui.review.applying")
 					}
 					if myui.PrimaryButton(c, label).Disabled(r.applyBusy || !reviewHasChanges(r.entries)).Clicked() {
 						a.ApplyAsync()
@@ -1320,18 +1335,19 @@ func (a *App) viewReviewModal(c *myui.Context) {
 				})
 			case r.preview != nil:
 				p := r.preview
-				myui.Text(c, "更新 "+r.skill).FontSize(16).Bold()
+				myui.Text(c, i18n.Tf("ui.review.title", r.skill)).FontSize(16).Bold()
 				myui.Row(c).Gap(8).AlignItems(myui.Center).Children(func() {
 					myui.Text(c, previewMetaText(p)).SingleLine().TextColor(t.TextMuted)
 				})
 				if !p.HasChanges() {
-					myui.Text(c, "与上游一致，无需更新").TextColor(t.Success)
+					myui.Text(c, i18n.T("ui.review.upToDate")).TextColor(t.Success)
 				}
 				if p.LocalModified {
 					// 上游没变时只是提醒；有变化时提示应用会覆盖本地改动。
-					msg := "已安装的内容与安装时不一致（本地改过）"
+					// 两种情形各一条整句：句子中段拼接会译歪。
+					msg := i18n.T("ui.review.localModified")
 					if p.HasChanges() {
-						msg += "，应用更新会覆盖这些改动（旧内容在快照中）"
+						msg = i18n.T("ui.review.localModifiedWithChanges")
 					}
 					myui.Text(c, msg).TextColor(t.Warning)
 				}
@@ -1343,12 +1359,12 @@ func (a *App) viewReviewModal(c *myui.Context) {
 					})
 				})
 				myui.Row(c).Gap(8).Justify(myui.End).Children(func() {
-					if myui.Button(c, "取消").Clicked() {
+					if myui.Button(c, i18n.T("ui.common.cancel")).Clicked() {
 						a.CloseReview()
 					}
-					label := "应用更新"
+					label := i18n.T("ui.review.apply")
 					if r.applyBusy {
-						label = "正在应用…"
+						label = i18n.T("ui.review.applying")
 					}
 					// 无变化时禁用应用（ApplyAsync 对空名单也会直接返回）。
 					if myui.PrimaryButton(c, label).Disabled(r.applyBusy || !p.HasChanges()).Clicked() {
@@ -1357,8 +1373,8 @@ func (a *App) viewReviewModal(c *myui.Context) {
 				})
 			default:
 				// 理论不可达：open 但无数据。给占位并允许关闭，绝不 panic。
-				myui.Text(c, "没有可显示的检查结果").TextColor(t.TextMuted)
-				if myui.Button(c, "关闭").Clicked() {
+				myui.Text(c, i18n.T("ui.review.noResult")).TextColor(t.TextMuted)
+				if myui.Button(c, i18n.T("ui.common.close")).Clicked() {
 					a.CloseReview()
 				}
 			}
@@ -1374,15 +1390,15 @@ func (a *App) viewReviewEntry(c *myui.Context, e skillReviewEntry) {
 			myui.Text(c, e.skill).Bold()
 			switch {
 			case e.err != "":
-				myui.Text(c, "检查失败").SingleLine().TextColor(t.Danger)
+				myui.Text(c, i18n.T("ui.review.checkFailed")).SingleLine().TextColor(t.Danger)
 			case !e.preview.HasChanges():
-				myui.Text(c, "已是最新").SingleLine().TextColor(t.Success)
+				myui.Text(c, i18n.T("ui.review.latest")).SingleLine().TextColor(t.Success)
 				if e.preview.LocalModified {
-					myui.Text(c, "本地有改动").SingleLine().TextColor(t.Warning)
+					myui.Text(c, i18n.T("ui.review.localChanged")).SingleLine().TextColor(t.Warning)
 				}
 			default:
 				added, changed, removed := e.preview.Counts()
-				myui.Text(c, fmt.Sprintf("+%d ~%d -%d（%d 个文件）", added, changed, removed, len(e.preview.Files))).
+				myui.Text(c, i18n.Tf("ui.review.counts", added, changed, removed, len(e.preview.Files))).
 					SingleLine().TextColor(t.Warning)
 			}
 		})
@@ -1401,7 +1417,7 @@ func (a *App) viewReviewEntry(c *myui.Context, e skillReviewEntry) {
 func (a *App) viewDiffRow(c *myui.Context, f store.FileDiff) {
 	t := c.Theme()
 	myui.Row(c).FillWidth().Padding(2, 8).Gap(8).AlignItems(myui.Center).Children(func() {
-		myui.Text(c, diffStatusText(f.Status)).SingleLine().Width(44).
+		myui.Text(c, diffStatusText(f.Status)).SingleLine().Width(diffStatusWidth()).
 			TextColor(diffStatusColor(c, f.Status))
 		myui.Text(c, f.Path).SingleLine().Grow(1)
 		counts := fmt.Sprintf("+%d/-%d", f.Added, f.Removed)
@@ -1414,19 +1430,21 @@ func (a *App) viewDiffRow(c *myui.Context, f store.FileDiff) {
 
 // previewMetaText 生成单技能评审面板的元信息行。上游没变（凭 commit 或
 // 目录树哈希判定）时没有逐文件比较，只在本地被改过时才显示新旧哈希。
+// 这是纯函数（没有 App/Context），文案直接用 i18n.T 现取。
 func previewMetaText(p *store.UpdatePreview) string {
-	parts := []string{"来源: " + p.SourceType}
+	parts := []string{i18n.Tf("ui.review.metaSource", p.SourceType)}
 	if p.Commit != "" {
-		parts = append(parts, "上游 commit: "+shortCommit(p.Commit))
+		parts = append(parts, i18n.Tf("ui.review.metaCommit", shortCommit(p.Commit)))
 	}
 	switch p.Basis {
 	case store.BasisCommit:
-		parts = append(parts, "上游 commit 未变")
+		parts = append(parts, i18n.T("ui.review.basisCommit"))
 	case store.BasisTree:
-		parts = append(parts, "上游该目录未变")
+		parts = append(parts, i18n.T("ui.review.basisTree"))
 	}
 	if p.Basis == store.BasisContent || p.LocalModified {
-		parts = append(parts, "旧 "+shortHash(p.OldHash), "新 "+shortHash(p.NewHash))
+		parts = append(parts, i18n.Tf("ui.review.oldHash", shortHash(p.OldHash)),
+			i18n.Tf("ui.review.newHash", shortHash(p.NewHash)))
 	}
 	return strings.Join(parts, " · ")
 }

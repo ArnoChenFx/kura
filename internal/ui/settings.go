@@ -7,6 +7,7 @@ package ui
 import (
 	"strings"
 
+	"github.com/ArnoChenFx/kura/internal/i18n"
 	"github.com/ArnoChenFx/kura/internal/store"
 	myui "github.com/egoist/mygo/ui"
 )
@@ -25,28 +26,8 @@ type settingsState struct {
 	note    string // 打开时的提示（如已存的语言无法识别，已回到默认）
 }
 
-// targetLang 是一个目标语言：规范语言码与界面显示名。
-type targetLang struct {
-	code  string // 规范码，必须是 store.NormalizeTargetLang 认得（且规范化后不变）的
-	label string // 界面显示名
-}
-
-// targetLangs 是设置里可选的目标语言，显式列在 UI 侧：store 的显示名表是
-// 未导出的，且「选项顺序」是界面决策。每个 code 必须能被
-// store.NormalizeTargetLang 原样认回，否则保存会被拒（TestTargetLangsAreNormalized 守着）。
-var targetLangs = []targetLang{
-	{"zh-CN", "简体中文"},
-	{"en", "English"},
-	{"en-US", "English (US)"},
-	{"en-GB", "English (UK)"},
-	{"ja", "日本語"},
-	{"ko", "한국어"},
-	{"fr", "Français"},
-	{"de", "Deutsch"},
-	{"es", "Español"},
-	{"pt", "Português"},
-	{"ru", "Русский"},
-}
+// targetLang 类型与 targetLangs（可选的目标语言表）、ifaceLangs（界面语言
+// 下拉的选项表）都在 catalog.go：它们的显示名是语言自称，不进目录。
 
 // langLabels 返回 Select 用的选项（可读名，顺序同 targetLangs）。
 func langLabels() []string {
@@ -91,7 +72,7 @@ func (a *App) OpenSettings() {
 	code, err := store.NormalizeTargetLang(a.settings.TargetLang)
 	if err != nil {
 		code = store.DefaultTargetLang
-		s.note = "已保存的目标语言无法识别，已回到" + langLabelFor(code) + "；保存后生效。"
+		s.note = i18n.Tf("ui.settings.unknownTargetLang", langLabelFor(code))
 	}
 	s.lang = langLabelFor(code)
 	if s.lang == "" {
@@ -145,7 +126,7 @@ func (a *App) SaveSettingsAsync(s store.Settings) {
 		a.trans.reset()
 	}
 	a.settingsUI = settingsState{}
-	a.status, a.statusErr = "正在保存设置…", false
+	a.status, a.statusErr = i18n.T("ui.status.savingSettings"), false
 
 	cfg := a.cfg
 	seq := a.settingsSeq.Add(1)
@@ -159,7 +140,7 @@ func (a *App) SaveSettingsAsync(s store.Settings) {
 		err := store.SaveSettings(cfg, &out)
 		a.publish(func() {
 			if err != nil {
-				a.status, a.statusErr = "设置没能保存："+err.Error(), true
+				a.status, a.statusErr = i18n.Tf("ui.status.settingsSaveFailed", err.Error()), true
 				return
 			}
 			a.settingsMu.Lock()
@@ -169,9 +150,9 @@ func (a *App) SaveSettingsAsync(s store.Settings) {
 			a.settingsMu.Unlock()
 			a.settingsErr, a.settingsLoaded = "", true
 			if a.settings.Ready() {
-				a.status, a.statusErr = "设置已保存", false
+				a.status, a.statusErr = i18n.T("ui.status.settingsSaved"), false
 			} else {
-				a.status, a.statusErr = "设置已保存，但翻译 API 还没填全，暂时不能翻译", false
+				a.status, a.statusErr = i18n.T("ui.status.settingsSavedShort"), false
 			}
 		})
 	})
@@ -185,48 +166,63 @@ func (a *App) SaveSettingsAsync(s store.Settings) {
 //	密钥      [••••••••]
 //	模型      [gpt-4o-mini]
 //	目标语言  [简体中文 ▾]
+//	界面语言  [跟随系统 ▾]
 //	（说明：密钥明文保存；译文只用于界面显示）
 //	（提示 / 错误）
 //	                         [取消] [保存]
+//
+// 「界面语言」是即时生效的偏好（选中即静默写 config.json，不经过「保存」）：
+// 它与其他翻译设置不是一类东西，且用户期望选完立刻看到界面变样。
 func (a *App) viewSettingsModal(c *myui.Context) {
 	s := &a.settingsUI
 	t := c.Theme()
+	ifaceLabel := i18n.T("ui.settings.interfaceLang")
 	myui.Modal(c, &s.open, func() {
 		myui.Column(c).Width(520).Gap(t.Space(3)).Children(func() {
 			myui.Column(c).Gap(t.Space(1)).Children(func() {
-				myui.Text(c, "设置").FontSize(t.FontSize + 3).Bold()
-				myui.Text(c, "翻译 API（OpenAI 兼容）").FontSize(t.FontSize - 1).TextColor(t.TextMuted)
+				myui.Text(c, i18n.T("ui.settings.title")).FontSize(t.FontSize + 3).Bold()
+				myui.Text(c, i18n.T("ui.settings.translateHeading")).FontSize(t.FontSize - 1).TextColor(t.TextMuted)
 			})
 			// settings.json 读不出来（JSON 损坏）：说清楚，保存会覆盖它。
 			if a.settingsErr != "" {
 				myui.Box(c).FillWidth().Padding(t.Space(1.5), t.Space(3)).Radius(t.Radius).
 					Background(t.Warning.Alpha(0.10)).Border(1, t.Warning.Alpha(0.4)).Children(func() {
-					myui.Text(c, "设置文件读取失败，保存会覆盖它："+a.settingsErr).MaxLines(4).TextColor(t.Warning)
+					myui.Text(c, i18n.Tf("ui.settings.loadFailed", a.settingsErr)).MaxLines(4).TextColor(t.Warning)
 				})
 			}
 			myui.Form(c, func() {
-				myui.Field(c, "API 地址", func() {
+				myui.Field(c, i18n.T("ui.settings.baseURL"), func() {
 					myui.TextInput(c, &s.baseURL).Background(a.pal.canvas).FillWidth().
-						Placeholder("https://api.openai.com/v1").Label("API 地址")
+						Placeholder("https://api.openai.com/v1").Label(i18n.T("ui.settings.baseURL"))
 				})
-				myui.Field(c, "密钥", func() {
+				myui.Field(c, i18n.T("ui.settings.apiKey"), func() {
 					myui.TextInput(c, &s.apiKey).Background(a.pal.canvas).FillWidth().
-						Placeholder("sk-…").Label("密钥").Password()
+						Placeholder("sk-…").Label(i18n.T("ui.settings.apiKey")).Password()
 				})
-				myui.Field(c, "模型", func() {
+				myui.Field(c, i18n.T("ui.settings.model"), func() {
 					myui.TextInput(c, &s.model).Background(a.pal.canvas).FillWidth().
-						Placeholder("gpt-4o-mini").Label("模型")
+						Placeholder("gpt-4o-mini").Label(i18n.T("ui.settings.model"))
 				})
-				myui.Field(c, "目标语言", func() {
-					myui.Select(c, &s.lang, langLabels()).Label("目标语言")
+				myui.Field(c, i18n.T("ui.settings.targetLang"), func() {
+					myui.Select(c, &s.lang, langLabels()).Label(i18n.T("ui.settings.targetLang"))
+				})
+				myui.Field(c, ifaceLabel, func() {
+					// 下拉绑的是「本帧的显示名」而不是持久字段：语言一切，选项名
+					// 就跟着变，把上一次语言的显示名留在状态里会显示成旧语言。
+					// Changed 返回 true 的那次构建里 sel 已是新选中的显示名（同
+					// viewThemeSwitch 的 Segmented），这才不会丢掉点击。
+					sel := ifaceLangLabel(a.langPref)
+					if myui.Select(c, &sel, ifaceLangLabels()).Label(ifaceLabel).Changed() {
+						a.SetLangAsync(ifaceLangPref(sel))
+					}
 				})
 			})
-			myui.Text(c, "密钥以明文保存在 ~/.kura/settings.json；译文只用于界面显示，不会改动技能文件。").
+			myui.Text(c, i18n.T("ui.settings.secretNote")).
 				FontSize(t.FontSize - 1).TextColor(t.TextMuted)
 			// 没填全不阻止保存（可能只想先选语言），只提醒翻译暂时用不了。
 			draft := s.settingsDraft()
 			if !draft.Ready() {
-				myui.Text(c, "API 地址、密钥、模型都填好后，才能翻译技能描述。").
+				myui.Text(c, i18n.T("ui.settings.incomplete")).
 					FontSize(t.FontSize - 1).TextColor(t.Warning)
 			}
 			if s.note != "" {
@@ -240,11 +236,11 @@ func (a *App) viewSettingsModal(c *myui.Context) {
 			}
 			myui.Row(c).FillWidth().Gap(t.Space(2)).AlignItems(myui.Center).Children(func() {
 				myui.Spacer(c)
-				if myui.Button(c, "取消").Disabled(s.busy).Clicked() {
+				if myui.Button(c, i18n.T("ui.common.cancel")).Disabled(s.busy).Clicked() {
 					s.open = false
 				}
-				// 无障碍名称「确认保存」，与别处文字区分（同安装弹窗）。
-				if myui.PrimaryButton(c, "保存").Label("确认保存").Disabled(s.busy).Clicked() {
+				// 无障碍名称写成「确认保存」，与别处文字区分（同安装弹窗）。
+				if myui.PrimaryButton(c, i18n.T("ui.common.save")).Label(i18n.T("ui.settings.saveA11y")).Disabled(s.busy).Clicked() {
 					a.SaveSettingsAsync(s.settingsDraft())
 				}
 			})

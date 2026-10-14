@@ -6,6 +6,10 @@
 //
 // 结构：先把源文本解析成与 UI 无关的块列表（parseMarkdown，纯函数，好测），
 // 再由 renderMarkdown 逐块画出来。渲染函数只吃字符串，不做任何 I/O。
+//
+// 本文件里的「•」「◦」「▪」、" │ " 与裸链接末尾的标点字符集是 **markdown
+// 语法**（解析/输出用的符号），不是给用户看的文案，也不该随界面语言变，所以
+// 它们不进文案目录；真正的界面文案（截断提示、未显示行数）走 i18n，见下面。
 package ui
 
 import (
@@ -13,6 +17,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/ArnoChenFx/kura/internal/i18n"
 	myui "github.com/egoist/mygo/ui"
 )
 
@@ -33,9 +38,10 @@ const (
 	mdMaxLineRunes = 2000
 	// mdMonoFont 是等宽字体族名；Windows 上 Consolas 一定存在。
 	mdMonoFont = "Consolas"
-	// mdTruncatedNotice 是被截断时追加在末尾的提示。
-	mdTruncatedNotice = "（内容过长，已截断）"
 )
+
+// 截断提示是界面文案，渲染时现取（mdTruncatedNotice 是它的中文取值，
+// 供 markdown_test.go 引用，定义在 catalog.go）。
 
 // mdKind 是块的种类。
 type mdKind int
@@ -87,7 +93,7 @@ func parseMarkdown(src string) []mdBlock {
 		truncated = true
 	}
 	if truncated {
-		blocks = append(blocks, mdBlock{kind: mdNotice, text: mdTruncatedNotice})
+		blocks = append(blocks, mdBlock{kind: mdNotice, text: i18n.T("ui.markdown.truncated")})
 	}
 	return blocks
 }
@@ -167,6 +173,7 @@ func mdFenceOpen(s string) (ch byte, n int, lang string, ok bool) {
 
 // mdListMarker 判断 s（已去掉缩进）是不是列表项开头，返回符号、正文。
 // 无序：- * + 后跟空白；有序：1~9 位数字加 . 或 )，后跟空白。
+// 返回的符号（•）是渲染用的 markdown 语法，不是界面文案。
 func mdListMarker(s string) (marker, rest string, ok bool) {
 	if len(s) >= 2 && (s[0] == '-' || s[0] == '*' || s[0] == '+') && (s[1] == ' ' || s[1] == '\t') {
 		return "•", strings.TrimSpace(s[2:]), true
@@ -327,7 +334,7 @@ func mdParseBlocks(lines []string, depth int, budget *int) []mdBlock {
 				body = append(body, mdClipLine(mdStripIndent(lines[j], indent)))
 			}
 			if skipped > 0 {
-				body = append(body, "…（另有 "+itoa(skipped)+" 行未显示）")
+				body = append(body, i18n.Tf("ui.markdown.moreLines", skipped))
 			}
 			// 代码块按行数多收一些预算：一行就是一个界面元素。
 			*budget -= len(body) / 4
@@ -608,6 +615,8 @@ func mdInlineRec(s string, base mdSpan, depth int) []mdSpan {
 			for end < len(s) && s[end] != ' ' && s[end] != '\t' && s[end] != '\n' && s[end] != '<' && s[end] != '>' {
 				end++
 			}
+			// 字符集是各类句末标点（含全角），用来剥掉裸链接末尾点错的标点：
+			// 是 markdown 语法，不是界面文案。
 			for end > i && strings.IndexByte(".,;:!?)]}\"'，。；：！？）", s[end-1]) >= 0 {
 				end--
 			}
