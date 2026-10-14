@@ -236,20 +236,20 @@ func markdownBlocks(text string) []string {
 		cur = cur[:0]
 	}
 	for _, line := range strings.Split(text, "\n") {
-		trimmed := strings.TrimSpace(line)
 		if fence != "" {
-			// 闭合围栏：同样的标记字符，长度不短于开围栏，行上不再有别的内容。
-			if strings.HasPrefix(trimmed, fence) && strings.Trim(trimmed, fence[:1]) == "" {
+			// 闭合围栏：同样的标记字符，长度不短于开围栏，行上不再有别的内容，
+			// 缩进同样不超过 3 个空格。
+			if isClosingFence(line, fence) {
 				fence = ""
 			}
 			cur = append(cur, line)
 			continue
 		}
-		if trimmed == "" {
+		if strings.TrimSpace(line) == "" {
 			emit()
 			continue
 		}
-		if m := fenceMarker(trimmed); m != "" {
+		if m := fenceMarker(line); m != "" {
 			fence = m
 		}
 		cur = append(cur, line)
@@ -258,13 +258,47 @@ func markdownBlocks(text string) []string {
 	return blocks
 }
 
-// fenceMarker 返回行首的围栏标记（至少三个 ` 或 ~），不是围栏时返回空串。
-func fenceMarker(trimmed string) string {
-	for _, ch := range []string{"`", "~"} {
-		if strings.HasPrefix(trimmed, strings.Repeat(ch, 3)) {
-			n := len(trimmed) - len(strings.TrimLeft(trimmed, ch))
-			return strings.Repeat(ch, n)
-		}
+// fenceMarker 按 CommonMark 判断 line 是不是开围栏，是则返回围栏标记（至少
+// 三个 ` 或 ~），不是返回空串。围栏行可以有 0–3 个前导空格；4 个及以上空格
+// （或制表符）是缩进代码块，不算围栏。反引号围栏的 info 串里不能再有反引号
+// （否则那是行内代码）。
+func fenceMarker(line string) string {
+	rest, ok := trimFenceIndent(line)
+	if !ok {
+		return ""
 	}
-	return ""
+	ch := rest[:1]
+	if ch != "`" && ch != "~" {
+		return ""
+	}
+	n := len(rest) - len(strings.TrimLeft(rest, ch))
+	if n < 3 {
+		return ""
+	}
+	if ch == "`" && strings.Contains(rest[n:], "`") {
+		return ""
+	}
+	return strings.Repeat(ch, n)
+}
+
+// isClosingFence 报告 line 是否闭合标记为 fence 的围栏：缩进不超过 3 个空格，
+// 同种标记字符、长度不短于开围栏，其后只能是空白。
+func isClosingFence(line, fence string) bool {
+	rest, ok := trimFenceIndent(line)
+	if !ok {
+		return false
+	}
+	run := strings.TrimLeft(rest, fence[:1])
+	n := len(rest) - len(run)
+	return n >= len(fence) && strings.TrimSpace(run) == ""
+}
+
+// trimFenceIndent 去掉行首至多 3 个空格；缩进更深（4 个及以上空格）、以制表符
+// 缩进或整行为空时 ok 为假。
+func trimFenceIndent(line string) (rest string, ok bool) {
+	rest = strings.TrimLeft(line, " ")
+	if len(line)-len(rest) > 3 || rest == "" || rest[0] == '\t' {
+		return "", false
+	}
+	return rest, true
 }

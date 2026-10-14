@@ -41,13 +41,16 @@ type App struct {
 	gen        int            // 目录切换代数：切换后丢弃旧目录的后台结果
 	rootCounts map[string]int // 每个目录根下在用技能数（左栏徽标）
 	adding     bool           // 正在选择/添加文件夹
-	// rootsW 与 detailW 是左栏与详情栏的宽度（DIP），由两侧的分割线拖动改变，
-	// 中栏占剩余宽度。bodyW 是上一帧三栏占用的总宽，用来夹住拖动范围，保证窄窗口
-	// 里中栏还留有余地（见 View）。都只在内存里，重启后回到默认宽度。
-	rootsW, detailW float32
-	bodyW           float32
-	win             *mygo.Window
-	path            string // 导入元数据用的 .skill-lock.json 路径，空为默认位置
+	// rootsW 与 detailW 是用户拖出来的左栏与详情栏宽度偏好（DIP），由两侧的
+	// 分割线拖动改变；窗口放不下时并不改它们，而是每帧按可用宽度夹紧出实际
+	// 宽度 rootsEff / detailEff（见 fitWidths），窗口再变宽时偏好自然恢复。
+	// 中栏占剩余宽度。bodyW 是本帧窗口内容的宽度（c.Size）。都只在内存里，
+	// 重启后回到默认宽度。
+	rootsW, detailW     float32
+	rootsEff, detailEff float32
+	bodyW               float32
+	win                 *mygo.Window
+	path                string // 导入元数据用的 .skill-lock.json 路径，空为默认位置
 
 	// pickFolder 弹出系统的文件夹选择框，返回所选路径（取消为空串）。
 	// 会阻塞，只在后台 goroutine 里调用；测试里替换为假实现。
@@ -109,7 +112,8 @@ type App struct {
 
 	// 翻译设置与译文（翻译只用于界面显示，绝不写技能目录，见 translate.go）。
 	// settings 是 ~/.kura/settings.json 的内存副本：只在 UI 线程写，写时持
-	// settingsMu；生产的 translate 闭包在后台 goroutine 里读它，持读锁。
+	// settingsMu。翻译任务在 UI 线程发起时拷走一份传给 translate，后台
+	// goroutine 不直接读它。
 	settings        store.Settings
 	settingsLoaded  bool          // 设置读取成功（文件不存在也算，得到零值）
 	settingsErr     string        // 读取 settings.json 的错误（JSON 损坏等）
@@ -118,9 +122,10 @@ type App struct {
 	settingsWriteMu sync.Mutex    // 串行化写 settings.json
 	settingsUI      settingsState // 设置弹窗
 	trans           *translateState
-	// translate 调用翻译 API；生产实现走 (a.settings).Translate。测试注入假
+	// translate 用设置 s 调用翻译 API；生产实现走 s.Translate。设置由任务
+	// 发起时在 UI 线程固定下来，同一任务的所有请求用同一套配置。测试注入假
 	// 实现，绝不联网。只在后台 goroutine 里调用（会阻塞）。
-	translate func(ctx context.Context, text string) (string, error)
+	translate func(ctx context.Context, s store.Settings, text string) (string, error)
 
 	// spawn 在后台运行 fn：生产环境为 go fn()。
 	spawn func(func())
@@ -162,13 +167,8 @@ func NewApp(cfg *store.Config) *App {
 		a.settings, a.settingsLoaded = *st, true
 	}
 	a.trans = newTranslateState()
-	a.translate = func(ctx context.Context, text string) (string, error) {
-		// 读的是最新的 a.settings（保存设置后立即生效）；拷贝一份再调用，
-		// 请求期间不持锁。
-		a.settingsMu.RLock()
-		cur := a.settings
-		a.settingsMu.RUnlock()
-		return cur.Translate(ctx, text)
+	a.translate = func(ctx context.Context, s store.Settings, text string) (string, error) {
+		return s.Translate(ctx, text)
 	}
 	a.grid.Selected = &a.selIdx
 	a.grid.Key = func(i int) any {

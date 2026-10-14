@@ -28,7 +28,7 @@ const (
 )
 
 // 分割线的命中宽度，以及两侧栏宽的拖动范围（DIP）：左栏 168–420，详情栏
-// 260–560。中栏至少留 mainMinW，窄窗口里两侧的拖动会先让位（见 widthLimits）。
+// 260–560。中栏至少留 mainMinW，窄窗口里两侧栏会一起让位（见 fitWidths）。
 const (
 	gripHit    = 8
 	rootsMinW  = 168
@@ -83,13 +83,17 @@ func (a *App) View(c *myui.Context) {
 
 	a.viewTitlebar(c)
 	// 三栏占满标题栏以下的剩余高度；标题栏自身不参与收缩（见 viewTitlebar）。
-	// 左右两条分割线拖动改变两侧栏宽，中栏占剩余（见 viewGrip）。bodyW 在构建
-	// 结束后记下本帧的总宽，下一帧据此夹住拖动范围。
+	// 左右两条分割线拖动改变两侧栏宽（偏好），中栏占剩余（见 viewGrip）。
+	// 实际宽度按本帧窗口宽度（c.Size）每帧夹紧：窗口变窄时两侧一起让位，不
+	// 改用户的偏好，变宽后自然恢复；它是偏好与窗口宽度的纯函数，所以连续帧
+	// 不会抖动。
+	a.bodyW, _ = c.Size()
+	a.rootsEff, a.detailEff = fitWidths(a.bodyW, a.rootsW, a.detailW, sel != nil)
 	rootsHi, detailHi := a.widthLimits(sel != nil)
 	body := myui.Row(c).Key("body").Grow(1).MinHeight(0).AlignItems(myui.Stretch)
 	body.Children(func() {
 		a.viewRoots(c)
-		a.viewGrip(c, &a.rootsW, 1, rootsMinW, rootsHi)
+		a.viewGrip(c, &a.rootsW, a.rootsEff, 1, rootsMinW, rootsHi)
 		myui.Column(c).Grow(1).MinWidth(0).FillHeight().Background(a.pal.canvas).Children(func() {
 			a.viewMainHeader(c)
 			a.viewFilterBar(c)
@@ -98,11 +102,10 @@ func (a *App) View(c *myui.Context) {
 			a.viewStatusBar(c)
 		})
 		if sel != nil {
-			a.viewGrip(c, &a.detailW, -1, detailMinW, detailHi)
+			a.viewGrip(c, &a.detailW, a.detailEff, -1, detailMinW, detailHi)
 			a.viewDetail(c, sel)
 		}
 	})
-	a.bodyW = body.Bounds().W
 
 	// 「移入回收站」与「永久删除」共用一个确认框；最后一个按钮是默认按钮（回车触发），
 	// Escape 或点按钮后 *open 置 false。
@@ -150,9 +153,9 @@ func (a *App) viewTitlebar(c *myui.Context) {
 }
 
 // widthLimits 返回两侧栏宽的拖动上限（DIP）。窗口宽度减去中栏的最小宽度与两条
-// 分割线，再减去另一侧栏的当前宽度：这样拖宽一侧时，中栏不会被挤没。详情栏
-// 隐藏时左栏可以用掉全部余量。bodyW 为 0（首帧，还没有上一帧的宽度）时只用
-// 固定上限。
+// 分割线，再减去另一侧栏的当前实际宽度：这样拖宽一侧时，中栏不会被挤没。
+// 详情栏隐藏时左栏可以用掉全部余量。bodyW 为 0（还没有窗口宽度）时只用固定
+// 上限。
 func (a *App) widthLimits(detailShown bool) (rootsHi, detailHi float32) {
 	rootsHi, detailHi = rootsMaxW, detailMaxW
 	if a.bodyW <= 0 {
@@ -161,25 +164,57 @@ func (a *App) widthLimits(detailShown bool) (rootsHi, detailHi float32) {
 	spare := a.bodyW - mainMinW - 2*gripHit
 	rootsHi = min(rootsHi, spare)
 	if detailShown {
-		rootsHi = min(rootsHi, spare-a.detailW)
-		detailHi = min(detailHi, spare-a.rootsW)
+		rootsHi = min(rootsHi, spare-a.detailEff)
+		detailHi = min(detailHi, spare-a.rootsEff)
 	}
 	return rootsHi, detailHi
 }
 
+// fitWidths 把用户偏好的栏宽夹紧到本帧窗口宽度 avail（DIP）放得下的范围，返回
+// 左栏与详情栏的实际宽度。偏好先夹进各自的 [下限, 上限]；两侧加起来超过
+// avail 减去中栏最小宽度与两条分割线的余量时，两侧按各自高出下限的部分
+// 等比例一起让位，最多让到下限（窗口窄到连下限都放不下时，中栏不再保证
+// mainMinW）。详情栏隐藏时只夹左栏，它可以用掉全部余量。avail 为 0
+// （还没有窗口宽度）时只做上下限夹紧。纯函数：同样的输入总是同样的结果。
+func fitWidths(avail, rootsPref, detailPref float32, detailShown bool) (roots, detail float32) {
+	roots = min(max(rootsPref, rootsMinW), rootsMaxW)
+	detail = min(max(detailPref, detailMinW), detailMaxW)
+	if avail <= 0 {
+		return roots, detail
+	}
+	spare := avail - mainMinW - 2*gripHit
+	if !detailShown {
+		return min(roots, max(spare, rootsMinW)), detail
+	}
+	if over := roots + detail - spare; over > 0 {
+		slackR, slackD := roots-rootsMinW, detail-detailMinW
+		total := slackR + slackD
+		if over >= total {
+			return rootsMinW, detailMinW
+		}
+		roots -= over * slackR / total
+		detail -= over * slackD / total
+	}
+	return roots, detail
+}
+
 // viewGrip 是两栏之间的分割线：中间一条 1px 的线，两侧共 gripHit 宽的区域用来
-// 拖动，悬停或拖动时线变成强调色。size 指向它调整的那一栏的宽度；dir 为 +1
-// 表示那一栏在分割线左侧（向右拖变宽），-1 表示在右侧（向左拖变宽）。拖动量经
-// dragWidth 夹进 [lo, hi]。宽度变了就请求重绘。
+// 拖动，悬停或拖动时线变成强调色。size 指向它调整的那一栏的宽度偏好，cur 是
+// 它本帧的实际宽度（窗口窄时可能比偏好小）；dir 为 +1 表示那一栏在分割线
+// 左侧（向右拖变宽），-1 表示在右侧（向左拖变宽）。拖动量从实际宽度出发，
+// 经 dragWidth 夹进 [lo, hi]；开始拖动时两栏当前被夹紧后的实际宽度先固定为
+// 偏好，这样分割线跟手、另一栏不会在拖动中又被重新夹一遍。宽度变了就请求
+// 重绘。
 //
 // 命中区用主栏底色铺满：不铺的话，它会透出后面的窗口底色（深色下是卡片色），
 // 变成一道 gripHit 宽的色带，分割线看起来就粗了。
-func (a *App) viewGrip(c *myui.Context, size *float32, dir float32, lo, hi float32) {
+func (a *App) viewGrip(c *myui.Context, size *float32, cur, dir float32, lo, hi float32) {
 	t := c.Theme()
 	g := myui.Box(c).Width(gripHit).FillHeight().Shrink(0).Background(a.pal.canvas).Cursor(myui.CursorResizeEW)
 	dx, _, held := g.Dragged()
 	if held && dx != 0 {
-		if next := dragWidth(*size, dir*dx, lo, hi); next != *size {
+		if next := dragWidth(cur, dir*dx, lo, hi); next != cur {
+			a.rootsW, a.detailW = a.rootsEff, a.detailEff
 			*size = next
 			c.Invalidate()
 		}
@@ -212,7 +247,7 @@ func dragWidth(cur, delta, lo, hi float32) float32 {
 // 顶栏里，这里不再重复。
 func (a *App) viewRoots(c *myui.Context) {
 	t := c.Theme()
-	myui.Column(c).Width(a.rootsW).Shrink(0).FillHeight().Background(a.pal.sidebar).Children(func() {
+	myui.Column(c).Width(a.rootsEff).Shrink(0).FillHeight().Background(a.pal.sidebar).Children(func() {
 		myui.Text(c, "技能目录").FontSize(t.FontSize-1).FontWeight(600).TextColor(t.TextMuted).
 			Padding(t.Space(4), t.Space(5), t.Space(1.5), t.Space(5))
 		myui.Scroll(c).Grow(1).FillWidth().Children(func() {
@@ -850,7 +885,7 @@ func (a *App) viewDetail(c *myui.Context, s *store.Skill) {
 		a.detailSel = s.Name
 		a.detailTab = 0
 	}
-	myui.Column(c).Width(a.detailW).Shrink(0).FillHeight().Background(a.pal.canvas).Children(func() {
+	myui.Column(c).Width(a.detailEff).Shrink(0).FillHeight().Background(a.pal.canvas).Children(func() {
 		myui.Scroll(c).Grow(1).FillWidth().Children(func() {
 			myui.Column(c).FillWidth().Padding(t.Space(4), t.Space(5)).Gap(t.Space(4)).Children(func() {
 				myui.Row(c).FillWidth().Gap(t.Space(3)).AlignItems(myui.Start).Children(func() {

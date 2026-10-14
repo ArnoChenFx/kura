@@ -168,54 +168,88 @@ func (l *Library) AddRoot(root string) error {
 	if err != nil || !info.IsDir() {
 		return fmt.Errorf("%w: %s", ErrNotDir, abs)
 	}
-	if l.index(abs) >= 0 {
-		return fmt.Errorf("%w: %s", ErrRootExists, abs)
-	}
-	next := append(append([]string(nil), l.Roots...), abs)
-	if err := l.save(next); err != nil {
-		return err
-	}
-	l.Roots = next
-	return nil
+	// 「已在列表里」要对 config.json 里最新的列表判，所以放进锁内的回调。
+	return l.updateRoots(func(cur []string) ([]string, error) {
+		if indexOf(cur, abs) >= 0 {
+			return nil, fmt.Errorf("%w: %s", ErrRootExists, abs)
+		}
+		return append(cur, abs), nil
+	})
 }
 
 // RemoveRoot 把 root 从列表移除并保存，只改列表，不动磁盘上的任何技能。
 // 默认根目录不能移除（ErrDefaultRoot）。
 func (l *Library) RemoveRoot(root string) error {
-	i := l.index(root)
-	switch {
-	case i < 0:
-		return fmt.Errorf("%w: %s", ErrUnknownRoot, root)
-	case i == 0:
-		return ErrDefaultRoot
-	}
-	next := append(append([]string(nil), l.Roots[:i]...), l.Roots[i+1:]...)
-	if err := l.save(next); err != nil {
-		return err
-	}
-	l.Roots = next
-	return nil
+	return l.updateRoots(func(cur []string) ([]string, error) {
+		i := indexOf(cur, root)
+		switch {
+		case i < 0:
+			return nil, fmt.Errorf("%w: %s", ErrUnknownRoot, root)
+		case i == 0:
+			return nil, ErrDefaultRoot
+		}
+		return slices.Delete(cur, i, i+1), nil
+	})
 }
 
 // MoveRoot 把 root 挪到列表里的第 to 个位置（从 0 数）并保存，只改列表顺序。
 // 默认目录固定在第一个：它不能移动（ErrDefaultRoot），其他目录也不能挪到
 // 第一个位置；root 不在列表里返回 ErrUnknownRoot，to 越界返回普通错误。
 func (l *Library) MoveRoot(root string, to int) error {
-	i := l.index(root)
-	switch {
-	case i < 0:
-		return fmt.Errorf("%w: %s", ErrUnknownRoot, root)
-	case i == 0 || to == 0:
-		return ErrDefaultRoot
-	case to < 0 || to >= len(l.Roots):
-		return fmt.Errorf("store: 位置 %d 超出列表范围", to)
+	return l.updateRoots(func(cur []string) ([]string, error) {
+		i := indexOf(cur, root)
+		switch {
+		case i < 0:
+			return nil, fmt.Errorf("%w: %s", ErrUnknownRoot, root)
+		case i == 0 || to == 0:
+			return nil, ErrDefaultRoot
+		case to < 0 || to >= len(cur):
+			return nil, fmt.Errorf("store: 位置 %d 超出列表范围", to)
+		}
+		moved := cur[i]
+		return slices.Insert(slices.Delete(cur, i, i+1), to, moved), nil
+	})
+}
+
+// updateRoots 是增、删、排序共用的「读—改—写」：持 configMu，以锁内刚从
+// config.json 读到的列表为基础交给 mutate 计算新列表，再写回并同步内存里的
+// l.Roots。基于内存副本算新列表会把别处（另一份 Library、DiscoverAgentRoots）
+// 刚写下的目录覆盖掉，所以既有的校验（已存在、默认根、越界）也在 mutate 里、
+// 对最新的列表重新判一遍。mutate 拿到的是可随意修改的拷贝；返回错误时不写盘。
+//
+// config.json 不存在时从默认根目录起算；损坏时以内存里的列表为基础，新列表
+// 覆盖它（与 DiscoverAgentRoots 相反：这里是用户明确要求的修改），本次运行里
+// 设过的外观与排列偏好带过去。
+func (l *Library) updateRoots(mutate func(cur []string) ([]string, error)) error {
+	configMu.Lock()
+	defer configMu.Unlock()
+	c := &Config{Root: l.Roots[0], Home: l.Home}
+	var cur []string
+	hc, _, err := LoadHomeConfig(c)
+	if err != nil {
+		hc = &HomeConfig{}
+		if l.Theme != ThemeSystem {
+			hc.Theme = l.Theme
+		}
+		if l.View != "" && l.View != ViewGrid {
+			hc.View = l.View
+		}
+		cur = append([]string(nil), l.Roots...)
+	} else {
+		cur = mergeRoots(l.Roots[0], hc.Roots)
 	}
-	next := append([]string(nil), l.Roots...)
-	next = slices.Delete(next, i, i+1)
-	next = slices.Insert(next, to, l.Roots[i])
-	if err := l.save(next); err != nil {
+	next, err := mutate(cur)
+	if err != nil {
 		return err
 	}
+	if hc.CreatedAt == "" {
+		hc.CreatedAt = time.Now().UTC().Format(time.RFC3339)
+	}
+	hc.Roots = next
+	if err := SaveHomeConfig(c, hc); err != nil {
+		return err
+	}
+	// 写盘成功后才更新内存，保证两边一致；next 可能含别处刚加入的目录。
 	l.Roots = next
 	return nil
 }
@@ -297,7 +331,7 @@ func realPath(p string) string {
 
 // SetTheme 把外观偏好写进 config.json（其余内容原样保留）。mode 不是
 // system、light、dark 时返回 ErrUnknownTheme，不写盘。config.json 损坏时
-// 它被只含这一项偏好的新文件覆盖，与 save 对根目录列表的处理一致。
+// 它被只含这一项偏好的新文件覆盖，与 updateRoots 对根目录列表的处理一致。
 func (l *Library) SetTheme(mode string) error {
 	mode, err := NormalizeTheme(mode)
 	if err != nil {
@@ -354,33 +388,13 @@ func (l *Library) SetView(v string) error {
 	return nil
 }
 
-// save 把根目录列表写回 config.json，保留已有的 createdAt、外观与排列偏好。
-func (l *Library) save(roots []string) error {
-	configMu.Lock()
-	defer configMu.Unlock()
-	c := &Config{Root: roots[0], Home: l.Home}
-	hc, _, err := LoadHomeConfig(c)
-	if err != nil {
-		// 损坏的配置文件被新列表覆盖；本次运行里设过的外观偏好带过去。
-		hc = &HomeConfig{}
-		if l.Theme != ThemeSystem {
-			hc.Theme = l.Theme
-		}
-		if l.View != "" && l.View != ViewGrid {
-			hc.View = l.View
-		}
-	}
-	if hc.CreatedAt == "" {
-		hc.CreatedAt = time.Now().UTC().Format(time.RFC3339)
-	}
-	hc.Roots = roots
-	return SaveHomeConfig(c, hc)
-}
-
 // index 返回 root 在列表里的位置，不在时返回 -1。
-func (l *Library) index(root string) int {
+func (l *Library) index(root string) int { return indexOf(l.Roots, root) }
+
+// indexOf 返回 root 在 roots 里的位置（按 rootKey 比较），不在时返回 -1。
+func indexOf(roots []string, root string) int {
 	key := rootKey(root)
-	for i, r := range l.Roots {
+	for i, r := range roots {
 		if rootKey(r) == key {
 			return i
 		}

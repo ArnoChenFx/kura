@@ -90,3 +90,93 @@ func TestSplitForTranslationTildeFence(t *testing.T) {
 		t.Errorf("~~~ 围栏应同样保护代码块，得到 %q", parts)
 	}
 }
+
+// TestSplitIndentedFenceIsNotAFence 验证 CommonMark 规则：4 个及以上空格缩进的
+// ``` 是缩进代码块，不是围栏。把它当围栏会让后面的正文与代码全并进一块，
+// 以一次超限请求发出（PR #4 评审缺陷 4）。
+func TestSplitIndentedFenceIsNotAFence(t *testing.T) {
+	doc := strings.Join([]string{
+		"    ```",
+		"",
+		"第一段正文，不在代码块里。",
+		"",
+		"第二段正文，同样不在代码块里。",
+		"",
+		"```bash",
+		"echo x",
+		"```",
+	}, "\n")
+	blocks := markdownBlocks(doc)
+	if len(blocks) < 4 {
+		t.Fatalf("缩进的围栏不应吞掉后面的空行分界，想要至少 4 块，得到 %d：%q", len(blocks), blocks)
+	}
+	// 按小上限切分时，没有一块被并成超限的大块。
+	for _, p := range SplitForTranslation(doc, 30) {
+		if utf8.RuneCountInString(p) > 30 && !strings.Contains(p, "```bash") {
+			t.Errorf("出现超限块 %q", p)
+		}
+	}
+}
+
+// TestFenceMarkerIndentRules 验证围栏标记的缩进与 info 串规则。
+func TestFenceMarkerIndentRules(t *testing.T) {
+	cases := []struct {
+		line, want string
+	}{
+		{"```", "```"},
+		{"   ```go", "```"}, // 3 个空格仍是围栏
+		{"    ```", ""},     // 4 个空格是缩进代码块
+		{"\t```", ""},       // 制表符缩进同样
+		{"~~~~", "~~~~"},
+		{"``", ""},
+		{"``` a`b", ""}, // 反引号围栏的 info 串里不能有反引号
+		{"~~~ a`b", "~~~"},
+		{"text ```", ""},
+	}
+	for _, c := range cases {
+		if got := fenceMarker(c.line); got != c.want {
+			t.Errorf("fenceMarker(%q) = %q，想要 %q", c.line, got, c.want)
+		}
+	}
+	closing := []struct {
+		line, fence string
+		want        bool
+	}{
+		{"```", "```", true},
+		{"````", "```", true},
+		{"``", "```", false},
+		{"   ```  ", "```", true},
+		{"    ```", "```", false}, // 缩进的闭合行不算
+		{"``` x", "```", false},
+		{"~~~", "```", false},
+	}
+	for _, c := range closing {
+		if got := isClosingFence(c.line, c.fence); got != c.want {
+			t.Errorf("isClosingFence(%q, %q) = %v，想要 %v", c.line, c.fence, got, c.want)
+		}
+	}
+}
+
+// TestSplitUnclosedFenceKeepsFollowingText 验证未闭合围栏时后面的内容不被丢弃。
+func TestSplitUnclosedFenceKeepsFollowingText(t *testing.T) {
+	doc := "前言\n\n```\ncode\n\n后续正文不能丢"
+	var all string
+	for _, b := range markdownBlocks(doc) {
+		all += b + "\n"
+	}
+	for _, want := range []string{"前言", "code", "后续正文不能丢"} {
+		if !strings.Contains(all, want) {
+			t.Errorf("未闭合围栏后丢了 %q：%q", want, all)
+		}
+	}
+}
+
+// TestSplitIndentedClosingFenceDoesNotClose 验证：围栏内缩进 4 格的 ``` 不是
+// 闭合围栏，围栏继续到真正的闭合行（其间的空行不分界）。
+func TestSplitIndentedClosingFenceDoesNotClose(t *testing.T) {
+	doc := "```\na\n    ```\n\nb\n```\n\n后文"
+	blocks := markdownBlocks(doc)
+	if len(blocks) != 2 || !strings.Contains(blocks[0], "\n\nb\n") {
+		t.Errorf("缩进的 ``` 不应闭合围栏，得到 %q", blocks)
+	}
+}

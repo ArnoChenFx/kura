@@ -21,14 +21,21 @@ import (
 // fakeTranslator 是注入的假翻译：记录调用，返回「[译]」+原文，或固定的错误。
 // 测试里 spawn 是同步的，不需要锁。
 type fakeTranslator struct {
-	calls int
-	texts []string
-	err   error
+	calls  int
+	texts  []string
+	models []string // 每次调用看到的模型名：同一任务里应只有一个值
+	err    error
+	// onCall 非空时在记录调用之后、返回之前执行（测试用来在请求中途改配置）。
+	onCall func(n int)
 }
 
-func (f *fakeTranslator) translate(_ context.Context, text string) (string, error) {
+func (f *fakeTranslator) translate(_ context.Context, s store.Settings, text string) (string, error) {
 	f.calls++
+	f.models = append(f.models, s.Model)
 	f.texts = append(f.texts, text)
+	if f.onCall != nil {
+		f.onCall(f.calls)
+	}
 	if f.err != nil {
 		return "", f.err
 	}
