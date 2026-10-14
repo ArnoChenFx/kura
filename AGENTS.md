@@ -70,8 +70,14 @@ kura 自己的目录：
 
 ## 4. 编码约定
 
-- **注释与用户可见字符串用中文**；包名、类型、函数、变量名用英文。
-- 错误信息统一以 `store: ` 开头，例如 `store: 未找到该技能`。
+- **注释用中文**；包名、类型、函数、变量名用英文。
+- **用户可见的界面字符串不写在代码里**：一律进各包的 `catalog.go`（`map[key]string`，中文与英文两份，key 集合必须一致），用 `internal/i18n` 的 `T` / `Tf` 取。中文取值是用户实际看到的文案，改动等于改产品，必须是有意的。
+  - key 形如 `<领域>.<分类>.<名字>`（`ui.filter.all`、`store.err.skillExists`），全小写 ASCII、点分隔。整句进目录，**不拼接**：语序在中英文之间不同。
+  - 错误用 `i18n.NewError` / `i18n.Errorf` / `i18n.Wrapf`：身份稳定（`errors.Is` 可用），文字随当前语言变。
+  - **不翻译**：用户数据（技能名、描述、路径、URL、`owner/repo`）、语言的自称（`简体中文`、`日本語`…）、markdown 语法字符（`•`/`◦`/表格分隔/标点集合）。
+  - `internal/i18n` 的 `TestNoHardcodedCJK` 会拦住漏网的中文字面量；`TestCatalogParity` 保证两份目录 key 一致。
+  - 语言解析规则：`system` 时系统 locale 是 `zh*` 用中文，其余（含空、`C`、`POSIX`）一律英文（`i18n.Resolve`）。
+- 错误信息统一以 `store: ` 开头（英文用 `store: `），例如 `store: 未找到该技能` / `store: skill not found`。
 - **错误要能用 `errors.Is` / `errors.As` 判断**；已知可判定的情况导出哨兵错误（如 `ErrUnknownSkill`），不要只返回裸字符串。
 - 路径拼接一律 `filepath.Join`；不用字符串拼。
 - 依赖克制：先看标准库与已固定版本的 MyGo；引入新依赖要先说明理由。
