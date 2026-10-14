@@ -2,7 +2,7 @@
 
 kura 的应用自更新完全交给 MyGo 更新器(`plugins/updater` + `native.Plugin`), kura 自己不写任何下载、校验、替换代码。本文说明各部分如何配合、用户看到什么、维护者怎么发一个带自更新的版本,以及哪些部分**尚未验证**。
 
-机制参考:`go list -m -f '{{.Dir}}' github.com/egoist/mygo` 下的 `docs/updates.md`、`docs/plugins/updater.md` 与 `cmd/mygo/updates.go`(v0.4.6)。
+机制参考:`go list -m -f '{{.Dir}}' github.com/egoist/mygo` 下的 `docs/updates.md`、`docs/plugins/updater.md` 与 `cmd/mygo/updates.go`(v0.4.8)。
 
 ## 各部分如何配合
 
@@ -70,17 +70,16 @@ kura 这边的三个接点(都在本里程碑落盘):
 
 ## 已验证 / 未验证
 
-**已验证**(本里程碑证据见下):
+**已验证**:
 
 - `go build ./...`、`go vet ./...`、`go tool mygo vet .`、 `CGO_ENABLED=0 go build ./...`、`go test ./...` 全部通过;
 - `go tool mygo build -platform windows/amd64` 成功——挂上更新插件后应用仍能正常打包;
 - `mygo.json` 只含公钥(`grep -c PRIVATE mygo.json` 为 0),git 历史无任何私钥文件;私钥在仓库外的 keygen 默认目录;
 - 测试覆盖:插件挂载冒烟、应用菜单结构(含更新项占位与 Click 透传)、主窗口 Tester 照常构建、开发构建下版本号为空。
+- 自更新端到端:一份已安装副本从 0.1.0 升到 0.1.1(GitHub latest 清单 → 下载 → Ed25519 验签 → 替换 → 重启),2026-10-13 实测;
+- `mygo build -upload` 真实上传草稿 Release:v0.1.0 起的每次发布都由 CI 的发布工作流完成(draft-release → 各平台 build → publish),v0.1.5 为最近一次。
 
-**UNVERIFIED(自更新端到端未验证;需要一次打过标签、签过名的发布)**:
+**未验证**:
 
-- 已安装应用从 GitHub latest 清单发现新版本 → 下载 → 验签 → 替换 → 重启的完整链路;
-- `mygo build -upload` 真实上传到 GitHub 草稿 Release;
-- delta 增量更新路径(需要至少两个已发布版本);
-- macOS 签名 / 公证与 dmg(需 macOS 环境);
-- CI 接入后的发布工作流(本里程碑未改 release.yml)。
+- delta 增量更新是否真的被采用(资产已产出,本机无法确认更新走 delta 还是整包);
+- macOS 签名 / 公证与 dmg(需 macOS 环境),macOS / Linux 副本的自更新也未实测。

@@ -241,7 +241,7 @@ A change is done only when these are green (the exact commands are in `AGENTS.md
 
 ## 14. Not implemented, not verified, or limited
 
-- **End-to-end self-update is not verified**: an installed app discovering a new release from the GitHub manifest, downloading it, verifying the signature, replacing itself and restarting has never been exercised end to end. The release v0.1.3 does publish the manifests, update archives and deltas, so the publishing half exists; the client half is untested ([docs/note/updates.md](docs/note/updates.md)).
+- **End-to-end self-update is verified once, on Windows only**: an installed copy went from 0.1.0 to 0.1.1 on 2026-10-13 (manifest discovery, download, Ed25519 verification, replacement, restart). The macOS and Linux copies have not been exercised ([docs/note/updates.md](docs/note/updates.md)).
 - **Delta updates are not verified in use**: delta files are produced and published (`kura-<from>-to-<to>-<platform>.delta`), but whether an installed app actually picks a delta over the full archive has not been observed.
 - **macOS builds are unsigned and not notarised.** `mygo.json` sets no `macos` section, so MyGo falls back to an ad-hoc signature (`-`) and runs no notary step; no Developer ID signing happens in CI either. macOS will therefore warn before the first launch. Windows builds carry no Authenticode signature, so SmartScreen may warn as well.
 - The update preview's line counts do not account for git's `autocrlf`: when the cloned content and the local content differ in line endings, a file is shown as fully changed ([docs/note/m4-preview-notes.md](docs/note/m4-preview-notes.md)).
