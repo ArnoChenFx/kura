@@ -7,14 +7,23 @@ import (
 	"strings"
 )
 
-// maxFrontmatterLines 限制读取 SKILL.md 头部的行数：description 总在
+// maxFrontmatterLines 限制读取 SKILL.md 头部的行数：description 与 name 总在
 // frontmatter 里，不必读完整个文件。
 const maxFrontmatterLines = 200
 
 // readDescription 从 SKILL.md 的 YAML frontmatter 里取 description 字段，
-// 用于界面上的卡片摘要。只支持常见写法：单行值（可带引号）与 `>`/`|`
-// 折叠块。文件缺失、没有 frontmatter 或没有该字段时返回空串，绝不报错。
-func readDescription(dir string) string {
+// 用于界面上的卡片摘要。
+func readDescription(dir string) string { return readFrontmatterField(dir, "description") }
+
+// readSkillName 从 SKILL.md 的 YAML frontmatter 里取 name 字段：技能自己声明的
+// 名字，安装时作为默认技能名（见 installDir）。它与 description 同属
+// frontmatter，共用 readFrontmatterField 的那一套扫描规则，不另写 YAML 解析。
+func readSkillName(dir string) string { return readFrontmatterField(dir, "name") }
+
+// readFrontmatterField 从 SKILL.md 的 YAML frontmatter 里取顶层键 key 的值。
+// 只支持常见写法：单行值（可带引号）与 `>`/`|` 折叠块（多行用空格连接）。
+// 文件缺失、没有 frontmatter 或没有该字段时返回空串，绝不报错。
+func readFrontmatterField(dir, key string) string {
 	f, err := os.Open(filepath.Join(dir, "SKILL.md"))
 	if err != nil {
 		return ""
@@ -41,8 +50,9 @@ func readDescription(dir string) string {
 			}
 			continue
 		}
-		key, val, ok := strings.Cut(line, ":")
-		if !ok || strings.TrimSpace(key) != "description" || key != strings.TrimLeft(key, " \t") {
+		k, val, ok := strings.Cut(line, ":")
+		// 只认顶层键：缩进的（嵌套在别的键下面）不算。
+		if !ok || strings.TrimSpace(k) != key || k != strings.TrimLeft(k, " \t") {
 			continue
 		}
 		val = strings.TrimSpace(val)

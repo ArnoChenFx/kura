@@ -414,7 +414,9 @@ func TestPreviewUpdateLocalSource(t *testing.T) {
 	if err := os.MkdirAll(src, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(src, "SKILL.md"), []byte("---\nname: src\n---\n\nv1\n"), 0o644); err != nil {
+	// frontmatter 的 name 与目录名保持一致：装进来的默认名现在取 SKILL.md
+	// 的 name（见 installDir），两者不一致时本测试会找错技能名。
+	if err := os.WriteFile(filepath.Join(src, "SKILL.md"), []byte("---\nname: src-skill\n---\n\nv1\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := c.Add(&AddOptions{LocalPath: src}); err != nil {
@@ -424,7 +426,7 @@ func TestPreviewUpdateLocalSource(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(src, "extra.md"), []byte("new\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(src, "SKILL.md"), []byte("---\nname: src\n---\n\nv2\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(src, "SKILL.md"), []byte("---\nname: src-skill\n---\n\nv2\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
