@@ -4,6 +4,18 @@ kura 遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 的格�
 
 应用版本号的唯一来源是 `mygo.json` 的 `version` 字段(打包时由 MyGo 注入); `internal/cli` 的 `Version` 常量是 CLI 二进制自己的版本号,不参与自更新, 发版时需人工与 `mygo.json` 保持一致。
 
+## 0.1.8
+
+界面按 MyGo 的官方方案重做两块：全文页的 Markdown 渲染与全部界面文案。
+
+- **全文页改用官方 Markdown 视图**：详情页「全文」不再用手写渲染器（原 `internal/ui/markdown.go` 1066 行），改用 MyGo v0.5.1 的 `ui/markdown`（完整 CommonMark 0.31.2 + GFM）。表格不再是「一堆竖线」、任务列表显示成真正的复选框、代码块有语法高亮与「拷贝」按钮、行内代码与链接正常排在一行；脚注、公式、图片描述也可辨。kura 只保留官方视图不做、而我们要做的两件事：跳过 `SKILL.md` 开头的 YAML frontmatter，以及给超大源码一个截断上限。渲染主题只在窗口外观（浅色/深色/跟随系统）变化时重建，不每帧新建。
+
+- **文案迁到 MyGo 官方 catalogs**：全部界面文案从自写的 `internal/i18n` 加四个包各自的 `catalog.go`，迁到 `locales/en.json` 与 `locales/zh-Hans.json`（ARB + ICU MessageFormat），由 `go tool mygo generate` 生成类型化取值函数。421 条文案一一对应迁移，**中文与英文的措辞逐字未变**（有回归脚本守住）。错误仍按 key 判断身份（`errors.Is` 跨语言成立），文字则每次按当前语言现取，所以后台任务里产生、切语言之后才显示的错误也是新语言的句子。
+
+- **顺带的收益与修正**：MyGo 自己的控件、菜单与文件夹选择框文案现在也跟着界面语言变（中文用户看到「完成」「取消」而不是 "Done"/"Cancel"），这是自写方案做不到的。另外修掉三处：繁体中文系统（`zh-TW`/`zh-Hant`/`zh-HK`）下窗口语言会错误地退成英文（同一台机器上命令行却是中文）；「非测试代码不硬编码中文」的守卫有一半在空转（扫目录时把根条目当成隐藏目录跳过，一个文件都没检查）；以及随旧渲染器退役的一条死文案（「另有 N 行未显示」）。
+
+- **依赖**：mygo 升到 v0.5.1（此前 v0.4.8）。CI 增加 `go tool mygo i18n check`。
+
 ## 0.1.7
 
 列表扫描不再计算内容哈希，「仓库根即技能」的仓库能正常安装了。
