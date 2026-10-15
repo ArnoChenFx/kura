@@ -1,0 +1,2684 @@
+{
+  "@@locale": "en",
+  "cliCheckChanges": "{name}: {files, number, ::group-off} files changed (added {added, number, ::group-off} · modified {modified, number, ::group-off} · removed {removed, number, ::group-off})\n",
+  "@cliCheckChanges": {
+    "description": "update --check 的结果行：文件变更统计。",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "files": {
+        "type": "int",
+        "example": "3"
+      },
+      "added": {
+        "type": "int",
+        "example": "3"
+      },
+      "modified": {
+        "type": "int",
+        "example": "3"
+      },
+      "removed": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "cliCheckCommit": "  upstream commit: {commit}\n",
+  "@cliCheckCommit": {
+    "description": "update --check 的结果行：上游 commit。",
+    "placeholders": {
+      "commit": {
+        "type": "String"
+      }
+    }
+  },
+  "cliCheckHash": "  hash: {oldHash} -> {newHash}\n",
+  "@cliCheckHash": {
+    "description": "update --check 的结果行：内容哈希前后对比。",
+    "placeholders": {
+      "oldHash": {
+        "type": "String"
+      },
+      "newHash": {
+        "type": "String"
+      }
+    }
+  },
+  "cliCheckLocalModifiedNote": "  note: the local content differs from the installed one (edited)\n",
+  "@cliCheckLocalModifiedNote": {
+    "description": "update --check 的提示：本地内容被改过。"
+  },
+  "cliCheckLocalModifiedWarn": "  note: the local content was edited; applying the update overwrites those edits (the old content is in the snapshot)\n",
+  "@cliCheckLocalModifiedWarn": {
+    "description": "update --check 的提示：应用更新会覆盖本地改动。"
+  },
+  "cliCheckNoteCommit": " (upstream commit unchanged)",
+  "@cliCheckNoteCommit": {
+    "description": "「已是最新」的后缀：上游 commit 未变。"
+  },
+  "cliCheckNoteTree": " (upstream folder unchanged)",
+  "@cliCheckNoteTree": {
+    "description": "「已是最新」的后缀：上游目录未变。"
+  },
+  "cliCheckUpToDate": "{name}: up to date{note}\n",
+  "@cliCheckUpToDate": {
+    "description": "update --check 的结果行：已是最新。",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "note": {
+        "type": "String"
+      }
+    }
+  },
+  "cliCheckAllFailed": "[{name}] check failed: {reason}\n",
+  "@cliCheckAllFailed": {
+    "description": "update --check --all 中单个技能检查失败的条目。",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "cliCheckAllSummary": "{total, number, ::group-off} skill(s) in total, {pending, number, ::group-off} with an update pending\n",
+  "@cliCheckAllSummary": {
+    "description": "update --check --all 的汇总行。",
+    "placeholders": {
+      "total": {
+        "type": "int",
+        "example": "3"
+      },
+      "pending": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "cliDoctorAllGood": "all good (nothing to report)",
+  "@cliDoctorAllGood": {
+    "description": "doctor 没有发现问题时的输出。"
+  },
+  "cliDoctorDisabledLeftover": "disabled holds a disabled skill (kura enable {name} brings it back)",
+  "@cliDoctorDisabledLeftover": {
+    "description": "doctor 明细：disabled 中的残留条目。",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "cliDoctorHashDrift": "the content does not match the metadata: now {now}, recorded {recorded} (kura update refreshes it)",
+  "@cliDoctorHashDrift": {
+    "description": "doctor 明细：内容哈希与元数据不符。",
+    "placeholders": {
+      "now": {
+        "type": "String"
+      },
+      "recorded": {
+        "type": "String"
+      }
+    }
+  },
+  "cliDoctorMetaMissing": "the skill in {dir} has no .kura-meta.json (kura import-meta can fill it in from the lock file)",
+  "@cliDoctorMetaMissing": {
+    "description": "doctor 明细：技能缺少 .kura-meta.json。",
+    "placeholders": {
+      "dir": {
+        "type": "String"
+      }
+    }
+  },
+  "cliDoctorNoContentHash": "the metadata has no contentHash, so content drift cannot be detected",
+  "@cliDoctorNoContentHash": {
+    "description": "doctor 明细：元数据缺少 contentHash。"
+  },
+  "cliDoctorProblemCount": "{count, number, ::group-off} problem(s) found:\n",
+  "@cliDoctorProblemCount": {
+    "description": "doctor 的问题计数标题。",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "cliDoctorReadFailed": "failed to read {path}: {reason}",
+  "@cliDoctorReadFailed": {
+    "description": "doctor 明细：读取文件失败。",
+    "placeholders": {
+      "path": {
+        "type": "String"
+      },
+      "reason": {
+        "type": "Object"
+      }
+    }
+  },
+  "cliDoctorRootFileNotDir": "a plain file shares the name of a skill; skills must be folders",
+  "@cliDoctorRootFileNotDir": {
+    "description": "doctor 明细：根目录下有同名普通文件。"
+  },
+  "cliDoctorRootUnreadable": "the root folder is unreadable: {reason}",
+  "@cliDoctorRootUnreadable": {
+    "description": "doctor 明细：根目录不可读。",
+    "placeholders": {
+      "reason": {
+        "type": "Object"
+      }
+    }
+  },
+  "cliDoctorScanDisabledFailed": "failed to scan the disabled folder: {reason}",
+  "@cliDoctorScanDisabledFailed": {
+    "description": "doctor 明细：扫描 disabled 失败。",
+    "placeholders": {
+      "reason": {
+        "type": "Object"
+      }
+    }
+  },
+  "cliDoctorScanTrashFailed": "failed to scan the trash folder: {reason}",
+  "@cliDoctorScanTrashFailed": {
+    "description": "doctor 明细：扫描 trash 失败。",
+    "placeholders": {
+      "reason": {
+        "type": "Object"
+      }
+    }
+  },
+  "cliDoctorSideFileNotDir": "a plain file under {path} shares the name of a skill; skills must be folders",
+  "@cliDoctorSideFileNotDir": {
+    "description": "doctor 明细：指定目录下有同名普通文件。",
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "cliDoctorSkillMDMissing": "the skill in {dir} has no SKILL.md",
+  "@cliDoctorSkillMDMissing": {
+    "description": "doctor 明细：技能缺少 SKILL.md。",
+    "placeholders": {
+      "dir": {
+        "type": "String"
+      }
+    }
+  },
+  "cliDoctorTrashEntryUnreadable": "the trash entry is unreadable: {reason}",
+  "@cliDoctorTrashEntryUnreadable": {
+    "description": "doctor 明细：回收站条目不可读。",
+    "placeholders": {
+      "reason": {
+        "type": "Object"
+      }
+    }
+  },
+  "cliDoctorTrashLeftover": "the trash still holds {skill}/{stamp} (kura restore {restoreSkill} --stamp {restoreStamp} brings it back)",
+  "@cliDoctorTrashLeftover": {
+    "description": "doctor 明细：回收站中的残留条目（附恢复命令）。",
+    "placeholders": {
+      "skill": {
+        "type": "String"
+      },
+      "stamp": {
+        "type": "String"
+      },
+      "restoreSkill": {
+        "type": "String"
+      },
+      "restoreStamp": {
+        "type": "String"
+      }
+    }
+  },
+  "cliErrActionFailed": "{action} failed: {reason}",
+  "@cliErrActionFailed": {
+    "description": "命令行错误：某个动作失败。",
+    "placeholders": {
+      "action": {
+        "type": "String"
+      },
+      "reason": {
+        "type": "Object"
+      }
+    }
+  },
+  "cliErrAddFailed": "add failed: {reason}",
+  "@cliErrAddFailed": {
+    "description": "命令行错误：add 失败。",
+    "placeholders": {
+      "reason": {
+        "type": "Object"
+      }
+    }
+  },
+  "cliErrAddPositional": "add takes no positional arguments",
+  "@cliErrAddPositional": {
+    "description": "命令行用法：add 不接受位置参数。"
+  },
+  "cliErrAddUsage": "usage: kura add --local PATH or kura add --github owner/repo (exactly one source must be given)",
+  "@cliErrAddUsage": {
+    "description": "命令行用法：add 需要且只能给一个来源。"
+  },
+  "cliErrBadFlag": "kura: argument error: {reason} (see kura --help)\n",
+  "@cliErrBadFlag": {
+    "description": "命令行错误：flag 解析失败（文本模式）。",
+    "placeholders": {
+      "reason": {
+        "type": "Object"
+      }
+    }
+  },
+  "cliErrBadFlagJSON": "argument error: {reason}",
+  "@cliErrBadFlagJSON": {
+    "description": "命令行错误：flag 解析失败（JSON 模式）。",
+    "placeholders": {
+      "reason": {
+        "type": "Object"
+      }
+    }
+  },
+  "cliErrBadLang": "kura: argument error: unknown interface language \"{lang}\" (use system, zh or en; see kura --help)\n",
+  "@cliErrBadLang": {
+    "description": "命令行错误：界面语言取值不合法。",
+    "placeholders": {
+      "lang": {
+        "type": "String"
+      }
+    }
+  },
+  "cliErrCheckAllWithName": "usage: kura update --check --all (NAME cannot be given here)",
+  "@cliErrCheckAllWithName": {
+    "description": "命令行用法：--check --all 不能再给 NAME。"
+  },
+  "cliErrCheckFailed": "check failed: {reason}",
+  "@cliErrCheckFailed": {
+    "description": "命令行错误：检查更新失败。",
+    "placeholders": {
+      "reason": {
+        "type": "Object"
+      }
+    }
+  },
+  "cliErrCheckNeedsName": "usage: kura update --check <NAME> | kura update --check --all",
+  "@cliErrCheckNeedsName": {
+    "description": "命令行用法：--check 需要 NAME 或 --all。"
+  },
+  "cliErrDoctorPositional": "doctor takes no positional arguments",
+  "@cliErrDoctorPositional": {
+    "description": "命令行用法：doctor 不接受位置参数。"
+  },
+  "cliErrImportMetaFailed": "import-meta failed: {reason}: {detail}",
+  "@cliErrImportMetaFailed": {
+    "description": "命令行错误：import-meta 失败（附明细）。",
+    "placeholders": {
+      "reason": {
+        "type": "Object"
+      },
+      "detail": {
+        "type": "String"
+      }
+    }
+  },
+  "cliErrImportMetaFailedPlain": "import-meta failed: {reason}",
+  "@cliErrImportMetaFailedPlain": {
+    "description": "命令行错误：import-meta 失败。",
+    "placeholders": {
+      "reason": {
+        "type": "Object"
+      }
+    }
+  },
+  "cliErrImportMetaPositional": "import-meta takes no positional arguments",
+  "@cliErrImportMetaPositional": {
+    "description": "命令行用法：import-meta 不接受位置参数。"
+  },
+  "cliErrJsonEncode": "cli: failed to encode JSON",
+  "@cliErrJsonEncode": {
+    "description": "命令行错误：JSON 编码失败。"
+  },
+  "cliErrListPositional": "list takes no positional arguments (got \"{arg}\")",
+  "@cliErrListPositional": {
+    "description": "命令行用法：list 不接受位置参数。",
+    "placeholders": {
+      "arg": {
+        "type": "String"
+      }
+    }
+  },
+  "cliErrRemoveFailed": "remove failed: {reason}",
+  "@cliErrRemoveFailed": {
+    "description": "命令行错误：remove 失败。",
+    "placeholders": {
+      "reason": {
+        "type": "Object"
+      }
+    }
+  },
+  "cliErrRestoreFailed": "restore failed: {reason}",
+  "@cliErrRestoreFailed": {
+    "description": "命令行错误：restore 失败。",
+    "placeholders": {
+      "reason": {
+        "type": "Object"
+      }
+    }
+  },
+  "cliErrScanRootFailed": "failed to scan the root folder: {reason}",
+  "@cliErrScanRootFailed": {
+    "description": "命令行错误：扫描根目录失败。",
+    "placeholders": {
+      "reason": {
+        "type": "Object"
+      }
+    }
+  },
+  "cliErrUnknownCommand": "kura: unknown command \"{name}\"\n\n",
+  "@cliErrUnknownCommand": {
+    "description": "命令行错误：未知命令。",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "cliErrUpdateFailed": "update failed: {reason}",
+  "@cliErrUpdateFailed": {
+    "description": "命令行错误：update 失败。",
+    "placeholders": {
+      "reason": {
+        "type": "Object"
+      }
+    }
+  },
+  "cliErrUsageRemove": "usage: kura remove <NAME> [--stamp TS]",
+  "@cliErrUsageRemove": {
+    "description": "命令行用法：remove 的参数形式。"
+  },
+  "cliErrUsageRestore": "usage: kura restore <NAME> [--stamp TS]",
+  "@cliErrUsageRestore": {
+    "description": "命令行用法：restore 的参数形式。"
+  },
+  "cliErrUsageToggle": "usage: kura {command} <NAME>",
+  "@cliErrUsageToggle": {
+    "description": "命令行用法：enable / disable 的参数形式。",
+    "placeholders": {
+      "command": {
+        "type": "String"
+      }
+    }
+  },
+  "cliErrUsageUpdate": "usage: kura update <NAME>",
+  "@cliErrUsageUpdate": {
+    "description": "命令行用法：update 的参数形式。"
+  },
+  "cliFlagAddGithub": "GitHub repository, owner/repo",
+  "@cliFlagAddGithub": {
+    "description": "flag 说明：add 的 --github。"
+  },
+  "cliFlagAddLocal": "Local skill folder",
+  "@cliFlagAddLocal": {
+    "description": "flag 说明：add 的 --local。"
+  },
+  "cliFlagAddName": "Skill name after installing (defaults to the source folder name)",
+  "@cliFlagAddName": {
+    "description": "flag 说明：add 的 --name。"
+  },
+  "cliFlagAddRef": "Branch/tag/commit (optional for github)",
+  "@cliFlagAddRef": {
+    "description": "flag 说明：add 的 --ref。"
+  },
+  "cliFlagAddSubPath": "Skill folder inside the repository (optional for github; when omitted the skills are discovered, and one must be picked if there are several)",
+  "@cliFlagAddSubPath": {
+    "description": "flag 说明：add 的 --sub-path。"
+  },
+  "cliFlagAll": "With --check: check every skill in the root folder",
+  "@cliFlagAll": {
+    "description": "flag 说明：update --check 的 --all。"
+  },
+  "cliFlagCheck": "Preview what an update would change (writes nothing); exit code 3 when an update is pending",
+  "@cliFlagCheck": {
+    "description": "flag 说明：update 的 --check。"
+  },
+  "cliFlagDryRun": "Only report which skills would be imported, write nothing",
+  "@cliFlagDryRun": {
+    "description": "flag 说明：import-meta 的 --dry-run。"
+  },
+  "cliFlagHome": "kura data folder (default $KURA_HOME or ~/.kura)",
+  "@cliFlagHome": {
+    "description": "flag 说明：全局 --home。"
+  },
+  "cliFlagJson": "Output JSON (errors go to stderr as JSON too)",
+  "@cliFlagJson": {
+    "description": "flag 说明：全局 --json。"
+  },
+  "cliFlagLang": "Interface language: system | zh | en (default $KURA_LANG, then config.json, then the system locale)",
+  "@cliFlagLang": {
+    "description": "flag 说明：全局 --lang。"
+  },
+  "cliFlagLock": "Path of the lock file (default <root>/../.skill-lock.json)",
+  "@cliFlagLock": {
+    "description": "flag 说明：import-meta 的 --lock。"
+  },
+  "cliFlagRoot": "Skills root folder (default $KURA_ROOT or ~/.agents/skills)",
+  "@cliFlagRoot": {
+    "description": "flag 说明：全局 --root。"
+  },
+  "cliFlagStampRemove": "Timestamp folder name for the trash and the snapshot (defaults to now)",
+  "@cliFlagStampRemove": {
+    "description": "flag 说明：remove 的 --stamp。"
+  },
+  "cliFlagStampRestore": "Restore the trash copy with this timestamp (defaults to the newest)",
+  "@cliFlagStampRestore": {
+    "description": "flag 说明：restore 的 --stamp。"
+  },
+  "cliImportMetaCount": "{verb} {count, number, ::group-off} skills:\n",
+  "@cliImportMetaCount": {
+    "description": "import-meta 的清单标题（would import / imported）。",
+    "placeholders": {
+      "verb": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "cliImportMetaImported": "imported",
+  "@cliImportMetaImported": {
+    "description": "import-meta 清单标题词：imported。"
+  },
+  "cliImportMetaLockMissing": " (missing)",
+  "@cliImportMetaLockMissing": {
+    "description": "import-meta 的标注：lock 文件缺失。"
+  },
+  "cliImportMetaNothing": "no skills to import",
+  "@cliImportMetaNothing": {
+    "description": "import-meta 没有内容可导入时的输出。"
+  },
+  "cliImportMetaWouldImport": "would import",
+  "@cliImportMetaWouldImport": {
+    "description": "import-meta --dry-run 的清单标题词：would import。"
+  },
+  "cliListEmpty": "(no skills)",
+  "@cliListEmpty": {
+    "description": "list 没有技能时的输出。"
+  },
+  "cliListMetaBroken": "\t⚠ corrupt metadata: {detail}",
+  "@cliListMetaBroken": {
+    "description": "list 条目标注：元数据损坏。",
+    "placeholders": {
+      "detail": {
+        "type": "String"
+      }
+    }
+  },
+  "cliListNoMeta": "\t(no metadata)",
+  "@cliListNoMeta": {
+    "description": "list 条目标注：没有元数据。"
+  },
+  "cliListNoSkillMD": "\t⚠ SKILL.md missing",
+  "@cliListNoSkillMD": {
+    "description": "list 条目标注：缺少 SKILL.md。"
+  },
+  "cliListTrashed": "\t(trash entry, its content lives in the timestamp subfolder)",
+  "@cliListTrashed": {
+    "description": "list 条目标注：回收站条目。"
+  },
+  "cliStatusAdded": "added",
+  "@cliStatusAdded": {
+    "description": "差异状态词：added。"
+  },
+  "cliStatusChanged": "modified",
+  "@cliStatusChanged": {
+    "description": "差异状态词：modified。"
+  },
+  "cliStatusRemoved": "removed",
+  "@cliStatusRemoved": {
+    "description": "差异状态词：removed。"
+  },
+  "cliTermRootDir": "the root folder",
+  "@cliTermRootDir": {
+    "description": "「根目录」的展示名。"
+  },
+  "cliUsageCheckAllWithName": "kura: usage: kura update --check --all (NAME cannot be given here)\n",
+  "@cliUsageCheckAllWithName": {
+    "description": "usage 行：--check --all 不能再给 NAME。"
+  },
+  "cliUsageCheckNeedsName": "kura: usage: kura update --check <NAME> | kura update --check --all\n",
+  "@cliUsageCheckNeedsName": {
+    "description": "usage 行：--check 需要 NAME 或 --all。"
+  },
+  "cliUsageText": "kura — a manager for agent skills (headless command line)\n\nUsage:\n  kura <command> [args] [flags]\n\nCommands:\n  list                 List all skills (enabled + disabled + trashed)\n  scan                 Same as list (alias; handy with --root to override the root)\n  disable <NAME>       Disable a skill (move it to <home>/disabled/, a pure move)\n  enable <NAME>        Enable a skill (move it back from disabled/ to the root)\n  remove <NAME> [--stamp TS]\n                       Move to the trash (snapshot first); --stamp names the\n                       trash timestamp folder\n  restore <NAME> [--stamp TS]\n                       Restore from the trash; --stamp defaults to the newest\n  import-meta [--dry-run] [--lock PATH]\n                       Fill in missing .kura-meta.json from the\n                       .skill-lock.json next to the root; --dry-run only\n                       reports, it writes nothing; default folder only, added\n                       folders are rejected (exit 1)\n  add --local PATH [--name N]\n                       Install a skill from a local folder\n  add --github owner/repo [--sub-path P] [--ref R] [--name N]\n                       Install a skill from a GitHub repository; without\n                       --sub-path the skills inside are discovered: a single\n                       candidate installs directly, several candidates are\n                       listed and fail with exit 1, pick one with --sub-path\n  update <NAME>        Pull the recorded source again and replace the content\n                       (snapshot first)\n  update --check <NAME>\n                       Preview what updating NAME would change (writes nothing);\n                       exit 3 when an update is pending, 0 when up to date\n  update --check --all\n                       Preview every skill in the root (one block per skill)\n  doctor               Read-only check: missing metadata / corrupt metadata /\n                       content drift / missing SKILL.md / leftovers in disabled\n                       and trash\n  version              Print the version\n\nGlobal flags (may follow any subcommand):\n  --json        Output JSON; on errors the message goes to stderr as '{'\"error\": \"...\"'}'\n  --root PATH   Skills root folder (default $KURA_ROOT or ~/.agents/skills)\n  --home PATH   kura data folder (default $KURA_HOME or ~/.kura)\n  --lang LANG   Interface language: system | zh | en (default $KURA_LANG, then\n                config.json, then the system locale)\n\nExit codes:\n  0  success\n  1  operation failed (skill not found, name conflict, I/O error, ...)\n  2  usage error (unknown command, bad flag, wrong number of arguments)\n  3  doctor found problems (see its output)\n\nJSON shapes (with --json):\n  list/scan   '{'\"root\": string, \"skills\": ['{'name, state, hasSkillMd, dir,\n              sourceType?, sourceURL?, ref?, subPath?, pluginName?,\n              updatedAt?, metaError?'}']'}'\n  changes     '{'\"id\": string, \"state\": string, \"dir\": string,\n              \"snapshotDir\"?: string'}'\n  doctor      '{'\"root\": string, \"problems\": ['{'kind, skill, detail'}']'}'\n              kind in not-a-dir | no-meta | meta-parse | hash-drift |\n                      no-skillmd | leftover\n  import-meta '{'\"root\": string, \"lockPath\": string, \"dryRun\": bool,\n              \"wouldImport\"?: [string], \"imported\"?: [string]'}'\n  add (many candidates) '{'\"error\": string, \"repo\": string,\n              \"candidates\": [string]'}' (stderr, exit 1)\n  update --check NAME\n              '{'\"skill\": string, \"sourceType\": string, \"commit\"?: string,\n              \"hasChanges\": bool, \"basis\": string, \"localModified\": bool,\n              \"oldHash\": string, \"newHash\": string,\n              \"files\": ['{'path, status, added, removed, oldHash?, newHash?'}'],\n              \"unchanged\": int'}'\n              status in added | changed | removed; files holds only the\n              differing files, [] when there is nothing to do. Exit code: 3\n              when an update is pending, 0 when up to date.\n              basis in commit | tree | content: git sources compare the upstream\n              commit with git ls-remote (commit), when it changed the tree hash\n              of the skill folder (tree); neither downloads files, anything else\n              compares file by file (content). localModified true means the\n              installed content was edited (an unchanged upstream is not an\n              update, but applying one overwrites those edits).\n  update --check --all\n              '{'\"root\": string,\n              \"results\": ['{'skill, error?, check?'}']'}'\n              check has the shape above; exit 3 if any skill has an update.\n              Skills from the same repository share one check and clone.\n",
+  "@cliUsageText": {
+    "description": "命令行 --help 的完整帮助文本，按界面语言整段输出。"
+  },
+  "selfupdateAboutBody": "kura — an agent skill manager (github.com/ArnoChenFx/kura)",
+  "@selfupdateAboutBody": {
+    "description": "「关于 kura」弹窗的正文。"
+  },
+  "selfupdateAboutOk": "OK",
+  "@selfupdateAboutOk": {
+    "description": "「关于 kura」弹窗的确定按钮。"
+  },
+  "selfupdateAboutTitle": "About kura",
+  "@selfupdateAboutTitle": {
+    "description": "「关于 kura」弹窗的标题。"
+  },
+  "selfupdateAboutUpdater": "\n\nApp updates come from the MyGo updater: the \"Check for Updates...\" menu item looks for new versions.",
+  "@selfupdateAboutUpdater": {
+    "description": "「关于 kura」弹窗里说明应用更新的段落。"
+  },
+  "selfupdateAboutVersion": "\nversion {version}",
+  "@selfupdateAboutVersion": {
+    "description": "「关于 kura」弹窗的版本行（拼在正文之后）。",
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "selfupdateMenuAbout": "About kura",
+  "@selfupdateMenuAbout": {
+    "description": "应用菜单项：关于 kura。"
+  },
+  "selfupdateMenuQuit": "Quit kura",
+  "@selfupdateMenuQuit": {
+    "description": "应用菜单项：退出 kura。"
+  },
+  "storeErrAddOptionsNil": "store: AddOptions must not be nil",
+  "@storeErrAddOptionsNil": {
+    "description": "错误：AddOptions 不能为空。"
+  },
+  "storeErrAddSource": "store: provide exactly one of LocalPath or Repo",
+  "@storeErrAddSource": {
+    "description": "错误：LocalPath 与 Repo 必须且只能提供一个。"
+  },
+  "storeErrBadRepo": "store: Repo must look like owner/repo",
+  "@storeErrBadRepo": {
+    "description": "错误：Repo 不是 owner/repo 形式。"
+  },
+  "storeErrBadSkillSubPath": "store: the subfolder of skill {name} must not start with / or contain ..",
+  "@storeErrBadSkillSubPath": {
+    "description": "错误：技能的子目录以 / 开头或含 ..。",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "storeErrBadSubPath": "store: SubPath must not start with / or contain ..",
+  "@storeErrBadSubPath": {
+    "description": "错误：SubPath 以 / 开头或含 ..。"
+  },
+  "storeErrCleanStaging": "store: failed to clean the temp folder of the cross-volume move: {path}",
+  "@storeErrCleanStaging": {
+    "description": "错误：跨卷移动后清理临时目录失败。",
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "storeErrCopyFile": "store: failed to copy {path}",
+  "@storeErrCopyFile": {
+    "description": "错误：复制文件失败。",
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "storeErrCreateDir": "store: failed to create folder {path}",
+  "@storeErrCreateDir": {
+    "description": "错误：创建目录失败。",
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "storeErrCreateRootDir": "store: failed to create the root folder",
+  "@storeErrCreateRootDir": {
+    "description": "错误：创建技能根目录失败。"
+  },
+  "storeErrCreateTrashDir": "store: failed to create the trash folder",
+  "@storeErrCreateTrashDir": {
+    "description": "错误：创建回收站目录失败。"
+  },
+  "storeErrCrossVolumeCopy": "store: cross-volume move of {src}: failed to copy to {dst} (source untouched)",
+  "@storeErrCrossVolumeCopy": {
+    "description": "错误：跨卷移动复制到目标失败（源目录未改动）。",
+    "placeholders": {
+      "src": {
+        "type": "String"
+      },
+      "dst": {
+        "type": "String"
+      }
+    }
+  },
+  "storeErrCrossVolumeRename": "store: cross-volume move of {src}: failed to place {dst} (source untouched)",
+  "@storeErrCrossVolumeRename": {
+    "description": "错误：跨卷移动落位失败（源目录未改动）。",
+    "placeholders": {
+      "src": {
+        "type": "String"
+      },
+      "dst": {
+        "type": "String"
+      }
+    }
+  },
+  "storeErrCrossVolumeSource": "store: cross-volume move done, but deleting the source folder {src} failed (the content is at {dst})",
+  "@storeErrCrossVolumeSource": {
+    "description": "错误：跨卷移动已完成，但删除源目录失败。",
+    "placeholders": {
+      "src": {
+        "type": "String"
+      },
+      "dst": {
+        "type": "String"
+      }
+    }
+  },
+  "storeErrDefaultRoot": "store: the default skills folder cannot be removed",
+  "@storeErrDefaultRoot": {
+    "description": "错误：默认技能目录不能从列表中移除。"
+  },
+  "storeErrDeriveSkillName": "store: cannot derive a skill name from the source: {source}",
+  "@storeErrDeriveSkillName": {
+    "description": "错误：无法从安装来源推导技能名。",
+    "placeholders": {
+      "source": {
+        "type": "String"
+      }
+    }
+  },
+  "storeErrDisableFailed": "store: failed to disable {name}",
+  "@storeErrDisableFailed": {
+    "description": "错误：禁用技能失败。",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "storeErrDisabledExists": "store: a skill named {name} already exists in disabled",
+  "@storeErrDisabledExists": {
+    "description": "错误：disabled 中已存在同名技能。",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "storeErrEmptyHome": "store: home must not be empty (use DefaultConfig)",
+  "@storeErrEmptyHome": {
+    "description": "错误：home 不能为空。"
+  },
+  "storeErrEmptyMeta": "store: cannot write empty metadata",
+  "@storeErrEmptyMeta": {
+    "description": "错误：不能写入空元数据。"
+  },
+  "storeErrEmptyRoot": "store: root must not be empty",
+  "@storeErrEmptyRoot": {
+    "description": "错误：root 不能为空。"
+  },
+  "storeErrEmptySettings": "store: settings must not be nil",
+  "@storeErrEmptySettings": {
+    "description": "错误：设置不能为空。"
+  },
+  "storeErrEnableFailed": "store: failed to enable {name}",
+  "@storeErrEnableFailed": {
+    "description": "错误：启用技能失败。",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "storeErrEscapesTrash": "store: invalid skill name: \"{name}\" resolves outside the trash, nothing deleted",
+  "@storeErrEscapesTrash": {
+    "description": "错误：技能名解析后落在回收站之外，未删除。",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "storeErrGitFailed": "store: git {command} failed: {reason}",
+  "@storeErrGitFailed": {
+    "description": "错误：git 子命令失败。",
+    "placeholders": {
+      "command": {
+        "type": "String"
+      },
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "storeErrGitTimeout": "store: git operation timed out",
+  "@storeErrGitTimeout": {
+    "description": "错误：git 操作超时。"
+  },
+  "storeErrGitTimeoutAfter": "store: git operation timed out ({command} took longer than {timeout})",
+  "@storeErrGitTimeoutAfter": {
+    "description": "错误：git 操作超时（附命令与时长）。",
+    "placeholders": {
+      "command": {
+        "type": "String"
+      },
+      "timeout": {
+        "type": "String"
+      }
+    }
+  },
+  "storeErrHashTrashCopy": "store: failed to hash the trash copy {path}, nothing deleted",
+  "@storeErrHashTrashCopy": {
+    "description": "错误：计算回收站副本的内容哈希失败，未删除。",
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "storeErrImportDefaultOnly": "store: .skill-lock.json only describes the default skills folder, so importing metadata is limited to that folder",
+  "@storeErrImportDefaultOnly": {
+    "description": "错误：.skill-lock.json 只描述默认技能目录，导入元数据只适用于它。"
+  },
+  "storeErrImportMetaWrite": "store: failed to write the metadata of {path}",
+  "@storeErrImportMetaWrite": {
+    "description": "错误：写入技能的元数据失败。",
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "storeErrInstallSkill": "store: failed to install {name}",
+  "@storeErrInstallSkill": {
+    "description": "错误：安装技能失败。",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "storeErrInvalidName": "store: invalid skill name",
+  "@storeErrInvalidName": {
+    "description": "错误：非法的技能名（哨兵）。"
+  },
+  "storeErrInvalidStamp": "store: invalid timestamp folder name \"{stamp}\"",
+  "@storeErrInvalidStamp": {
+    "description": "错误：非法的时间戳目录名。",
+    "placeholders": {
+      "stamp": {
+        "type": "String"
+      }
+    }
+  },
+  "storeErrInvalidStampName": "store: invalid skill name: timestamp folder name \"{stamp}\"",
+  "@storeErrInvalidStampName": {
+    "description": "错误：非法技能名，具体为时间戳目录名。",
+    "placeholders": {
+      "stamp": {
+        "type": "String"
+      }
+    }
+  },
+  "storeErrLocalSourceGone": "store: the local source is gone: {path}",
+  "@storeErrLocalSourceGone": {
+    "description": "错误：本地安装来源已不存在。",
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "storeErrMarshalConfig": "store: failed to encode the config",
+  "@storeErrMarshalConfig": {
+    "description": "错误：序列化配置失败。"
+  },
+  "storeErrMarshalMeta": "store: failed to encode the metadata",
+  "@storeErrMarshalMeta": {
+    "description": "错误：序列化元数据失败。"
+  },
+  "storeErrMarshalSettings": "store: failed to encode the settings",
+  "@storeErrMarshalSettings": {
+    "description": "错误：序列化设置失败。"
+  },
+  "storeErrMetaMissingCheck": "store: {name} has no .kura-meta.json, cannot check for updates",
+  "@storeErrMetaMissingCheck": {
+    "description": "错误：技能缺少元数据，无法检查更新。",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "storeErrMetaMissingUpdate": "store: {name} has no .kura-meta.json, cannot update",
+  "@storeErrMetaMissingUpdate": {
+    "description": "错误：技能缺少元数据，无法更新。",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "storeErrMetaNoGithubURL": "store: the metadata has no github source URL",
+  "@storeErrMetaNoGithubURL": {
+    "description": "错误：元数据缺少 github 来源 URL。"
+  },
+  "storeErrMetaNoLocalPath": "store: the metadata has no local source path",
+  "@storeErrMetaNoLocalPath": {
+    "description": "错误：元数据缺少本地来源路径。"
+  },
+  "storeErrMetaUnreadable": "store: the metadata of {name} is unreadable",
+  "@storeErrMetaUnreadable": {
+    "description": "错误：技能元数据不可读。",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "storeErrMoveToTrash": "store: failed to move ({name}) to the trash",
+  "@storeErrMoveToTrash": {
+    "description": "错误：移入回收站失败。",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "storeErrNoDefaultBranch": "store: the remote {remote} has no default branch",
+  "@storeErrNoDefaultBranch": {
+    "description": "错误：远端仓库没有默认分支。",
+    "placeholders": {
+      "remote": {
+        "type": "String"
+      }
+    }
+  },
+  "storeErrNoDirInRepo": "store: no such folder in the repository: {path}",
+  "@storeErrNoDirInRepo": {
+    "description": "错误：仓库内不存在该目录。",
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "storeErrNoSettings": "store: no settings have been saved yet",
+  "@storeErrNoSettings": {
+    "description": "错误：尚未保存任何设置。"
+  },
+  "storeErrNoSnapshotPath": "store: no free snapshot path ({name}/{stamp}), nothing deleted",
+  "@storeErrNoSnapshotPath": {
+    "description": "错误：找不到可用的快照位置，未删除。",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "stamp": {
+        "type": "String"
+      }
+    }
+  },
+  "storeErrNoSubdir": "store: the folder has no subfolders",
+  "@storeErrNoSubdir": {
+    "description": "错误：目录下没有子目录。"
+  },
+  "storeErrNoSuchRef": "store: the remote {remote} has no branch or tag {ref}",
+  "@storeErrNoSuchRef": {
+    "description": "错误：远端不存在该分支或标签。",
+    "placeholders": {
+      "remote": {
+        "type": "String"
+      },
+      "ref": {
+        "type": "String"
+      }
+    }
+  },
+  "storeErrNotConfigured": "store: translation is not configured: fill in the API address, key and model first",
+  "@storeErrNotConfigured": {
+    "description": "错误：翻译未配置，需先填 API 地址、密钥与模型。"
+  },
+  "storeErrNotDir": "store: the path does not exist or is not a folder",
+  "@storeErrNotDir": {
+    "description": "错误：路径不存在或不是文件夹。"
+  },
+  "storeErrParseFile": "store: failed to parse {path}",
+  "@storeErrParseFile": {
+    "description": "错误：解析文件失败。",
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "storeErrParseJSON": "store: failed to parse {path} (corrupt JSON)",
+  "@storeErrParseJSON": {
+    "description": "错误：解析 JSON 失败（文件已损坏）。",
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "storeErrParseMeta": "store: failed to parse {path} (corrupt JSON)",
+  "@storeErrParseMeta": {
+    "description": "错误：解析元数据失败（JSON 损坏）。",
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "storeErrPosOutOfRange": "store: position {pos, number, ::group-off} is out of range",
+  "@storeErrPosOutOfRange": {
+    "description": "错误：位置超出根目录列表范围。",
+    "placeholders": {
+      "pos": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "storeErrPrepareContent": "store: failed to prepare the new content",
+  "@storeErrPrepareContent": {
+    "description": "错误：准备更新后的新内容失败。"
+  },
+  "storeErrPurgeFailed": "store: failed to delete {name} permanently",
+  "@storeErrPurgeFailed": {
+    "description": "错误：永久删除失败。",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "storeErrReadDir": "store: failed to read folder {path}",
+  "@storeErrReadDir": {
+    "description": "错误：读取目录失败。",
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "storeErrReadFile": "store: failed to read {path}",
+  "@storeErrReadFile": {
+    "description": "错误：读取文件失败。",
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "storeErrReplaceAndRestore": "store: the swap failed and the automatic restore failed too (snapshot at {snapshot})",
+  "@storeErrReplaceAndRestore": {
+    "description": "错误：替换失败且自动恢复也失败（附快照位置）。",
+    "placeholders": {
+      "snapshot": {
+        "type": "String"
+      }
+    }
+  },
+  "storeErrReplaceRestored": "store: the swap failed (restored from the snapshot)",
+  "@storeErrReplaceRestored": {
+    "description": "错误：替换失败，已从快照恢复。"
+  },
+  "storeErrRepoDirMissing": "store: no such repository folder: {path}",
+  "@storeErrRepoDirMissing": {
+    "description": "错误：仓库目录不存在。",
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "storeErrResolveLocalPath": "store: failed to resolve the path",
+  "@storeErrResolveLocalPath": {
+    "description": "错误：解析本地来源路径失败。"
+  },
+  "storeErrResolvePath": "store: failed to resolve the path {path}",
+  "@storeErrResolvePath": {
+    "description": "错误：解析路径失败。",
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "storeErrRestoreFailed": "store: failed to restore {name}",
+  "@storeErrRestoreFailed": {
+    "description": "错误：从回收站恢复技能失败。",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "storeErrRootExists": "store: that folder is already in the list",
+  "@storeErrRootExists": {
+    "description": "错误：该目录已经在根目录列表中。"
+  },
+  "storeErrSkillExists": "store: a skill named {name} already exists in the root folder",
+  "@storeErrSkillExists": {
+    "description": "错误：根目录中已存在同名技能。",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "storeErrSnapshot": "store: failed to snapshot {name}",
+  "@storeErrSnapshot": {
+    "description": "错误：写快照失败。",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "storeErrSnapshotBeforePurge": "store: failed to snapshot {name} before deleting, nothing deleted",
+  "@storeErrSnapshotBeforePurge": {
+    "description": "错误：永久删除前写快照失败，未删除。",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "storeErrSnapshotCheck": "store: failed to check the snapshot path {path}; {name} not deleted",
+  "@storeErrSnapshotCheck": {
+    "description": "错误：检查快照位置失败，未删除。",
+    "placeholders": {
+      "path": {
+        "type": "String"
+      },
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "storeErrSnapshotIsFile": "store: the snapshot path {path} is taken by a file; {name} not deleted",
+  "@storeErrSnapshotIsFile": {
+    "description": "错误：快照位置被文件占用，未删除。",
+    "placeholders": {
+      "path": {
+        "type": "String"
+      },
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "storeErrSnapshotIsSymlink": "store: the snapshot path {path} is a symlink, so it cannot serve as a snapshot; {name} not deleted",
+  "@storeErrSnapshotIsSymlink": {
+    "description": "错误：快照位置是符号链接，不能用作快照，未删除。",
+    "placeholders": {
+      "path": {
+        "type": "String"
+      },
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "storeErrSnapshotVerify": "store: the snapshot of {name} failed verification, nothing deleted",
+  "@storeErrSnapshotVerify": {
+    "description": "错误：快照校验失败，未删除。",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "storeErrSourceNoSkillMD": "store: the source folder has no SKILL.md: {path}",
+  "@storeErrSourceNoSkillMD": {
+    "description": "错误：安装来源目录缺少 SKILL.md。",
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "storeErrSourceNotDir": "store: the source is not a folder: {path}",
+  "@storeErrSourceNotDir": {
+    "description": "错误：安装来源不是目录。",
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "storeErrSourceUnreadable": "store: the source folder is not readable",
+  "@storeErrSourceUnreadable": {
+    "description": "错误：安装来源目录不可读。"
+  },
+  "storeErrSparseCheckout": "store: failed to set up the sparse checkout",
+  "@storeErrSparseCheckout": {
+    "description": "错误：准备稀疏检出失败。"
+  },
+  "storeErrTempDir": "store: failed to create a temp folder",
+  "@storeErrTempDir": {
+    "description": "错误：创建临时目录失败。"
+  },
+  "storeErrTooManyCandidates": "store: the repository {repo} holds {count, number, ::group-off} skills; pick one with --sub-path:",
+  "@storeErrTooManyCandidates": {
+    "description": "错误：仓库内技能候选过多，需用 --sub-path 指定。",
+    "placeholders": {
+      "repo": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "storeErrTooManySkills": "store: too many skill candidates in the repository",
+  "@storeErrTooManySkills": {
+    "description": "错误：仓库内技能候选过多。"
+  },
+  "storeErrTooManySkillsLimit": "store: too many skill candidates in the repository (limit {limit, number, ::group-off})",
+  "@storeErrTooManySkillsLimit": {
+    "description": "错误：仓库内技能候选过多（附上限）。",
+    "placeholders": {
+      "limit": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "storeErrTranslateDo": "store: the translation request failed",
+  "@storeErrTranslateDo": {
+    "description": "错误：翻译请求失败。"
+  },
+  "storeErrTranslateEmpty": "store: the translation response is empty",
+  "@storeErrTranslateEmpty": {
+    "description": "错误：翻译响应内容为空。"
+  },
+  "storeErrTranslateEndpoint": "store: failed to build the translation request (check the API address {url})",
+  "@storeErrTranslateEndpoint": {
+    "description": "错误：构造翻译请求失败（附 API 地址）。",
+    "placeholders": {
+      "url": {
+        "type": "String"
+      }
+    }
+  },
+  "storeErrTranslateNoChoices": "store: the translation response has no choices (the server returned no translation)",
+  "@storeErrTranslateNoChoices": {
+    "description": "错误：翻译响应里没有 choices。"
+  },
+  "storeErrTranslateParse": "store: failed to parse the translation response (not valid JSON)",
+  "@storeErrTranslateParse": {
+    "description": "错误：解析翻译响应失败（不是合法 JSON）。"
+  },
+  "storeErrTranslateRead": "store: failed to read the translation response",
+  "@storeErrTranslateRead": {
+    "description": "错误：读取翻译响应失败。"
+  },
+  "storeErrTranslateRequest": "store: failed to build the translation request",
+  "@storeErrTranslateRequest": {
+    "description": "错误：构造翻译请求失败。"
+  },
+  "storeErrTranslateStatus": "store: the translation API returned {status, number, ::group-off}: {detail}",
+  "@storeErrTranslateStatus": {
+    "description": "错误：翻译接口返回非成功状态码。",
+    "placeholders": {
+      "status": {
+        "type": "int",
+        "example": "3"
+      },
+      "detail": {
+        "type": "String"
+      }
+    }
+  },
+  "storeErrTrashExists": "store: the trash already contains {name}/{stamp}",
+  "@storeErrTrashExists": {
+    "description": "错误：回收站中已存在同名条目。",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "stamp": {
+        "type": "String"
+      }
+    }
+  },
+  "storeErrTrashRead": "store: failed to read {name} from the trash",
+  "@storeErrTrashRead": {
+    "description": "错误：读取回收站中的条目失败。",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "storeErrUnknownLang": "store: unsupported translation target language",
+  "@storeErrUnknownLang": {
+    "description": "错误：不支持的翻译目标语言。"
+  },
+  "storeErrUnknownRoot": "store: that folder is not in the list",
+  "@storeErrUnknownRoot": {
+    "description": "错误：根目录列表中没有该目录。"
+  },
+  "storeErrUnknownSkill": "store: skill not found",
+  "@storeErrUnknownSkill": {
+    "description": "错误：未找到该技能（哨兵，身份不随语言变）。"
+  },
+  "storeErrUnknownSkillInTrash": "store: skill not found: {name} (not in the trash)",
+  "@storeErrUnknownSkillInTrash": {
+    "description": "错误：回收站中没有该技能。",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "storeErrUnknownSourceType": "store: unknown source type \"{kind}\"",
+  "@storeErrUnknownSourceType": {
+    "description": "错误：未知的来源类型。",
+    "placeholders": {
+      "kind": {
+        "type": "String"
+      }
+    }
+  },
+  "storeErrUnknownTheme": "store: the theme must be system, light or dark",
+  "@storeErrUnknownTheme": {
+    "description": "错误：外观只能是 system、light 或 dark。"
+  },
+  "storeErrUnknownUILang": "store: the UI language must be system, zh or en",
+  "@storeErrUnknownUILang": {
+    "description": "错误：界面语言只能是 system、zh 或 en。"
+  },
+  "storeErrUnknownView": "store: the view must be grid or list",
+  "@storeErrUnknownView": {
+    "description": "错误：排列模式只能是 grid 或 list。"
+  },
+  "storeErrUpdateMeta": "store: failed to update the metadata",
+  "@storeErrUpdateMeta": {
+    "description": "错误：更新元数据失败。"
+  },
+  "storeErrUpstreamDirMissing": "store: no such upstream folder: {path}",
+  "@storeErrUpstreamDirMissing": {
+    "description": "错误：上游目录不存在。",
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "storeErrUserHome": "store: cannot locate the user home folder",
+  "@storeErrUserHome": {
+    "description": "错误：无法确定用户主目录。"
+  },
+  "storeErrWalkDir": "store: failed to walk {path}",
+  "@storeErrWalkDir": {
+    "description": "错误：遍历目录失败。",
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "storeErrWriteFile": "store: failed to write {path}",
+  "@storeErrWriteFile": {
+    "description": "错误：写入文件失败。",
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "storeLangNameDe": "Deutsch",
+  "@storeLangNameDe": {
+    "description": "翻译目标语言的自称：Deutsch（两种界面语言下都一样）。"
+  },
+  "storeLangNameEn": "English",
+  "@storeLangNameEn": {
+    "description": "翻译目标语言的自称：English。"
+  },
+  "storeLangNameEnGB": "English (UK)",
+  "@storeLangNameEnGB": {
+    "description": "翻译目标语言的自称：English (UK)。"
+  },
+  "storeLangNameEnUS": "English (US)",
+  "@storeLangNameEnUS": {
+    "description": "翻译目标语言的自称：English (US)。"
+  },
+  "storeLangNameEs": "Español",
+  "@storeLangNameEs": {
+    "description": "翻译目标语言的自称：Español。"
+  },
+  "storeLangNameFr": "Français",
+  "@storeLangNameFr": {
+    "description": "翻译目标语言的自称：Français。"
+  },
+  "storeLangNameJa": "日本語",
+  "@storeLangNameJa": {
+    "description": "翻译目标语言的自称：日本語。"
+  },
+  "storeLangNameKo": "한국어",
+  "@storeLangNameKo": {
+    "description": "翻译目标语言的自称：한국어。"
+  },
+  "storeLangNamePt": "Português",
+  "@storeLangNamePt": {
+    "description": "翻译目标语言的自称：Português。"
+  },
+  "storeLangNameRu": "Русский",
+  "@storeLangNameRu": {
+    "description": "翻译目标语言的自称：Русский。"
+  },
+  "storeLangNameZhCN": "简体中文",
+  "@storeLangNameZhCN": {
+    "description": "翻译目标语言的自称：简体中文。"
+  },
+  "storeTermTruncated": "… (truncated)",
+  "@storeTermTruncated": {
+    "description": "候选清单被截断时的省略标记。"
+  },
+  "storeWordRepoRoot": "the repository root",
+  "@storeWordRepoRoot": {
+    "description": "「仓库根」的展示名（安装来源是仓库根时用）。"
+  },
+  "uiActionCheckAll": "Check all",
+  "@uiActionCheckAll": {
+    "description": "按钮：检查全部更新。"
+  },
+  "uiActionCheckUpdate": "Check for updates",
+  "@uiActionCheckUpdate": {
+    "description": "按钮：检查更新。"
+  },
+  "uiActionCloseDetail": "Close details",
+  "@uiActionCloseDetail": {
+    "description": "按钮：关闭详情栏。"
+  },
+  "uiActionImportMeta": "Import metadata",
+  "@uiActionImportMeta": {
+    "description": "按钮：导入元数据。"
+  },
+  "uiActionInstall": "Install skill",
+  "@uiActionInstall": {
+    "description": "按钮：安装技能。"
+  },
+  "uiActionMoveTrash": "Move to trash",
+  "@uiActionMoveTrash": {
+    "description": "按钮：移入回收站。"
+  },
+  "uiActionPurge": "Delete permanently",
+  "@uiActionPurge": {
+    "description": "按钮：永久删除。"
+  },
+  "uiActionPurgeTooltip": "Delete a trashed skill permanently",
+  "@uiActionPurgeTooltip": {
+    "description": "按钮提示：永久删除回收站中的技能。"
+  },
+  "uiActionRefresh": "Refresh",
+  "@uiActionRefresh": {
+    "description": "按钮：刷新。"
+  },
+  "uiActionRemoveRoot": "Remove this directory from the list",
+  "@uiActionRemoveRoot": {
+    "description": "按钮：从列表移除该技能目录。"
+  },
+  "uiActionRestore": "Restore",
+  "@uiActionRestore": {
+    "description": "按钮：恢复。"
+  },
+  "uiCardNoDescription": "No description",
+  "@uiCardNoDescription": {
+    "description": "卡片上技能没有描述时的占位。"
+  },
+  "uiCardSwitchLabel": "{name} switch",
+  "@uiCardSwitchLabel": {
+    "description": "卡片上启用开关的无障碍名（技能名 + switch）。",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "uiCommonCancel": "Cancel",
+  "@uiCommonCancel": {
+    "description": "通用按钮：取消。"
+  },
+  "uiCommonClose": "Close",
+  "@uiCommonClose": {
+    "description": "通用按钮：关闭。"
+  },
+  "uiCommonListSep": ", ",
+  "@uiCommonListSep": {
+    "description": "列表项之间的分隔符。"
+  },
+  "uiCommonSave": "Save",
+  "@uiCommonSave": {
+    "description": "通用按钮：保存。"
+  },
+  "uiConfirmPurgeMessage": "Skill {name} will be deleted from the trash permanently and cannot be restored. A content snapshot is written first and kept in the kura data directory.",
+  "@uiConfirmPurgeMessage": {
+    "description": "永久删除确认框的正文。",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "uiConfirmPurgeTitle": "Delete permanently?",
+  "@uiConfirmPurgeTitle": {
+    "description": "永久删除确认框的标题。"
+  },
+  "uiConfirmTrashMessage": "Skill {name} will be moved from the skill directory to the kura trash and can be restored at any time. A content snapshot is written before the move.",
+  "@uiConfirmTrashMessage": {
+    "description": "移入回收站确认框的正文。",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "uiConfirmTrashOK": "Move to trash",
+  "@uiConfirmTrashOK": {
+    "description": "移入回收站确认框的确认按钮。"
+  },
+  "uiConfirmTrashTitle": "Move to the trash?",
+  "@uiConfirmTrashTitle": {
+    "description": "移入回收站确认框的标题。"
+  },
+  "uiDetailBusy": "Working on {name}…",
+  "@uiDetailBusy": {
+    "description": "详情栏：正在处理某个技能。",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "uiDetailCheckLabel": "Detail: check for updates",
+  "@uiDetailCheckLabel": {
+    "description": "详情栏的无障碍标签：检查更新。"
+  },
+  "uiDetailInstalledAt": "Installed",
+  "@uiDetailInstalledAt": {
+    "description": "详情栏字段名：安装时间。"
+  },
+  "uiDetailLoading": "Reading SKILL.md…",
+  "@uiDetailLoading": {
+    "description": "详情栏：正在读取 SKILL.md。"
+  },
+  "uiDetailLocation": "Location",
+  "@uiDetailLocation": {
+    "description": "详情栏字段名：位置。"
+  },
+  "uiDetailMetaFailed": "Could not read the metadata: {reason}",
+  "@uiDetailMetaFailed": {
+    "description": "详情栏：读取元数据失败。",
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "uiDetailMetaGroup": "Metadata",
+  "@uiDetailMetaGroup": {
+    "description": "详情栏分组标题：元数据。"
+  },
+  "uiDetailNoMeta": "No .kura-meta.json (not installed by kura, or the metadata was never imported)",
+  "@uiDetailNoMeta": {
+    "description": "详情栏：技能没有 .kura-meta.json。"
+  },
+  "uiDetailNoSkillMD": "No SKILL.md to show",
+  "@uiDetailNoSkillMD": {
+    "description": "详情栏：没有可展示的 SKILL.md。"
+  },
+  "uiDetailPurgeLabel": "Detail: delete permanently",
+  "@uiDetailPurgeLabel": {
+    "description": "详情栏的无障碍标签：永久删除。"
+  },
+  "uiDetailReadFailed": "Could not read SKILL.md: {reason}",
+  "@uiDetailReadFailed": {
+    "description": "详情栏：读取 SKILL.md 失败。",
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "uiDetailSource": "Source",
+  "@uiDetailSource": {
+    "description": "详情栏字段名：来源。"
+  },
+  "uiDetailTabFull": "Full text",
+  "@uiDetailTabFull": {
+    "description": "详情栏 tab：全文。"
+  },
+  "uiDetailTabOverview": "Overview",
+  "@uiDetailTabOverview": {
+    "description": "详情栏 tab：概览。"
+  },
+  "uiDetailTrashLabel": "Detail: move to trash",
+  "@uiDetailTrashLabel": {
+    "description": "详情栏的无障碍标签：移入回收站。"
+  },
+  "uiDetailUpdatedAt": "Updated",
+  "@uiDetailUpdatedAt": {
+    "description": "详情栏字段名：更新时间。"
+  },
+  "uiDiffAdded": "Added",
+  "@uiDiffAdded": {
+    "description": "文件差异状态：新增。"
+  },
+  "uiDiffModified": "Modified",
+  "@uiDiffModified": {
+    "description": "文件差异状态：修改。"
+  },
+  "uiDiffRemoved": "Removed",
+  "@uiDiffRemoved": {
+    "description": "文件差异状态：删除。"
+  },
+  "uiEmptyNoDisabled": "No disabled skills",
+  "@uiEmptyNoDisabled": {
+    "description": "技能区为空：没有已禁用的技能。"
+  },
+  "uiEmptyNoEnabled": "No enabled skills",
+  "@uiEmptyNoEnabled": {
+    "description": "技能区为空：没有已启用的技能。"
+  },
+  "uiEmptyNoMatch": "No skills match “{query}”",
+  "@uiEmptyNoMatch": {
+    "description": "技能区为空：搜索没有匹配。",
+    "placeholders": {
+      "query": {
+        "type": "String"
+      }
+    }
+  },
+  "uiEmptyNoMatchHint": "Try another keyword",
+  "@uiEmptyNoMatchHint": {
+    "description": "技能区为空的提示：换个关键词。"
+  },
+  "uiEmptyNoSkills": "No skills in this directory yet",
+  "@uiEmptyNoSkills": {
+    "description": "技能区为空：这个目录里还没有技能。"
+  },
+  "uiEmptyNoSkillsHint": "Click “Install skill” at the top right to install from GitHub or a local folder",
+  "@uiEmptyNoSkillsHint": {
+    "description": "技能区为空的引导：点右上角安装技能。"
+  },
+  "uiEmptyNoTrashed": "No skills in the trash",
+  "@uiEmptyNoTrashed": {
+    "description": "技能区为空：回收站里没有技能。"
+  },
+  "uiFileDialogAddRootButton": "Add",
+  "@uiFileDialogAddRootButton": {
+    "description": "文件夹选择框的按钮：添加。"
+  },
+  "uiFileDialogAddRootTitle": "Add skill directory",
+  "@uiFileDialogAddRootTitle": {
+    "description": "文件夹选择框的标题：添加技能目录。"
+  },
+  "uiFilterAll": "All {count, number, ::group-off}",
+  "@uiFilterAll": {
+    "description": "筛选栏分段：全部（带数量）。",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "uiFilterDisabled": "Disabled {count, number, ::group-off}",
+  "@uiFilterDisabled": {
+    "description": "筛选栏分段：已禁用（带数量）。",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "uiFilterEnabled": "Enabled {count, number, ::group-off}",
+  "@uiFilterEnabled": {
+    "description": "筛选栏分段：已启用（带数量）。",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "uiFilterTrashed": "Trash {count, number, ::group-off}",
+  "@uiFilterTrashed": {
+    "description": "筛选栏分段：回收站（带数量）。",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "uiInstallButton": "Install",
+  "@uiInstallButton": {
+    "description": "安装弹窗按钮：安装。"
+  },
+  "uiInstallButtonSelect": "Install selected skills",
+  "@uiInstallButtonSelect": {
+    "description": "安装弹窗按钮：安装选中的技能。"
+  },
+  "uiInstallButtonSelected": "Install {count, number, ::group-off} selected",
+  "@uiInstallButtonSelected": {
+    "description": "安装弹窗按钮：安装 N 个选中项。",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "uiInstallChoose": "Choose…",
+  "@uiInstallChoose": {
+    "description": "安装弹窗按钮：选择文件夹。"
+  },
+  "uiInstallConfirmA11y": "Confirm install",
+  "@uiInstallConfirmA11y": {
+    "description": "安装弹窗的无障碍名：确认安装。"
+  },
+  "uiInstallFailItem": "{name}: {reason}",
+  "@uiInstallFailItem": {
+    "description": "安装弹窗的结果行：单个技能安装失败。",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "uiInstallFolder": "Folder",
+  "@uiInstallFolder": {
+    "description": "安装弹窗字段名：本地文件夹。"
+  },
+  "uiInstallFolderPlaceholder": "Folder containing SKILL.md",
+  "@uiInstallFolderPlaceholder": {
+    "description": "安装弹窗输入框占位：含 SKILL.md 的文件夹。"
+  },
+  "uiInstallHintCandidates": "Select the skills to install (multiple allowed) and use the button below to install them at once; each name comes from its own SKILL.md (when you select one, the “Install name” above is used).",
+  "@uiInstallHintCandidates": {
+    "description": "安装弹窗的说明：多候选的安装方式。"
+  },
+  "uiInstallHintGitHub": "Clones the repository with your local git; when the subdirectory is empty, skills in the repository are discovered automatically.",
+  "@uiInstallHintGitHub": {
+    "description": "安装弹窗的说明：从 GitHub 安装会本地 clone 并自动发现技能。"
+  },
+  "uiInstallName": "Install name",
+  "@uiInstallName": {
+    "description": "安装弹窗字段名：安装名。"
+  },
+  "uiInstallNamePlaceholder": "Optional; defaults to the name in SKILL.md",
+  "@uiInstallNamePlaceholder": {
+    "description": "安装弹窗输入框占位：安装名可选。"
+  },
+  "uiInstallNoCandidates": "store: no skill directory containing SKILL.md was found in the repository",
+  "@uiInstallNoCandidates": {
+    "description": "安装弹窗：仓库里没有找到含 SKILL.md 的技能目录。"
+  },
+  "uiInstallRef": "Branch/tag",
+  "@uiInstallRef": {
+    "description": "安装弹窗字段名：分支/标签。"
+  },
+  "uiInstallRefPlaceholder": "Optional; uses the default branch",
+  "@uiInstallRefPlaceholder": {
+    "description": "安装弹窗输入框占位：分支可选。"
+  },
+  "uiInstallRepo": "Repository",
+  "@uiInstallRepo": {
+    "description": "安装弹窗字段名：仓库。"
+  },
+  "uiInstallRepoOrBranchChanged": "The repository or branch changed; click “Install” to discover skills again.",
+  "@uiInstallRepoOrBranchChanged": {
+    "description": "安装弹窗提示：仓库或分支变了，需重新发现技能。"
+  },
+  "uiInstallRepoPlaceholder": "owner/repo, or paste a GitHub URL",
+  "@uiInstallRepoPlaceholder": {
+    "description": "安装弹窗输入框占位：owner/repo 或 GitHub URL。"
+  },
+  "uiInstallRepoRoot": "Repository root",
+  "@uiInstallRepoRoot": {
+    "description": "安装来源展示名：仓库根。"
+  },
+  "uiInstallSelectAll": "Select all",
+  "@uiInstallSelectAll": {
+    "description": "安装弹窗按钮：全选。"
+  },
+  "uiInstallSelectNone": "Deselect all",
+  "@uiInstallSelectNone": {
+    "description": "安装弹窗按钮：全不选。"
+  },
+  "uiInstallSourceGitHub": "GitHub repository",
+  "@uiInstallSourceGitHub": {
+    "description": "安装来源选项：GitHub 仓库。"
+  },
+  "uiInstallSourceLocal": "Local folder",
+  "@uiInstallSourceLocal": {
+    "description": "安装来源选项：本地文件夹。"
+  },
+  "uiInstallSubPath": "Subdirectory",
+  "@uiInstallSubPath": {
+    "description": "安装弹窗字段名：子目录。"
+  },
+  "uiInstallSubPathPlaceholder": "Optional; leave empty to discover automatically",
+  "@uiInstallSubPathPlaceholder": {
+    "description": "安装弹窗输入框占位：子目录可留空自动发现。"
+  },
+  "uiInstallSubtitle": "Installing into {root}",
+  "@uiInstallSubtitle": {
+    "description": "安装弹窗副标题：安装到某个根目录。",
+    "placeholders": {
+      "root": {
+        "type": "String"
+      }
+    }
+  },
+  "uiInstallTotal": "Skills: {count, number, ::group-off}",
+  "@uiInstallTotal": {
+    "description": "安装弹窗的计数：技能数。",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "uiMarkdownTruncated": "(content too long; truncated)",
+  "@uiMarkdownTruncated": {
+    "description": "全文页提示：内容过长已截断。"
+  },
+  "uiMenuCopyPath": "Copy path",
+  "@uiMenuCopyPath": {
+    "description": "右键菜单项：复制路径。"
+  },
+  "uiMenuDisable": "Disable",
+  "@uiMenuDisable": {
+    "description": "右键菜单项：禁用。"
+  },
+  "uiMenuEnable": "Enable",
+  "@uiMenuEnable": {
+    "description": "右键菜单项：启用。"
+  },
+  "uiMenuMoveTrash": "Move to trash…",
+  "@uiMenuMoveTrash": {
+    "description": "右键菜单项：移入回收站。"
+  },
+  "uiMenuOpenFolder": "Open folder",
+  "@uiMenuOpenFolder": {
+    "description": "右键菜单项：打开文件夹。"
+  },
+  "uiMenuOpenSkillMD": "Open SKILL.md",
+  "@uiMenuOpenSkillMD": {
+    "description": "右键菜单项：打开 SKILL.md。"
+  },
+  "uiMenuPurge": "Delete permanently…",
+  "@uiMenuPurge": {
+    "description": "右键菜单项：永久删除。"
+  },
+  "uiMenuRemoveFromList": "Remove from list",
+  "@uiMenuRemoveFromList": {
+    "description": "右键菜单项：从列表移除。"
+  },
+  "uiMenuRestore": "Restore to skill directory",
+  "@uiMenuRestore": {
+    "description": "右键菜单项：恢复到技能目录。"
+  },
+  "uiMenuRevealFolder": "Show in folder",
+  "@uiMenuRevealFolder": {
+    "description": "右键菜单项：在文件管理器中显示。"
+  },
+  "uiPanicIconDecode": "ui: could not decode the app icon: {reason}",
+  "@uiPanicIconDecode": {
+    "description": "崩溃提示：无法解码应用图标。",
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "uiPillBadMeta": "Corrupt metadata",
+  "@uiPillBadMeta": {
+    "description": "卡片状态标签：元数据损坏。"
+  },
+  "uiPillHasUpdate": "Update available",
+  "@uiPillHasUpdate": {
+    "description": "卡片状态标签：有可用更新。"
+  },
+  "uiPillNoSkillMD": "Missing SKILL.md",
+  "@uiPillNoSkillMD": {
+    "description": "卡片状态标签：缺少 SKILL.md。"
+  },
+  "uiRailCheckUpdateTip": "Check for kura app updates",
+  "@uiRailCheckUpdateTip": {
+    "description": "左栏按钮提示：检查 kura 应用更新。"
+  },
+  "uiRailSettingsTip": "Translation API and target language",
+  "@uiRailSettingsTip": {
+    "description": "左栏按钮提示：翻译 API 与目标语言。"
+  },
+  "uiReviewApply": "Apply update",
+  "@uiReviewApply": {
+    "description": "更新评审面板按钮：应用更新。"
+  },
+  "uiReviewApplyAll": "Apply all updates",
+  "@uiReviewApplyAll": {
+    "description": "更新评审面板按钮：应用全部更新。"
+  },
+  "uiReviewApplying": "Applying…",
+  "@uiReviewApplying": {
+    "description": "更新评审面板：正在应用。"
+  },
+  "uiReviewBasisCommit": "upstream commit unchanged",
+  "@uiReviewBasisCommit": {
+    "description": "更新评审面板：依据是上游 commit 未变。"
+  },
+  "uiReviewBasisTree": "upstream directory unchanged",
+  "@uiReviewBasisTree": {
+    "description": "更新评审面板：依据是上游目录未变。"
+  },
+  "uiReviewCheckFailed": "Check failed",
+  "@uiReviewCheckFailed": {
+    "description": "更新评审面板：检查失败。"
+  },
+  "uiReviewCounts": "+{added, number, ::group-off} ~{modified, number, ::group-off} -{removed, number, ::group-off} ({files, number, ::group-off} file(s))",
+  "@uiReviewCounts": {
+    "description": "更新评审面板的计数：+新增 ~修改 -删除（文件数）。",
+    "placeholders": {
+      "added": {
+        "type": "int",
+        "example": "3"
+      },
+      "modified": {
+        "type": "int",
+        "example": "3"
+      },
+      "removed": {
+        "type": "int",
+        "example": "3"
+      },
+      "files": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "uiReviewLatest": "Up to date",
+  "@uiReviewLatest": {
+    "description": "更新评审面板：已是最新。"
+  },
+  "uiReviewLocalChanged": "Changed locally",
+  "@uiReviewLocalChanged": {
+    "description": "更新评审面板：本地有改动。"
+  },
+  "uiReviewLocalModified": "The installed content differs from what was installed (modified locally)",
+  "@uiReviewLocalModified": {
+    "description": "更新评审面板：本地内容被改动过。"
+  },
+  "uiReviewLocalModifiedWithChanges": "The installed content differs from what was installed (modified locally), and applying the update will overwrite these changes (old contents are in a snapshot)",
+  "@uiReviewLocalModifiedWithChanges": {
+    "description": "更新评审面板：本地有改动且应用更新会覆盖。"
+  },
+  "uiReviewMetaCommit": "upstream commit: {commit}",
+  "@uiReviewMetaCommit": {
+    "description": "更新评审面板字段：上游 commit。",
+    "placeholders": {
+      "commit": {
+        "type": "String"
+      }
+    }
+  },
+  "uiReviewMetaSource": "Source: {source}",
+  "@uiReviewMetaSource": {
+    "description": "更新评审面板字段：来源。",
+    "placeholders": {
+      "source": {
+        "type": "String"
+      }
+    }
+  },
+  "uiReviewNewHash": "new {hash}",
+  "@uiReviewNewHash": {
+    "description": "更新评审面板：新内容哈希。",
+    "placeholders": {
+      "hash": {
+        "type": "String"
+      }
+    }
+  },
+  "uiReviewNoResult": "No check results to show",
+  "@uiReviewNoResult": {
+    "description": "更新评审面板：没有可展示的检查结果。"
+  },
+  "uiReviewNothingToCheck": "No skills to check in this directory",
+  "@uiReviewNothingToCheck": {
+    "description": "更新评审面板：这个目录里没有可检查的技能。"
+  },
+  "uiReviewOldHash": "old {hash}",
+  "@uiReviewOldHash": {
+    "description": "更新评审面板：旧内容哈希。",
+    "placeholders": {
+      "hash": {
+        "type": "String"
+      }
+    }
+  },
+  "uiReviewScanFailed": "Scan failed: {reason}",
+  "@uiReviewScanFailed": {
+    "description": "更新评审面板：扫描失败。",
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "uiReviewTitle": "Update {name}",
+  "@uiReviewTitle": {
+    "description": "更新评审面板标题：更新某个技能。",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "uiReviewUpToDate": "Matches upstream; nothing to update",
+  "@uiReviewUpToDate": {
+    "description": "更新评审面板：与上游一致，无需更新。"
+  },
+  "uiRootsAddFolder": "Add folder",
+  "@uiRootsAddFolder": {
+    "description": "左栏按钮：添加文件夹。"
+  },
+  "uiRootsLoadFailed": "Could not read the directory list: {reason}",
+  "@uiRootsLoadFailed": {
+    "description": "左栏：读取目录列表失败。",
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "uiRootsSettingsLoadFailed": "Could not read the settings: {reason}",
+  "@uiRootsSettingsLoadFailed": {
+    "description": "左栏：读取设置失败。",
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "uiRootsTitle": "Skill directories",
+  "@uiRootsTitle": {
+    "description": "左栏标题：技能目录。"
+  },
+  "uiSearchPlaceholder": "Search skills",
+  "@uiSearchPlaceholder": {
+    "description": "搜索框占位文字。"
+  },
+  "uiSettingsApiKey": "API key",
+  "@uiSettingsApiKey": {
+    "description": "设置弹窗字段名：API 密钥。"
+  },
+  "uiSettingsBaseURL": "API URL",
+  "@uiSettingsBaseURL": {
+    "description": "设置弹窗字段名：API 地址。"
+  },
+  "uiSettingsIncomplete": "Fill in the API URL, the key and the model to translate skill descriptions.",
+  "@uiSettingsIncomplete": {
+    "description": "设置弹窗提示：翻译配置不完整。"
+  },
+  "uiSettingsInterfaceLang": "Language",
+  "@uiSettingsInterfaceLang": {
+    "description": "设置弹窗字段名：界面语言。"
+  },
+  "uiSettingsLangSystem": "System",
+  "@uiSettingsLangSystem": {
+    "description": "界面语言选项：跟随系统。"
+  },
+  "uiSettingsLoadFailed": "Could not read the settings file; saving will overwrite it: {reason}",
+  "@uiSettingsLoadFailed": {
+    "description": "设置弹窗：读取设置文件失败，保存会覆盖它。",
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "uiSettingsModel": "Model",
+  "@uiSettingsModel": {
+    "description": "设置弹窗字段名：模型。"
+  },
+  "uiSettingsSaveA11y": "Confirm save",
+  "@uiSettingsSaveA11y": {
+    "description": "设置弹窗的无障碍名：确认保存。"
+  },
+  "uiSettingsSecretNote": "The key is stored in plain text at ~/.kura/settings.json. Translations are shown in the interface only; skill files are never modified.",
+  "@uiSettingsSecretNote": {
+    "description": "设置弹窗说明：密钥明文保存、译文只用于界面显示。"
+  },
+  "uiSettingsTargetLang": "Target language",
+  "@uiSettingsTargetLang": {
+    "description": "设置弹窗字段名：目标语言。"
+  },
+  "uiSettingsTitle": "Settings",
+  "@uiSettingsTitle": {
+    "description": "设置弹窗标题。"
+  },
+  "uiSettingsTranslateHeading": "Translation API (OpenAI-compatible)",
+  "@uiSettingsTranslateHeading": {
+    "description": "设置弹窗分组标题：翻译 API（OpenAI 兼容）。"
+  },
+  "uiSettingsUnknownTargetLang": "The saved target language was not recognized; reset to {fallback}. Save to apply.",
+  "@uiSettingsUnknownTargetLang": {
+    "description": "设置弹窗提示：保存的目标语言无法识别，已重置。",
+    "placeholders": {
+      "fallback": {
+        "type": "String"
+      }
+    }
+  },
+  "uiSourceLocal": "Local",
+  "@uiSourceLocal": {
+    "description": "来源类型：本地。"
+  },
+  "uiSourceNoMeta": "No metadata",
+  "@uiSourceNoMeta": {
+    "description": "来源：没有元数据。"
+  },
+  "uiSourceUnknown": "Unknown source",
+  "@uiSourceUnknown": {
+    "description": "来源：未知来源。"
+  },
+  "uiSourceUnknownType": "Unknown",
+  "@uiSourceUnknownType": {
+    "description": "来源类型：未知。"
+  },
+  "uiStateDisabled": "Disabled",
+  "@uiStateDisabled": {
+    "description": "技能状态短标签：已禁用。"
+  },
+  "uiStateEnabled": "Enabled",
+  "@uiStateEnabled": {
+    "description": "技能状态短标签：已启用。"
+  },
+  "uiStateTrashed": "Trash",
+  "@uiStateTrashed": {
+    "description": "技能状态短标签：回收站。"
+  },
+  "uiStatusAppUpdateChecking": "Checking for kura updates…",
+  "@uiStatusAppUpdateChecking": {
+    "description": "状态行：正在检查 kura 应用更新。"
+  },
+  "uiStatusAppUpdateNotReady": "Updates are not available (this development build has no update plugin)",
+  "@uiStatusAppUpdateNotReady": {
+    "description": "状态行：更新不可用（开发构建没有更新插件）。"
+  },
+  "uiStatusCandidates": "The repository has {count, number, ::group-off} skills; select the ones to install",
+  "@uiStatusCandidates": {
+    "description": "状态行：仓库里有多个技能候选，请选择。",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "uiStatusCheckFailed": "Check failed for {name}: {reason}",
+  "@uiStatusCheckFailed": {
+    "description": "状态行：某个技能的更新检查失败。",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "reason": {
+        "type": "Object"
+      }
+    }
+  },
+  "uiStatusCheckSummary": "{name}: {added, number, ::group-off} added · {modified, number, ::group-off} modified · {removed, number, ::group-off} removed ({files, number, ::group-off} file(s))",
+  "@uiStatusCheckSummary": {
+    "description": "状态行：单个技能的检查结果汇总。",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "added": {
+        "type": "int",
+        "example": "3"
+      },
+      "modified": {
+        "type": "int",
+        "example": "3"
+      },
+      "removed": {
+        "type": "int",
+        "example": "3"
+      },
+      "files": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "uiStatusCheckedAll": "Checked: {count, number, ::group-off}",
+  "@uiStatusCheckedAll": {
+    "description": "状态行：已检查的技能数。",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "uiStatusCheckingAll": "Checking all skills for updates…",
+  "@uiStatusCheckingAll": {
+    "description": "状态行：正在检查全部技能的更新。"
+  },
+  "uiStatusCheckingUpdate": "Checking {name} for updates…",
+  "@uiStatusCheckingUpdate": {
+    "description": "状态行：正在检查某个技能的更新。",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "uiStatusDisabled": "Disabled {name}",
+  "@uiStatusDisabled": {
+    "description": "状态行：已禁用某个技能。",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "uiStatusDiscoverRootsFailed": "Could not discover agent skill directories: {reason}",
+  "@uiStatusDiscoverRootsFailed": {
+    "description": "状态行：自动发现技能目录失败。",
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "uiStatusDiscovering": "Looking for skills in the repository…",
+  "@uiStatusDiscovering": {
+    "description": "状态行：正在仓库里查找技能。"
+  },
+  "uiStatusDiscoveryFailed": "Discovery failed",
+  "@uiStatusDiscoveryFailed": {
+    "description": "状态行：发现技能失败。"
+  },
+  "uiStatusEnabled": "Enabled {name}",
+  "@uiStatusEnabled": {
+    "description": "状态行：已启用某个技能。",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "uiStatusImported": "Imported metadata: {count, number, ::group-off}",
+  "@uiStatusImported": {
+    "description": "状态行：已导入元数据的技能数。",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "uiStatusInstallFailed": "Install failed",
+  "@uiStatusInstallFailed": {
+    "description": "状态行：安装失败。"
+  },
+  "uiStatusInstalled": "Installed {name}",
+  "@uiStatusInstalled": {
+    "description": "状态行：已安装某个技能。",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "uiStatusInstalledCount": "Installed {count, number, ::group-off} skills",
+  "@uiStatusInstalledCount": {
+    "description": "状态行：已安装的技能数。",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "uiStatusInstalledPartial": "Installed {installed, number, ::group-off}, {failed, number, ::group-off} failed",
+  "@uiStatusInstalledPartial": {
+    "description": "状态行：部分安装成功、部分失败。",
+    "placeholders": {
+      "installed": {
+        "type": "int",
+        "example": "3"
+      },
+      "failed": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "uiStatusInstalling": "Installing…",
+  "@uiStatusInstalling": {
+    "description": "状态行：正在安装。"
+  },
+  "uiStatusLangSaveFailed": "Could not save the interface language: {reason}",
+  "@uiStatusLangSaveFailed": {
+    "description": "状态行：界面语言保存失败。",
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "uiStatusMovedToTrash": "Moved {name} to the trash",
+  "@uiStatusMovedToTrash": {
+    "description": "状态行：已把某个技能移入回收站。",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "uiStatusMovingToTrash": "Moving {name} to the trash…",
+  "@uiStatusMovingToTrash": {
+    "description": "状态行：正在把某个技能移入回收站。",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "uiStatusNothingToImport": "Nothing to import (no lock file, or every skill already has metadata)",
+  "@uiStatusNothingToImport": {
+    "description": "状态行：没有可导入的元数据。"
+  },
+  "uiStatusOpenFailed": "Could not open {path}: {reason}",
+  "@uiStatusOpenFailed": {
+    "description": "状态行：打开路径失败。",
+    "placeholders": {
+      "path": {
+        "type": "String"
+      },
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "uiStatusPathCopied": "Copied path {path}",
+  "@uiStatusPathCopied": {
+    "description": "状态行：已复制路径。",
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "uiStatusPickFolderFailed": "Could not choose a folder: {reason}",
+  "@uiStatusPickFolderFailed": {
+    "description": "状态行：选择文件夹失败。",
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "uiStatusPurged": "Deleted {name} permanently",
+  "@uiStatusPurged": {
+    "description": "状态行：已永久删除某个技能。",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "uiStatusPurging": "Deleting {name} permanently…",
+  "@uiStatusPurging": {
+    "description": "状态行：正在永久删除某个技能。",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "uiStatusRepoChanged": "The repository or branch changed; click “Install” to discover skills again.",
+  "@uiStatusRepoChanged": {
+    "description": "状态行：仓库或分支变了，需重新发现技能。"
+  },
+  "uiStatusRestored": "Restored {name}",
+  "@uiStatusRestored": {
+    "description": "状态行：已恢复某个技能。",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "uiStatusRestoring": "Restoring {name}…",
+  "@uiStatusRestoring": {
+    "description": "状态行：正在恢复某个技能。",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "uiStatusRootAdded": "Added directory {path}",
+  "@uiStatusRootAdded": {
+    "description": "状态行：已添加技能目录。",
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "uiStatusRootMissing": "The skill directory does not exist: {path}",
+  "@uiStatusRootMissing": {
+    "description": "状态行：技能目录不存在。",
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "uiStatusRootRemoved": "Removed {path} from the list (the folder is untouched)",
+  "@uiStatusRootRemoved": {
+    "description": "状态行：已从列表移除目录（磁盘未动）。",
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "uiStatusRootsDiscovered": "Auto-added skill directories: {count, number, ::group-off}",
+  "@uiStatusRootsDiscovered": {
+    "description": "状态行：自动添加的技能目录数。",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "uiStatusSavingSettings": "Saving settings…",
+  "@uiStatusSavingSettings": {
+    "description": "状态行：正在保存设置。"
+  },
+  "uiStatusScanned": "Scanned: {count, number, ::group-off}",
+  "@uiStatusScanned": {
+    "description": "状态行：已扫描的技能数。",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "uiStatusSettingsSaveFailed": "Could not save the settings: {reason}",
+  "@uiStatusSettingsSaveFailed": {
+    "description": "状态行：设置保存失败。",
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "uiStatusSettingsSaved": "Settings saved",
+  "@uiStatusSettingsSaved": {
+    "description": "状态行：设置已保存。"
+  },
+  "uiStatusSettingsSavedShort": "Settings saved, but the translation API is incomplete, so translation is unavailable for now",
+  "@uiStatusSettingsSavedShort": {
+    "description": "状态行：设置已保存但翻译配置不完整。"
+  },
+  "uiStatusSkillFound": "Found skill {name}",
+  "@uiStatusSkillFound": {
+    "description": "状态行：找到了某个技能。",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "uiStatusSubPathFilled": "The subdirectory is filled in; click “Install” to install it",
+  "@uiStatusSubPathFilled": {
+    "description": "状态行：已填入子目录，点安装。"
+  },
+  "uiStatusThemeSaveFailed": "Could not save the appearance preference: {reason}",
+  "@uiStatusThemeSaveFailed": {
+    "description": "状态行：外观偏好保存失败。",
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "uiStatusToggling": "Switching {name}…",
+  "@uiStatusToggling": {
+    "description": "状态行：正在切换某个技能。",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "uiStatusTotal": "Skills: {count, number, ::group-off}",
+  "@uiStatusTotal": {
+    "description": "状态行：技能总数。",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "uiStatusUpdateFailed": "Update failed: {reason}",
+  "@uiStatusUpdateFailed": {
+    "description": "状态行：更新失败。",
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "uiStatusUpdated": "Updated: {count, number, ::group-off} (old contents are in snapshots)",
+  "@uiStatusUpdated": {
+    "description": "状态行：已更新的技能数（旧内容在快照里）。",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "uiStatusUpdatedPartial": "{updated, number, ::group-off} updated, {failed, number, ::group-off} failed: {reason}",
+  "@uiStatusUpdatedPartial": {
+    "description": "状态行：部分更新成功、部分失败。",
+    "placeholders": {
+      "updated": {
+        "type": "int",
+        "example": "3"
+      },
+      "failed": {
+        "type": "int",
+        "example": "3"
+      },
+      "reason": {
+        "type": "Object"
+      }
+    }
+  },
+  "uiStatusUpdating": "Updating {name}…",
+  "@uiStatusUpdating": {
+    "description": "状态行：正在更新某个技能。",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "uiStatusViewSaveFailed": "Could not save the layout mode: {reason}",
+  "@uiStatusViewSaveFailed": {
+    "description": "状态行：排列模式保存失败。",
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "uiThemeDark": "Dark",
+  "@uiThemeDark": {
+    "description": "外观选项：深色。"
+  },
+  "uiThemeLabel": "Appearance",
+  "@uiThemeLabel": {
+    "description": "外观开关的标签。"
+  },
+  "uiThemeLight": "Light",
+  "@uiThemeLight": {
+    "description": "外观选项：浅色。"
+  },
+  "uiThemeSystem": "Auto",
+  "@uiThemeSystem": {
+    "description": "外观选项：跟随系统。"
+  },
+  "uiTranslateChunkEmpty": "part {index, number, ::group-off}/{total, number, ::group-off}: the translation was empty",
+  "@uiTranslateChunkEmpty": {
+    "description": "译文模式：某一段的翻译结果为空。",
+    "placeholders": {
+      "index": {
+        "type": "int",
+        "example": "3"
+      },
+      "total": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "uiTranslateChunkFailed": "part {index, number, ::group-off}/{total, number, ::group-off}: {reason}",
+  "@uiTranslateChunkFailed": {
+    "description": "译文模式：某一段的翻译失败。",
+    "placeholders": {
+      "index": {
+        "type": "int",
+        "example": "3"
+      },
+      "total": {
+        "type": "int",
+        "example": "3"
+      },
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "uiTranslateConfigChanged": "The translation settings changed",
+  "@uiTranslateConfigChanged": {
+    "description": "译文模式提示：翻译设置已变更。"
+  },
+  "uiTranslateDisplayLang": "Display language",
+  "@uiTranslateDisplayLang": {
+    "description": "译文模式的无障碍名：显示语言。"
+  },
+  "uiTranslateEmptyResult": "The translation was empty",
+  "@uiTranslateEmptyResult": {
+    "description": "译文模式提示：翻译结果为空。"
+  },
+  "uiTranslateFailed": "Translation failed: {reason} (switch back to Original and then to Translated to retry)",
+  "@uiTranslateFailed": {
+    "description": "译文模式提示：概览翻译失败。",
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "uiTranslateFullFailed": "Full-text translation failed: {reason} (switch back to Original and then to Translated to retry)",
+  "@uiTranslateFullFailed": {
+    "description": "译文模式提示：全文翻译失败。",
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "uiTranslateFullInProgress": "Translating the full text…",
+  "@uiTranslateFullInProgress": {
+    "description": "译文模式：正在翻译全文。"
+  },
+  "uiTranslateInProgress": "Translating…",
+  "@uiTranslateInProgress": {
+    "description": "译文模式：正在翻译。"
+  },
+  "uiTranslateLabel": "Translation",
+  "@uiTranslateLabel": {
+    "description": "译文模式的分段标签：翻译。"
+  },
+  "uiTranslateNotConfigured": "Set up the translation API in Settings first",
+  "@uiTranslateNotConfigured": {
+    "description": "译文模式提示：请先在设置里配置翻译 API。"
+  },
+  "uiTranslateNote": "Translated · {targetLang} · shown in the interface only; skill files are not modified",
+  "@uiTranslateNote": {
+    "description": "译文模式说明：译文只用于界面显示，不改技能文件。",
+    "placeholders": {
+      "targetLang": {
+        "type": "String"
+      }
+    }
+  },
+  "uiTranslateOpenSettings": "Open settings",
+  "@uiTranslateOpenSettings": {
+    "description": "译文模式按钮：打开设置。"
+  },
+  "uiTranslateOriginal": "Original",
+  "@uiTranslateOriginal": {
+    "description": "译文模式选项：原文。"
+  },
+  "uiTranslateTranslated": "Translated",
+  "@uiTranslateTranslated": {
+    "description": "译文模式选项：译文。"
+  },
+  "uiViewGrid": "Grid",
+  "@uiViewGrid": {
+    "description": "排列模式选项：卡片网格。"
+  },
+  "uiViewLabel": "Layout",
+  "@uiViewLabel": {
+    "description": "排列模式开关的标签。"
+  },
+  "uiViewList": "List",
+  "@uiViewList": {
+    "description": "排列模式选项：列表。"
+  }
+}

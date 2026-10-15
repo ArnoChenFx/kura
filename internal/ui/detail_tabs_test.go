@@ -4,6 +4,7 @@
 package ui
 
 import (
+	"github.com/ArnoChenFx/kura/locales"
 	"os"
 	"path/filepath"
 	"strings"
@@ -57,7 +58,7 @@ func TestDetailTabResetsOnSkillSwitch(t *testing.T) {
 	tt := showApp(a, 1280, 800)
 
 	click(t, a, tt, "alpha")
-	detClickTab(t, a, tt, detailTabFull)
+	detClickTab(t, a, tt, locales.UiDetailTabFull())
 	if a.detailTab != 1 {
 		t.Fatalf("点「全文」后 detailTab = %d，想要 1", a.detailTab)
 	}
@@ -95,7 +96,7 @@ func TestDetailFullTextMissing(t *testing.T) {
 	}
 	tt := showApp(a, 1280, 800)
 	click(t, a, tt, "hollow")
-	detClickTab(t, a, tt, detailTabFull)
+	detClickTab(t, a, tt, locales.UiDetailTabFull())
 	a.settle()
 	refresh(a, tt)
 	if !detHasText(tt, "没有 SKILL.md 可显示") {
@@ -113,7 +114,7 @@ func TestDetailFullTextMissing(t *testing.T) {
 	refresh(a, tt)
 	click(t, a, tt, "回收站 1")
 	click(t, a, tt, "binned")
-	detClickTab(t, a, tt, detailTabFull)
+	detClickTab(t, a, tt, locales.UiDetailTabFull())
 	a.settle()
 	refresh(a, tt)
 	if !detHasText(tt, "没有 SKILL.md 可显示") {
@@ -131,7 +132,7 @@ func TestDetailFullTextRendersMarkdown(t *testing.T) {
 	tt := showApp(a, 1280, 800)
 
 	click(t, a, tt, "docned")
-	detClickTab(t, a, tt, detailTabFull)
+	detClickTab(t, a, tt, locales.UiDetailTabFull())
 	a.settle()
 	refresh(a, tt)
 	for _, want := range []string{"全文标题", "第一段正文。", "第一项", "kura list"} {
@@ -149,11 +150,11 @@ func TestDetailFullTextRendersMarkdown(t *testing.T) {
 	if len(a.skillDocs) != 1 {
 		t.Fatalf("全文应有 1 份缓存，得到 %v", a.skillDocs)
 	}
-	detClickTab(t, a, tt, detailTabOverview)
+	detClickTab(t, a, tt, locales.UiDetailTabOverview())
 	if a.detailTab != 0 || !detHasText(tt, "位置") {
 		t.Errorf("应切回概览页，文本 %v", tt.Texts())
 	}
-	detClickTab(t, a, tt, detailTabFull)
+	detClickTab(t, a, tt, locales.UiDetailTabFull())
 	for _, want := range []string{"全文标题", "kura list"} {
 		if !detHasText(tt, want) {
 			t.Errorf("再次进全文页应命中缓存渲染出 %q，文本 %v", want, tt.Texts())

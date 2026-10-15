@@ -22,6 +22,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/ArnoChenFx/kura/internal/i18n"
+	"github.com/ArnoChenFx/kura/locales"
 )
 
 // errSnippetMax 是非 2xx 时错误信息里携带的响应体最大字节数。截断是为了
@@ -109,13 +110,13 @@ func (s *Settings) Translate(ctx context.Context, text string) (string, error) {
 	})
 	if err != nil {
 		// 结构体是静态的，正常不会走到这里；兜住并给出目录里的错误。
-		return "", i18n.Wrapf(err, "store.err.translateRequest")
+		return "", i18n.Wrapf(err, "storeErrTranslateRequest", func() string { return locales.StoreErrTranslateRequest() })
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 	if err != nil {
 		// URL 非法等构造期错误；带上端点便于用户发现 BaseURL 填错。
-		return "", i18n.Wrapf(err, "store.err.translateEndpoint", endpoint)
+		return "", i18n.Wrapf(err, "storeErrTranslateEndpoint", func() string { return locales.StoreErrTranslateEndpoint(endpoint) })
 	}
 	req.Header.Set("Content-Type", "application/json")
 	// Authorization 只进请求头；本函数的任何错误路径都不会打印 req。
@@ -125,7 +126,7 @@ func (s *Settings) Translate(ctx context.Context, text string) (string, error) {
 	if err != nil {
 		// 网络错误 / ctx 超时：原样包装，带上原因（*url.Error 已含取消语义）。
 		// 不打印 req（里面有 Authorization 头）。
-		return "", i18n.Wrapf(err, "store.err.translateDo")
+		return "", i18n.Wrapf(err, "storeErrTranslateDo", func() string { return locales.StoreErrTranslateDo() })
 	}
 	defer resp.Body.Close() //nolint:errcheck // 只读响应体，关闭失败无可恢复
 
@@ -134,27 +135,27 @@ func (s *Settings) Translate(ctx context.Context, text string) (string, error) {
 	// 会是空，短响应体会被截成空串导致 JSON 解析失败（这里曾有此 bug）。
 	full, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
 	if err != nil {
-		return "", i18n.Wrapf(err, "store.err.translateRead")
+		return "", i18n.Wrapf(err, "storeErrTranslateRead", func() string { return locales.StoreErrTranslateRead() })
 	}
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
 		// 错误信息只带响应体前 errSnippetMax 字节：够看清 401/429 的 JSON
 		// 错误说明，又不会把整页 HTML 错误页塞进弹窗。
-		return "", i18n.Errorf("store.err.translateStatus", resp.StatusCode, snippetOf(full))
+		return "", i18n.NewError("storeErrTranslateStatus", func() string { return locales.StoreErrTranslateStatus(resp.StatusCode, snippetOf(full)) })
 	}
 
 	var cr chatResponse
 	if err := json.Unmarshal(full, &cr); err != nil {
 		// 响应不是合法 JSON（常见于网关返回 HTML 或被代理劫持的页面）。
-		return "", i18n.Wrapf(err, "store.err.translateParse")
+		return "", i18n.Wrapf(err, "storeErrTranslateParse", func() string { return locales.StoreErrTranslateParse() })
 	}
 	if len(cr.Choices) == 0 {
 		// 合法 JSON 但没有 choices：模型拒绝输出、或服务端行为异常。
-		return "", i18n.NewError("store.err.translateNoChoices")
+		return "", i18n.NewError("storeErrTranslateNoChoices", func() string { return locales.StoreErrTranslateNoChoices() })
 	}
 	content := cr.Choices[0].Message.Content
 	if strings.TrimSpace(content) == "" {
 		// 有 choices 但内容为空：不把空串当成功返回，UI 会当成翻译消失。
-		return "", i18n.NewError("store.err.translateEmpty")
+		return "", i18n.NewError("storeErrTranslateEmpty", func() string { return locales.StoreErrTranslateEmpty() })
 	}
 	return content, nil
 }
@@ -181,7 +182,7 @@ func snippetOf(data []byte) string {
 	out := b.String()
 	out = strings.TrimSpace(out)
 	if len(data) >= errSnippetMax && out != "" {
-		out += i18n.T("store.term.truncated")
+		out += locales.StoreTermTruncated()
 	}
 	return out
 }

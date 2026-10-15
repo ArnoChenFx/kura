@@ -7,6 +7,7 @@
 package ui
 
 import (
+	"github.com/ArnoChenFx/kura/locales"
 	"os"
 	"path/filepath"
 	"strings"
@@ -204,7 +205,7 @@ func TestFullTextShowsTranslatedSource(t *testing.T) {
 	click(t, a, tt, "译文")
 	a.settle()
 	tt.Frame()
-	detClickTab(t, a, tt, detailTabFull)
+	detClickTab(t, a, tt, locales.UiDetailTabFull())
 	a.settle()
 	refresh(a, tt)
 	if f.calls == 0 {
@@ -250,15 +251,15 @@ func TestViewMarkdownShowsTruncatedNotice(t *testing.T) {
 		tt.Frame()
 		return ftAll(tt)
 	}
-	if got := show(false); strings.Contains(got, mdTruncatedNotice) {
+	if got := show(false); strings.Contains(got, locales.UiMarkdownTruncated()) {
 		t.Errorf("未截断时不应有提示：\n%s", got)
 	}
 	got := show(true)
 	if !strings.Contains(got, "标题") || !strings.Contains(got, "正文。") {
 		t.Errorf("截断提示不应取代正文：\n%s", got)
 	}
-	if !strings.Contains(got, mdTruncatedNotice) {
-		t.Errorf("报截断时应有提示 %q：\n%s", mdTruncatedNotice, got)
+	if !strings.Contains(got, locales.UiMarkdownTruncated()) {
+		t.Errorf("报截断时应有提示 %q：\n%s", locales.UiMarkdownTruncated(), got)
 	}
 }
 

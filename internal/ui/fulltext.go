@@ -19,7 +19,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/ArnoChenFx/kura/internal/i18n"
+	"github.com/ArnoChenFx/kura/locales"
 	myui "github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/ui/markdown"
 )
@@ -104,13 +104,13 @@ func (a *App) viewMarkdown(c *myui.Context, src string) {
 }
 
 // viewMarkdownBody 渲染处理好的源码；truncated 为真时在正文后追加截断提示
-// （文案走目录，见 catalog.go 的 ui.markdown.truncated）。
+// （文案走 locales，见 uiMarkdownTruncated）。
 func (a *App) viewMarkdownBody(c *myui.Context, src string, truncated bool) {
 	a.syncMarkdownTheme(c)
 	markdown.View(c, src, &a.md)
 	if truncated {
 		t := c.Theme()
-		myui.Text(c, i18n.T("ui.markdown.truncated")).FontSize(t.FontSize-1).
+		myui.Text(c, locales.UiMarkdownTruncated()).FontSize(t.FontSize-1).
 			TextColor(t.TextMuted).Margin(t.Space(2), 0, 0, 0)
 	}
 }

@@ -11,11 +11,12 @@ import (
 	"strings"
 
 	"github.com/ArnoChenFx/kura/internal/i18n"
+	"github.com/ArnoChenFx/kura/locales"
 )
 
 // ErrInvalidName 表示技能名不是单一的目录名（含路径分隔符、"." / ".." 等），
 // 拼进路径会越出根目录、disabled、trash 或 snapshots。
-var ErrInvalidName = i18n.NewError("store.err.invalidName")
+var ErrInvalidName = i18n.NewError("storeErrInvalidName", func() string { return locales.StoreErrInvalidName() })
 
 // ValidName 校验技能名是否是单一的目录名：非空、不是 "." 或 ".."、不含 / 或 \
 // 与 ".."，且 filepath.Base(name) == name。Enable、Disable、Remove、Restore、
@@ -53,7 +54,7 @@ func ValidStampName(s string) bool {
 func (c *Config) snapshotSkillAt(name, dir, stampName string) (string, error) {
 	dst := c.SnapshotPath(name, stampName)
 	if err := copyDir(dir, dst); err != nil {
-		return "", i18n.Wrapf(err, "store.err.snapshot", name)
+		return "", i18n.Wrapf(err, "storeErrSnapshot", func() string { return locales.StoreErrSnapshot(name) })
 	}
 	return dst, nil
 }
@@ -66,7 +67,7 @@ func (c *Config) RemoveWithStamp(name, stampName string) (*Result, error) {
 		return nil, err
 	}
 	if !ValidStampName(stampName) {
-		return nil, i18n.Errorf("store.err.invalidStamp", stampName)
+		return nil, i18n.NewError("storeErrInvalidStamp", func() string { return locales.StoreErrInvalidStamp(stampName) })
 	}
 	src := c.SkillPath(name)
 	if !fileExists(src) {
@@ -81,13 +82,13 @@ func (c *Config) RemoveWithStamp(name, stampName string) (*Result, error) {
 	}
 	dst := filepath.Join(c.TrashRoot(), name, stampName)
 	if fileExists(dst) {
-		return nil, i18n.Errorf("store.err.trashExists", name, stampName)
+		return nil, i18n.NewError("storeErrTrashExists", func() string { return locales.StoreErrTrashExists(name, stampName) })
 	}
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
-		return nil, i18n.Wrapf(err, "store.err.createTrashDir")
+		return nil, i18n.Wrapf(err, "storeErrCreateTrashDir", func() string { return locales.StoreErrCreateTrashDir() })
 	}
 	if err := moveDir(src, dst); err != nil {
-		return nil, i18n.Wrapf(err, "store.err.moveToTrash", name)
+		return nil, i18n.Wrapf(err, "storeErrMoveToTrash", func() string { return locales.StoreErrMoveToTrash(name) })
 	}
 	return &Result{ID: name, State: StateTrashed, Dir: dst, SnapshotDir: snapDir}, nil
 }

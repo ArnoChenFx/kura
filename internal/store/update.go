@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/ArnoChenFx/kura/internal/i18n"
+	"github.com/ArnoChenFx/kura/locales"
 )
 
 // Update 从记录的来源重新拉取技能并替换根目录中的内容，等价于只含一个
@@ -35,7 +36,7 @@ func (c *Config) UpdateMany(names []string) []UpdateResult {
 	metas := make([]*Meta, len(names))
 	for i, name := range names {
 		out[i].Name = name
-		meta, err := c.sourceMeta(name, msgMetaMissingUpdate)
+		meta, err := c.sourceMeta(name, i18n.NewError("storeErrMetaMissingUpdate", func() string { return locales.StoreErrMetaMissingUpdate(name) }))
 		if err != nil {
 			out[i].Err = err
 			continue
@@ -106,9 +107,9 @@ func (c *Config) updateRepo(idx []int, names []string, metas []*Meta, out []Upda
 
 // sourceMeta 读取根目录下技能 name 的元数据并校验来源字段齐全。
 // 技能不存在 → ErrUnknownSkill；元数据缺失/损坏/来源不完整 → 明确报错。
-// missingKey 是「元数据缺失」时的整句文案 key（更新与检查更新各一句，见
-// catalog.go 的 msgMetaMissingUpdate / msgMetaMissingCheck）。
-func (c *Config) sourceMeta(name, missingKey string) (*Meta, error) {
+// missing 是「元数据缺失」时要返回的错误（更新与检查更新各一句，见 locales
+// 的 storeErrMetaMissingUpdate / storeErrMetaMissingCheck）。
+func (c *Config) sourceMeta(name string, missing error) (*Meta, error) {
 	src := c.SkillPath(name)
 	if !fileExists(src) {
 		return nil, fmt.Errorf("%w: %s", ErrUnknownSkill, name)
@@ -116,27 +117,27 @@ func (c *Config) sourceMeta(name, missingKey string) (*Meta, error) {
 	// 缺失或损坏时无法知道来源，直接报错（不 panic）。
 	res := readMeta(src)
 	if res.Err != nil {
-		return nil, i18n.Wrapf(res.Err, "store.err.metaUnreadable", name)
+		return nil, i18n.Wrapf(res.Err, "storeErrMetaUnreadable", func() string { return locales.StoreErrMetaUnreadable(name) })
 	}
 	if !res.Found {
-		return nil, i18n.Errorf(missingKey, name)
+		return nil, missing
 	}
 	meta := res.Meta
 	switch meta.Source.Type {
 	case SourceLocal:
 		if meta.Source.Path == "" {
-			return nil, i18n.NewError("store.err.metaNoLocalPath")
+			return nil, i18n.NewError("storeErrMetaNoLocalPath", func() string { return locales.StoreErrMetaNoLocalPath() })
 		}
 		if !fileExists(meta.Source.Path) {
-			return nil, i18n.Errorf("store.err.localSourceGone", meta.Source.Path)
+			return nil, i18n.NewError("storeErrLocalSourceGone", func() string { return locales.StoreErrLocalSourceGone(meta.Source.Path) })
 		}
 	case SourceGitHub:
 		if meta.Source.URL == "" {
-			return nil, i18n.NewError("store.err.metaNoGithubURL")
+			return nil, i18n.NewError("storeErrMetaNoGithubURL", func() string { return locales.StoreErrMetaNoGithubURL() })
 		}
 		meta.Source.SubPath = cleanSubPath(meta.Source.SubPath)
 	default:
-		return nil, i18n.Errorf("store.err.unknownSourceType", meta.Source.Type)
+		return nil, i18n.NewError("storeErrUnknownSourceType", func() string { return locales.StoreErrUnknownSourceType(meta.Source.Type) })
 	}
 	return meta, nil
 }
@@ -158,16 +159,16 @@ func (c *Config) replaceSkill(name, newDir string, meta *Meta, commit, tree stri
 	// 技能是仓库根或本地来源本身是 git 仓库时目录里带着 .git，不能装进技能目录。
 	if err := copyTree(newDir, staging, true); err != nil {
 		os.RemoveAll(staging)
-		return nil, i18n.Wrapf(err, "store.err.prepareContent")
+		return nil, i18n.Wrapf(err, "storeErrPrepareContent", func() string { return locales.StoreErrPrepareContent() })
 	}
 	os.RemoveAll(src)
 	if err := os.Rename(staging, src); err != nil {
 		// 替换失败：从快照恢复旧内容。
 		restoreErr := copyDir(snapDir, src)
 		if restoreErr != nil {
-			return nil, i18n.Wrapf(err, "store.err.replaceAndRestore", snapDir)
+			return nil, i18n.Wrapf(err, "storeErrReplaceAndRestore", func() string { return locales.StoreErrReplaceAndRestore(snapDir) })
 		}
-		return nil, i18n.Wrapf(err, "store.err.replaceRestored")
+		return nil, i18n.Wrapf(err, "storeErrReplaceRestored", func() string { return locales.StoreErrReplaceRestored() })
 	}
 	// 刷新元数据：保留 installedAt/pluginName/notes，更新 updatedAt、commit、树哈希、内容哈希。
 	meta.UpdatedAt = now.UTC().Format(time.RFC3339)
@@ -179,7 +180,7 @@ func (c *Config) replaceSkill(name, newDir string, meta *Meta, commit, tree stri
 	}
 	meta.ContentHash = hash
 	if err := writeMeta(src, meta); err != nil {
-		return nil, i18n.Wrapf(err, "store.err.updateMeta")
+		return nil, i18n.Wrapf(err, "storeErrUpdateMeta", func() string { return locales.StoreErrUpdateMeta() })
 	}
 	return &Result{ID: name, State: StateEnabled, Dir: src, SnapshotDir: snapDir}, nil
 }

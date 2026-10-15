@@ -6,5 +6,9 @@
   "updates": {
     "publicKey": "WK6lXiBuZNwyviV0UUdvekyDCR+BPbLdq3RbbB5vrWY=",
     "github": "ArnoChenFx/kura"
+  },
+  "i18n": {
+    "dir": "locales",
+    "source": "en"
   }
 }

@@ -1,8 +1,8 @@
 package cli
 
-// catalog_test.go — cli 目录（中文/英文两套）的自检、界面语言解析（--lang /
-// KURA_LANG / config.json / 系统 locale）的表驱动测试，以及「输出随语言变、
-// 退出码不随语言变」的端到端验证。
+// catalog_test.go — 界面语言解析（--lang / KURA_LANG / config.json / 系统
+// locale）的表驱动测试，以及「输出随语言变、退出码不随语言变」的端到端验证；
+// 兼几条中文取值的逐字钉子（文案本体在 locales/，由 `mygo i18n check` 校验）。
 //
 // 语言是进程级的：Run 每次都会按优先级重新解析并 i18n.Set。既有测试比对的是
 // 中文输出（「用法」「3 个技能」「已是最新（上游 commit 未变）」等），所以
@@ -22,39 +22,36 @@ import (
 
 	"github.com/ArnoChenFx/kura/internal/i18n"
 	"github.com/ArnoChenFx/kura/internal/store"
+	"github.com/ArnoChenFx/kura/locales"
 )
 
-// TestMain 固定中文（见文件头）；同时把 i18n 的当前语言也设成中文，供直接
-// 调 i18n.T 的断言使用。
+// TestMain 固定中文（见文件头）；同时把 i18n 的当前语言也设成中文。
 func TestMain(m *testing.M) {
-	os.Setenv(langEnvVar, string(i18n.ZH))
+	os.Setenv(langEnvVar, "zh")
 	i18n.Set(i18n.ZH)
 	os.Exit(m.Run())
 }
 
-// TestCatalogPair 验证两套目录：key 集合一致、取值非空、登记有效、占位符
-// 顺序相同（helper 与 internal/store/catalog_test.go 的同名实现一致；
-// 两个包各自的测试互不可见，所以各留一份）。
-func TestCatalogPair(t *testing.T) {
-	checkCatalogPair(t, "cli", catalogZH, catalogEN)
-}
-
-// TestCatalogChineseTextIsVerbatim 钉住几条改造前就有的中文文案：--help 的
-// 抬头、用法错误与最新提示都是用户直接看到的文字，改动必须是有意的。
-func TestCatalogChineseTextIsVerbatim(t *testing.T) {
-	pinned := map[string]string{
-		"cli.err.unknownCommand": "kura: 未知命令 %q\n\n",
-		"cli.err.badFlag":        "kura: 参数错误: %v（用 kura --help 查看用法）\n",
-		"cli.check.upToDate":     "%s: 已是最新%s\n",
-		"cli.doctor.allGood":     "一切正常（没有发现问题）",
-		"cli.status.added":       "新增",
+// TestChineseTextIsVerbatim 钉住几条改造前就有的中文文案：--help 的抬头、
+// 用法错误与最新提示都是用户直接看到的文字，改动必须是有意的。
+func TestChineseTextIsVerbatim(t *testing.T) {
+	zh := locales.In("zh-Hans")
+	if got := zh.CliErrUnknownCommand("x"); got != "kura: 未知命令 \"x\"\n\n" {
+		t.Errorf("未知命令的中文 = %q", got)
 	}
-	for key, want := range pinned {
-		if got := i18n.Lookup(i18n.ZH, key); got != want {
-			t.Errorf("%s 的中文取值被改过：\n现在 %q\n原有 %q", key, got, want)
-		}
+	if got := zh.CliErrBadFlag("boom"); got != "kura: 参数错误: boom（用 kura --help 查看用法）\n" {
+		t.Errorf("参数错误的中文 = %q", got)
 	}
-	if text := i18n.Lookup(i18n.ZH, "cli.usage.text"); !strings.Contains(text, "用法:") {
+	if got := zh.CliCheckUpToDate("alpha", ""); got != "alpha: 已是最新\n" {
+		t.Errorf("已是最新的中文 = %q", got)
+	}
+	if got := zh.CliDoctorAllGood(); got != "一切正常（没有发现问题）" {
+		t.Errorf("doctor 全好的中文 = %q", got)
+	}
+	if got := zh.CliStatusAdded(); got != "新增" {
+		t.Errorf("状态词的中文 = %q", got)
+	}
+	if text := zh.CliUsageText(); !strings.Contains(text, "用法:") {
 		t.Errorf("--help 全文里应有「用法:」")
 	}
 }
@@ -344,58 +341,4 @@ func hasCJKText(s string) bool {
 		}
 	}
 	return false
-}
-
-// checkCatalogPair 是两套目录的自检（与 internal/store/catalog_test.go 的同名
-// 实现一致）：key 集合一致、取值非空、登记有效、占位符顺序相同。
-func checkCatalogPair(t *testing.T, pkg string, zh, en map[string]string) {
-	t.Helper()
-	for k, zv := range zh {
-		ev, ok := en[k]
-		if !ok {
-			t.Errorf("%s: %s 只有中文", pkg, k)
-			continue
-		}
-		if zv == "" || ev == "" {
-			t.Errorf("%s: %s 有空取值（zh=%q en=%q）", pkg, k, zv, ev)
-		}
-		if got := i18n.Lookup(i18n.ZH, k); got != zv {
-			t.Errorf("%s: %s 的中文取值没登记：Lookup = %q", pkg, k, got)
-		}
-		if got := i18n.Lookup(i18n.EN, k); got != ev {
-			t.Errorf("%s: %s 的英文取值没登记：Lookup = %q", pkg, k, got)
-		}
-		if a, b := verbsOf(zv), verbsOf(ev); a != b {
-			t.Errorf("%s: %s 的占位符顺序不一致：中文 %q，英文 %q", pkg, k, a, b)
-		}
-	}
-	for k := range en {
-		if _, ok := zh[k]; !ok {
-			t.Errorf("%s: %s 只有英文", pkg, k)
-		}
-	}
-}
-
-// verbsOf 按出现顺序取出格式串里的动词（%s/%d/%q/%v…；%% 不算）。
-func verbsOf(s string) string {
-	var out strings.Builder
-	for i := 0; i < len(s); i++ {
-		if s[i] != '%' {
-			continue
-		}
-		j := i + 1
-		for j < len(s) && strings.ContainsRune("-+ #0.123456789", rune(s[j])) {
-			j++
-		}
-		if j >= len(s) {
-			break
-		}
-		if s[j] == '%' {
-			i = j
-			continue
-		}
-		out.WriteByte(s[j])
-		i = j
-	}
-	return out.String()
 }

@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/ArnoChenFx/kura/internal/i18n"
+	"github.com/ArnoChenFx/kura/locales"
 )
 
 // State 是技能的三种存放状态：根目录（enabled）、disabled、trash。
@@ -84,7 +85,7 @@ func scanDir(dir string, state State) ([]*Skill, error) {
 		if errors.Is(err, fs.ErrNotExist) {
 			return nil, nil
 		}
-		return nil, i18n.Wrapf(err, "store.err.readDir", dir)
+		return nil, i18n.Wrapf(err, "storeErrReadDir", func() string { return locales.StoreErrReadDir(dir) })
 	}
 	skills := make([]*Skill, 0, len(entries))
 	for _, e := range entries {

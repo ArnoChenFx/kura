@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/ArnoChenFx/kura/internal/i18n"
+	"github.com/ArnoChenFx/kura/locales"
 )
 
 // SettingsFileName 是 Home 下设置文件的文件名，与 config.json 同级。
@@ -29,17 +30,17 @@ const SettingsFileName = "settings.json"
 // settings 相关的哨兵错误：调用方可以用 errors.Is 精确分支，而不是匹配错误文本。
 var (
 	// ErrUnknownLang 表示目标语言代码不在支持列表里。
-	ErrUnknownLang = i18n.NewError("store.err.unknownLang")
+	ErrUnknownLang = i18n.NewError("storeErrUnknownLang", func() string { return locales.StoreErrUnknownLang() })
 	// ErrNotConfigured 表示翻译所需的 BaseURL/APIKey/Model 尚未填齐。
 	// （放进哨兵列表是因为 UI 只需要「弹设置弹窗」这一个分支，不需要看
 	// 具体缺哪项；缺哪项由错误文本说明。）
-	ErrNotConfigured = i18n.NewError("store.err.notConfigured")
+	ErrNotConfigured = i18n.NewError("storeErrNotConfigured", func() string { return locales.StoreErrNotConfigured() })
 	// ErrNoSettings 表示 Home 下还没有 settings.json（用户从未保存过设置）。
 	// 与「文件存在但内容零值」区分开：前者通常意味着应该展示空的设置表单，
 	// 后者意味着应该展示已保存的（可能不完整的）值。LoadSettings 不返回它
 	// （文件不存在返回 false 而不是错误）；它是给 UI 在磁盘上探测文件是否存在
 	// 之外、需要明确语义时用的哨兵。
-	ErrNoSettings = i18n.NewError("store.err.noSettings")
+	ErrNoSettings = i18n.NewError("storeErrNoSettings", func() string { return locales.StoreErrNoSettings() })
 )
 
 // DefaultTargetLang 是 TargetLang 为空串时的默认值（简体中文）。
@@ -85,25 +86,26 @@ var langCanonical = map[string]string{
 	"ru":      "ru",
 }
 
-// langLabel 是 LangLabel 用的可读名字表的目录 key（键是规范语言码）。
+// langLabel 是 LangLabel 用的可读名字表（键是规范语言码）：值是 locales 的
+// 取值函数。
 //
 // 这些名字是语言的**自称**（glossonym）：简体中文在中文界面与英文界面下
-// 都写作「简体中文」，English 在两种界面下也都写作 English。因此 catalog 里
-// 两种语言的取值完全相同；它们仍然进目录（而不是留在代码里）只有一个原因：
+// 都写作「简体中文」，English 在两种界面下也都写作 English，所以两种语言的
+// 目录取值相同。它们仍然进目录（而不是留在代码里）只有一个原因：
 // 「界面文案不硬编码」这条守卫只能有一个标准（见 internal/i18n 的
 // TestNoHardcodedCJK）。
-var langLabel = map[string]string{
-	"en":    "store.langName.en",
-	"zh-CN": "store.langName.zhCN",
-	"en-US": "store.langName.enUS",
-	"en-GB": "store.langName.enGB",
-	"ja":    "store.langName.ja",
-	"ko":    "store.langName.ko",
-	"fr":    "store.langName.fr",
-	"de":    "store.langName.de",
-	"es":    "store.langName.es",
-	"pt":    "store.langName.pt",
-	"ru":    "store.langName.ru",
+var langLabel = map[string]func() string{
+	"en":    locales.StoreLangNameEn,
+	"zh-CN": locales.StoreLangNameZhCN,
+	"en-US": locales.StoreLangNameEnUS,
+	"en-GB": locales.StoreLangNameEnGB,
+	"ja":    locales.StoreLangNameJa,
+	"ko":    locales.StoreLangNameKo,
+	"fr":    locales.StoreLangNameFr,
+	"de":    locales.StoreLangNameDe,
+	"es":    locales.StoreLangNameEs,
+	"pt":    locales.StoreLangNamePt,
+	"ru":    locales.StoreLangNameRu,
 }
 
 // settingsPath 返回 Home/settings.json 的路径。路径拼接一律 filepath.Join。
@@ -121,11 +123,11 @@ func LoadSettings(c *Config) (*Settings, bool, error) {
 		return &Settings{}, false, nil
 	}
 	if err != nil {
-		return nil, false, i18n.Wrapf(err, "store.err.readFile", settingsPath(c))
+		return nil, false, i18n.Wrapf(err, "storeErrReadFile", func() string { return locales.StoreErrReadFile(settingsPath(c)) })
 	}
 	var s Settings
 	if err := json.Unmarshal(data, &s); err != nil {
-		return nil, false, i18n.Wrapf(err, "store.err.parseJSON", settingsPath(c))
+		return nil, false, i18n.Wrapf(err, "storeErrParseJSON", func() string { return locales.StoreErrParseJSON(settingsPath(c)) })
 	}
 	return &s, true, nil
 }
@@ -141,7 +143,7 @@ func LoadSettings(c *Config) (*Settings, bool, error) {
 // settings.json 的并发路径，必须先引入锁再改。
 func SaveSettings(c *Config, s *Settings) error {
 	if s == nil {
-		return i18n.NewError("store.err.emptySettings")
+		return i18n.NewError("storeErrEmptySettings", func() string { return locales.StoreErrEmptySettings() })
 	}
 	if err := c.ensureDirs(); err != nil {
 		return err
@@ -151,11 +153,11 @@ func SaveSettings(c *Config, s *Settings) error {
 	}
 	data, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
-		return i18n.Wrapf(err, "store.err.marshalSettings")
+		return i18n.Wrapf(err, "storeErrMarshalSettings", func() string { return locales.StoreErrMarshalSettings() })
 	}
 	// 权限 0o600：含 API key 的文件，比 config.json（0o644）更严。
 	if err := os.WriteFile(settingsPath(c), data, 0o600); err != nil {
-		return i18n.Wrapf(err, "store.err.writeFile", settingsPath(c))
+		return i18n.Wrapf(err, "storeErrWriteFile", func() string { return locales.StoreErrWriteFile(settingsPath(c)) })
 	}
 	return nil
 }
@@ -199,8 +201,8 @@ func (s *Settings) LangLabel() string {
 	if lang == "" {
 		lang = DefaultTargetLang
 	}
-	if key, ok := langLabel[lang]; ok {
-		return i18n.T(key)
+	if label, ok := langLabel[lang]; ok {
+		return label()
 	}
 	return lang
 }

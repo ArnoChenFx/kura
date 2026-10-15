@@ -199,11 +199,12 @@ func TestTargetLangsAreNormalized(t *testing.T) {
 		if err != nil || got != l.code {
 			t.Errorf("语言 %q 规范化得到 %q, err=%v", l.code, got, err)
 		}
-		if seen[l.label] {
-			t.Errorf("显示名 %q 重复", l.label)
+		label := l.label()
+		if seen[label] {
+			t.Errorf("显示名 %q 重复", label)
 		}
-		seen[l.label] = true
-		if langCodeFor(l.label) != l.code || langLabelFor(l.code) != l.label {
+		seen[label] = true
+		if langCodeFor(label) != l.code || langLabelFor(l.code) != label {
 			t.Errorf("语言 %q 的码↔名映射不闭合", l.code)
 		}
 	}

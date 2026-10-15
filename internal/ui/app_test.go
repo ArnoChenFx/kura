@@ -8,6 +8,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/ArnoChenFx/kura/internal/i18n"
 	"github.com/ArnoChenFx/kura/internal/store"
 	myui "github.com/egoist/mygo/ui"
 )
@@ -41,6 +42,12 @@ func newAppFor(cfg *store.Config) *App {
 	a.openPath = func(string) error { return nil }
 	a.reveal = func(string) {}
 	a.setSource = func(string) {}
+	// 语言：生产走 mygo.App.SetLocale（见 NewApp），测试里事件循环没跑，
+	// 改用 internal/i18n 的进程级覆盖；解析口径与生产一致（system → 系统
+	// locale）。
+	a.setLocale = func(pref string) {
+		i18n.Set(i18n.Resolve(store.LangPref(pref), i18n.SystemLocale()))
+	}
 	return a
 }
 

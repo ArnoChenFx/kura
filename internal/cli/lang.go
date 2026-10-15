@@ -18,6 +18,7 @@ import (
 
 	"github.com/ArnoChenFx/kura/internal/i18n"
 	"github.com/ArnoChenFx/kura/internal/store"
+	"github.com/ArnoChenFx/kura/locales"
 )
 
 // langEnvVar 是与 --lang 等价的环境变量名。
@@ -80,7 +81,7 @@ func applyLanguage(args []string, getenv func(string) string, stderr io.Writer) 
 	// 先把语言定下来：即使有写坏的一级，下面的报错也要用下一级的语言。
 	i18n.Set(i18n.Resolve(pref, i18n.SystemLocale()))
 	if invalid != "" {
-		_, _ = io.WriteString(stderr, i18n.Tf("cli.err.badLang", invalid))
+		_, _ = io.WriteString(stderr, locales.CliErrBadLang(invalid))
 		return ExitUsage
 	}
 	return ExitOK

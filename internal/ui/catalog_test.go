@@ -1,21 +1,24 @@
 package ui
 
-// catalog 的测试与新语言行为：目录完整性、切到英文后界面真的变英文、
-// 设置弹窗里的界面语言下拉，以及中英两张主界面截图（仅本地迭代用）。
+// 文案与新语言行为：切到英文后界面真的变英文、设置弹窗里的界面语言下拉，
+// 以及中英两张主界面截图（仅本地迭代用）。
 //
 // TestMain 把本包的测试统一放在中文下：既有测试断言的是中文界面文案
-// （例如 detailTabFull），切换语言的测试自己临时切到英文再切回来。生产的
-// 默认语言仍是英文（i18n.Default），由 main.go / CLI 在启动时解析。
+// （例如「全文」），切换语言的测试自己临时切到英文再切回来。生产的默认语言
+// 由 MyGo 解析（跟随系统/用户语言，缺省英文）。
+//
+// 本包的视图每帧调 locales.Xxx()，取值口径是 mygo 官方的 locale func：生产
+// 环境里 MyGo 把它接到 App.Locale；测试里 mygo 的事件循环没跑，TestMain 与
+// newAppFor 用 internal/i18n 的 Set 换上固定的语言（见 app_test.go）。
 
 import (
 	"os"
-	"path/filepath"
-	"regexp"
-	"strings"
 	"testing"
 
 	"github.com/ArnoChenFx/kura/internal/i18n"
 	"github.com/ArnoChenFx/kura/internal/store"
+	"github.com/ArnoChenFx/kura/locales"
+	myi18n "github.com/egoist/mygo/i18n"
 	myui "github.com/egoist/mygo/ui"
 )
 
@@ -24,88 +27,8 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-// formatVerbs 返回 s 里的 fmt 动词序列（%s、%d、%v…；%% 不算），用来验证
-// 两种语言的占位符数量与顺序一致（顺序不同会把参数填错位）。
-func formatVerbs(s string) []string {
-	var out []string
-	for i := 0; i+1 < len(s); i++ {
-		if s[i] != '%' {
-			continue
-		}
-		if s[i+1] == '%' {
-			i++
-			continue
-		}
-		out = append(out, string(s[i+1]))
-		i++
-	}
-	return out
-}
-
-// TestCatalogParity 验证两套目录的 key 完全一致、都登记进了 i18n、取值就是
-// 目录里的那一条，且占位符一致。
-func TestCatalogParity(t *testing.T) {
-	if len(catalogZH) == 0 || len(catalogEN) == 0 {
-		t.Fatal("目录不该是空的")
-	}
-	for k := range catalogZH {
-		if _, ok := catalogEN[k]; !ok {
-			t.Errorf("key %q 只有中文", k)
-		}
-	}
-	for k := range catalogEN {
-		if _, ok := catalogZH[k]; !ok {
-			t.Errorf("key %q 只有英文", k)
-		}
-	}
-	for k, zh := range catalogZH {
-		en, ok := catalogEN[k]
-		if !ok {
-			continue
-		}
-		if !i18n.Has(k) {
-			t.Errorf("key %q 没有登记进 i18n", k)
-			continue
-		}
-		if got := i18n.Lookup(i18n.ZH, k); got != zh {
-			t.Errorf("%q 的中文取值 = %q，目录里是 %q", k, got, zh)
-		}
-		if got := i18n.Lookup(i18n.EN, k); got != en {
-			t.Errorf("%q 的英文取值 = %q，目录里是 %q", k, got, en)
-		}
-		if a, b := formatVerbs(zh), formatVerbs(en); len(a) != len(b) {
-			t.Errorf("%q 的占位符数量不同：中文 %v，英文 %v", k, a, b)
-		} else {
-			for i := range a {
-				if a[i] != b[i] {
-					t.Errorf("%q 的占位符不同：中文 %v，英文 %v", k, a, b)
-					break
-				}
-			}
-		}
-		if zh == en {
-			t.Errorf("%q 的两种语言取值一样（%q），多半是忘了翻译", k, zh)
-		}
-	}
-	t.Logf("目录里共 %d 条文案", len(catalogZH))
-}
-
-// TestDetailTabConstantsMatchCatalog 验证既有测试引用的两个中文常量就是
-// 目录里的中文取值（它们不能各写各的）。
-func TestDetailTabConstantsMatchCatalog(t *testing.T) {
-	for _, c := range []struct{ got, key string }{
-		{detailTabOverview, "ui.detail.tabOverview"},
-		{detailTabFull, "ui.detail.tabFull"},
-		{mdTruncatedNotice, "ui.markdown.truncated"},
-	} {
-		if want := i18n.Lookup(i18n.ZH, c.key); c.got != want {
-			t.Errorf("%s 的中文常量 = %q，目录里是 %q", c.key, c.got, want)
-		}
-	}
-}
-
 // TestUISwitchesToEnglish 验证切到英文后界面文字真的变英文（筛选栏、状态条），
-// 并且不再出现对应中文；切回中文恢复。文案每帧现取，所以只改 i18n 再渲染即可。
+// 并且不再出现对应中文；切回中文恢复。文案每帧现取，所以只改语言再渲染即可。
 func TestUISwitchesToEnglish(t *testing.T) {
 	defer i18n.Set(i18n.ZH)
 	i18n.Set(i18n.ZH)
@@ -146,7 +69,7 @@ func TestSettingsLanguageDropdown(t *testing.T) {
 	a.settings = store.Settings{TargetLang: "ja"}
 	tt := showApp(a, 1280, 800)
 
-	click(t, a, tt, i18n.T("ui.settings.title"))
+	click(t, a, tt, locales.UiSettingsTitle())
 	if !detHasText(tt, "界面语言") {
 		t.Fatalf("设置弹窗应有界面语言一项，文本 %v", tt.Texts())
 	}
@@ -191,7 +114,7 @@ func TestSettingsLanguageDropdown(t *testing.T) {
 // 让测试失败（下拉不在焦点顺序里，用户也就没法用键盘选它）。
 func focusLangSelect(t *testing.T, tt *myui.Tester) {
 	t.Helper()
-	label := i18n.T("ui.settings.interfaceLang")
+	label := locales.UiSettingsInterfaceLang()
 	for i := 0; i < 80 && !tt.Focused(label); i++ {
 		tt.Key(0, myui.KeyTab)
 	}
@@ -200,43 +123,37 @@ func focusLangSelect(t *testing.T, tt *myui.Tester) {
 	}
 }
 
-// TestUISourceKeysAreRegistered 扫描本包非测试源码里的 i18n.T / i18n.Tf /
-// i18n.NewError / i18n.Errorf / i18n.Wrapf 调用，断言每个 key 都在目录里。
-// 漏登记的 key 不会编译报错，只会在界面上显示成 key 本身（i18n.T 的约定），
-// 所以这里用源码扫描把它拦住。
-func TestUISourceKeysAreRegistered(t *testing.T) {
-	files, err := filepath.Glob("*.go")
+// TestUISourceHasNoHardcodedCJK 是本包替代旧「key 已登记」守卫的检查：视图
+// 源码里不该出现中文字面量，文案一律经 locales.Xxx() 取。key 的完整性与
+// 占位符由 `go tool mygo i18n check` 保证（CI 与生成时都跑）。
+func TestUISourceHasNoHardcodedCJK(t *testing.T) {
+	found, err := i18n.CJKLiterals(".")
 	if err != nil {
 		t.Fatal(err)
 	}
-	used := 0
-	for _, name := range files {
-		if strings.HasSuffix(name, "_test.go") {
-			continue
-		}
-		src, err := os.ReadFile(name)
-		if err != nil {
-			t.Fatal(err)
-		}
-		for _, m := range i18nKeyRe.FindAllStringSubmatch(string(src), -1) {
-			key := m[1]
-			if key == "" {
-				key = m[2] // Wrapf 的 key 在第二个参数
-			}
-			used++
-			if !i18n.Has(key) {
-				t.Errorf("%s 用了未登记的 key %q", name, key)
-			}
-		}
-	}
-	if used == 0 {
-		t.Error("一个 key 都没扫到，正则多半过期了")
+	for _, f := range found {
+		t.Errorf("%s 有硬编码中文界面文案；请移进 locales 并用 locales.Xxx() 取用", f)
 	}
 }
 
-// i18nKeyRe 匹配取文案的调用：i18n.T/Tf/NewError/Errorf 的第一个参数，或
-// i18n.Wrapf 的第二个参数（第一个是被包住的错误）。
-var i18nKeyRe = regexp.MustCompile(`i18n\.(?:T|Tf|NewError|Errorf)\(\s*"([^"]+)"|i18n\.Wrapf\([^,]*,\s*"([^"]+)"`)
+// TestMyGoControlsFollowTheWindowLocale 是本次迁移的收益证据：MyGo 自己的
+// 控件文案（这里用查找栏的「无匹配项」「完成」）也跟着窗口语言变。kura 的
+// locales 包在 init 里链接了 MyGo 的 zh-Hans 翻译（见 locales/catalog_gen.go
+// 的导入），所以窗口语言是中文时 MyGo 的控件说中文；迁移前的自写 i18n
+// 做不到这一点。
+func TestMyGoControlsFollowTheWindowLocale(t *testing.T) {
+	query, open, cur := "", true, 0
+	tt := myui.NewTester(func(c *myui.Context) {
+		myui.FindBar(c, &open, &query, 0, &cur)
+	}, 600, 200)
+	if !tt.HasText("Done") {
+		t.Fatalf("英文下查找栏应说 Done，文本 %v", tt.Texts())
+	}
+	tt.SetLocale(string(i18n.ZH))
+	if !tt.HasText("完成") || tt.HasText("Done") {
+		t.Errorf("中文下查找栏应说「完成」，文本 %v", tt.Texts())
+	}
+}
 
 // TestRenderI18nShots 渲染主界面的中文与英文两张截图（仅本地迭代用）：
 // KURA_UI_SHOTS=<绝对路径> 时输出 <out>/main-zh.png 与 <out>/main-en.png，
@@ -268,5 +185,81 @@ func TestRenderI18nShots(t *testing.T) {
 		a.status, a.statusErr = "", false
 		tt.Frame()
 		saveShot(t, out, c.name, tt)
+	}
+}
+
+// TestLocaleForPref 钉住「偏好 + 系统 locale → 交给 MyGo 的语言标签」这条
+// 映射：固定语言直接就是标签；system 由 kura 自己按系统 locale 解（zh* 算
+// 中文，其余算英文），与 CLI 的 --lang 判据一致。
+//
+// 这条测试是为了防一个真回退：如果把 system 直接交给 MyGo（SetLocale("")），
+// 繁体中文系统（zh-TW / zh-Hant / zh-HK）匹配不上唯一的 zh-Hans 候选，会落
+// 到 catalogs 的 source 语言——窗口显示英文而 CLI 显示中文。
+func TestLocaleForPref(t *testing.T) {
+	cases := []struct {
+		pref      string
+		sysLocale string
+		want      string
+	}{
+		// 固定语言：与系统 locale 无关。
+		{"zh", "en-US", "zh-Hans"},
+		{"en", "zh-CN", "en"},
+		{"zh", "zh-TW", "zh-Hans"},
+		// 跟随系统：简繁都是中文，其余英文。
+		{store.LangSystem, "zh-CN", "zh-Hans"},
+		{store.LangSystem, "zh-TW", "zh-Hans"},
+		{store.LangSystem, "zh-HK", "zh-Hans"},
+		{store.LangSystem, "zh-Hant-TW", "zh-Hans"},
+		{store.LangSystem, "en-US", "en"},
+		{store.LangSystem, "de-DE", "en"},
+		{store.LangSystem, "ja-JP", "en"},
+		// 认不出来的系统 locale 与空偏好：英文（与旧实现一致）。
+		{store.LangSystem, "C", "en"},
+		{store.LangSystem, "POSIX", "en"},
+		{store.LangSystem, "", "en"},
+		{"", "zh-CN", "zh-Hans"},
+		{"", "en-US", "en"},
+		// 配置里写了不认识的取值：按「跟随系统」处理（store.LangPref 的口径）。
+		{"klingon", "zh-CN", "zh-Hans"},
+	}
+	for _, c := range cases {
+		if got := localeFor(c.pref, c.sysLocale); got != c.want {
+			t.Errorf("localeFor(%q, %q) = %q，想要 %q", c.pref, c.sysLocale, got, c.want)
+		}
+	}
+}
+
+// TestLocaleForPrefFallsBackToATranslatedLanguage 是上面那条的守门人：解出来
+// 的标签必须是 catalogs 真的有的语言（否则 MyGo 会落到 source 语言，界面又
+// 变回英文，而且没有任何报错）。
+func TestLocaleForPrefFallsBackToATranslatedLanguage(t *testing.T) {
+	langs := locales.Catalog.Languages()
+	has := func(tag string) bool {
+		for _, l := range langs {
+			if l == tag {
+				return true
+			}
+		}
+		return false
+	}
+	for _, sysLocale := range []string{"zh-CN", "zh-TW", "zh-Hant-TW", "en-US", "de-DE", ""} {
+		tag := localeFor(store.LangSystem, sysLocale)
+		if !has(tag) {
+			t.Errorf("localeFor(system, %q) = %q，不在 catalogs 的语言 %v 里",
+				sysLocale, tag, langs)
+		}
+	}
+	// 接线自己也要钉：生产路径走的是 localeForPref（带真实系统 locale），不是 localeFor。它必须给出一个具体语言标签，不能是空串
+	// （空串等于把「跟随系统」交给 MyGo，台繁系统上就是回退）。
+	tag := localeForPref(store.LangSystem)
+	if tag == "" {
+		t.Errorf("localeForPref(system) 为空，等于把「跟随系统」交给 MyGo")
+	} else if !has(tag) {
+		t.Errorf("localeForPref(system) = %q，不在 catalogs 的语言 %v 里", tag, langs)
+	}
+
+	// 这条是回退的判据：MyGo 的匹配对 zh-TW 找不到 zh-Hans。
+	if m := myi18n.Match([]string{"zh-TW"}, langs); m != "" {
+		t.Logf("MyGo 现在能把 zh-TW 匹配到 %q 了（若如此，本测试的前提值得重看）", m)
 	}
 }

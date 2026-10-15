@@ -10,12 +10,12 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/ArnoChenFx/kura/internal/i18n"
 	"github.com/ArnoChenFx/kura/internal/store"
+	"github.com/ArnoChenFx/kura/locales"
 )
 
 // printError 按模式输出错误：--json 时输出结构化错误，否则输出人类可读文本。
-// msg 已按当前语言取好（含占位符替换后的值，见 catalog.go）；调用方直接
+// msg 已按当前语言取好（含占位符替换后的值，见 locales/）；调用方直接
 // `return printError(...)`。返回 ExitError。
 func printError(g *globalFlags, stderr io.Writer, msg string) int {
 	if g.json {
@@ -87,7 +87,7 @@ func cmdList(args []string, stdout, stderr io.Writer, pre *globalFlags) int {
 		return usageError(stderr, err)
 	}
 	if len(positional) > 0 {
-		return printError(g, stderr, i18n.Tf("cli.err.listPositional", strings.Join(positional, " ")))
+		return printError(g, stderr, locales.CliErrListPositional(strings.Join(positional, " ")))
 	}
 	c, err := resolveConfig(g)
 	if err != nil {
@@ -112,24 +112,24 @@ func cmdList(args []string, stdout, stderr io.Writer, pre *globalFlags) int {
 func printSkillsText(w io.Writer, c *store.Config, skills []*store.Skill) {
 	fmt.Fprintf(w, "root: %s\n", c.Root)
 	if len(skills) == 0 {
-		fmt.Fprintln(w, i18n.T("cli.list.empty"))
+		fmt.Fprintln(w, locales.CliListEmpty())
 		return
 	}
 	for _, s := range skills {
 		fmt.Fprintf(w, "%s\t[%s]", s.Name, s.State)
 		if s.State == store.StateTrashed {
 			// trash/<name>/<stamp> 容器本身没有 SKILL.md，不告警。
-			fmt.Fprintln(w, i18n.T("cli.list.trashed"))
+			fmt.Fprintln(w, locales.CliListTrashed())
 			continue
 		}
 		if !s.HasSKILLMD {
-			fmt.Fprint(w, i18n.T("cli.list.noSkillMD"))
+			fmt.Fprint(w, locales.CliListNoSkillMD())
 		}
 		switch {
 		case s.MetaErr != "":
-			fmt.Fprint(w, i18n.Tf("cli.list.metaBroken", s.MetaErr))
+			fmt.Fprint(w, locales.CliListMetaBroken(s.MetaErr))
 		case s.Meta == nil:
-			fmt.Fprint(w, i18n.T("cli.list.noMeta"))
+			fmt.Fprint(w, locales.CliListNoMeta())
 		default:
 			fmt.Fprintf(w, "\t%s", s.Meta.Source.Type)
 			if s.Meta.Source.URL != "" {
@@ -157,7 +157,7 @@ func cmdToggle(args []string, stdout, stderr io.Writer, action string, pre *glob
 		return usageError(stderr, err)
 	}
 	if len(positional) != 1 {
-		return printError(g, stderr, i18n.Tf("cli.err.usageToggle", action))
+		return printError(g, stderr, locales.CliErrUsageToggle(action))
 	}
 	name := positional[0]
 	c, err := resolveConfig(g)
@@ -171,7 +171,7 @@ func cmdToggle(args []string, stdout, stderr io.Writer, action string, pre *glob
 		res, err = c.Enable(name)
 	}
 	if err != nil {
-		return printError(g, stderr, i18n.Tf("cli.err.actionFailed", action, err))
+		return printError(g, stderr, locales.CliErrActionFailed(action, err))
 	}
 	if g.json {
 		return writeJSONOrErr(stdout, resultJSON{
@@ -189,13 +189,13 @@ func cmdToggle(args []string, stdout, stderr io.Writer, action string, pre *glob
 func cmdRemove(args []string, stdout, stderr io.Writer, pre *globalFlags) int {
 	g := &globalFlags{}
 	fs := newFlagSet("remove", stderr, g, pre)
-	stampVal := fs.String("stamp", "", i18n.T("cli.flag.stampRemove"))
+	stampVal := fs.String("stamp", "", locales.CliFlagStampRemove())
 	positional, err := parseArgs(fs, args)
 	if err != nil {
 		return usageError(stderr, err)
 	}
 	if len(positional) != 1 {
-		return printError(g, stderr, i18n.T("cli.err.usageRemove"))
+		return printError(g, stderr, locales.CliErrUsageRemove())
 	}
 	name := positional[0]
 	c, err := resolveConfig(g)
@@ -209,7 +209,7 @@ func cmdRemove(args []string, stdout, stderr io.Writer, pre *globalFlags) int {
 		res, err = c.RemoveWithStamp(name, *stampVal)
 	}
 	if err != nil {
-		return printError(g, stderr, i18n.Tf("cli.err.removeFailed", err))
+		return printError(g, stderr, locales.CliErrRemoveFailed(err))
 	}
 	if g.json {
 		return writeJSONOrErr(stdout, resultJSON{
@@ -229,13 +229,13 @@ func cmdRemove(args []string, stdout, stderr io.Writer, pre *globalFlags) int {
 func cmdRestore(args []string, stdout, stderr io.Writer, pre *globalFlags) int {
 	g := &globalFlags{}
 	fs := newFlagSet("restore", stderr, g, pre)
-	stampVal := fs.String("stamp", "", i18n.T("cli.flag.stampRestore"))
+	stampVal := fs.String("stamp", "", locales.CliFlagStampRestore())
 	positional, err := parseArgs(fs, args)
 	if err != nil {
 		return usageError(stderr, err)
 	}
 	if len(positional) != 1 {
-		return printError(g, stderr, i18n.T("cli.err.usageRestore"))
+		return printError(g, stderr, locales.CliErrUsageRestore())
 	}
 	name := positional[0]
 	c, err := resolveConfig(g)
@@ -244,7 +244,7 @@ func cmdRestore(args []string, stdout, stderr io.Writer, pre *globalFlags) int {
 	}
 	res, err := c.Restore(name, *stampVal)
 	if err != nil {
-		return printError(g, stderr, i18n.Tf("cli.err.restoreFailed", err))
+		return printError(g, stderr, locales.CliErrRestoreFailed(err))
 	}
 	if g.json {
 		return writeJSONOrErr(stdout, resultJSON{
@@ -275,21 +275,21 @@ type importMetaResult struct {
 func cmdImportMeta(args []string, stdout, stderr io.Writer, pre *globalFlags) int {
 	g := &globalFlags{}
 	fs := newFlagSet("import-meta", stderr, g, pre)
-	dryRun := fs.Bool("dry-run", false, i18n.T("cli.flag.dryRun"))
-	lockPath := fs.String("lock", "", i18n.T("cli.flag.lock"))
+	dryRun := fs.Bool("dry-run", false, locales.CliFlagDryRun())
+	lockPath := fs.String("lock", "", locales.CliFlagLock())
 	positional, err := parseArgs(fs, args)
 	if err != nil {
 		return usageError(stderr, err)
 	}
 	if len(positional) > 0 {
-		return printError(g, stderr, i18n.T("cli.err.importMetaPositional"))
+		return printError(g, stderr, locales.CliErrImportMetaPositional())
 	}
 	c, err := resolveConfig(g)
 	if err != nil {
 		return printError(g, stderr, err.Error())
 	}
 	if !c.CanImportMeta() {
-		return printError(g, stderr, i18n.Tf("cli.err.importMetaFailed", store.ErrImportDefaultOnly, c.Root))
+		return printError(g, stderr, locales.CliErrImportMetaFailed(store.ErrImportDefaultOnly, c.Root))
 	}
 	lp := *lockPath
 	if lp == "" {
@@ -309,7 +309,7 @@ func cmdImportMeta(args []string, stdout, stderr io.Writer, pre *globalFlags) in
 	}
 	imported, err := c.ImportMeta(lp)
 	if err != nil {
-		return printError(g, stderr, i18n.Tf("cli.err.importMetaFailedPlain", err))
+		return printError(g, stderr, locales.CliErrImportMetaFailedPlain(err))
 	}
 	_, lockFound, _ := store.ReadLockFile(lp)
 	if imported == nil {
@@ -331,22 +331,22 @@ func emitImportMeta(stdout io.Writer, g *globalFlags, r importMetaResult) int {
 		}
 		return writeJSONOrErr(stdout, r)
 	}
-	label := i18n.T("cli.importMeta.imported")
+	label := locales.CliImportMetaImported()
 	list := r.Imported
 	if r.DryRun {
-		label = i18n.T("cli.importMeta.wouldImport")
+		label = locales.CliImportMetaWouldImport()
 		list = r.WouldImport
 	}
 	fmt.Fprintf(stdout, "lock: %s", r.LockPath)
 	if !r.LockFound {
-		fmt.Fprint(stdout, i18n.T("cli.importMeta.lockMissing"))
+		fmt.Fprint(stdout, locales.CliImportMetaLockMissing())
 	}
 	fmt.Fprintln(stdout)
 	if len(list) == 0 {
-		fmt.Fprintln(stdout, i18n.T("cli.importMeta.nothing"))
+		fmt.Fprintln(stdout, locales.CliImportMetaNothing())
 		return ExitOK
 	}
-	fmt.Fprint(stdout, i18n.Tf("cli.importMeta.count", label, len(list)))
+	fmt.Fprint(stdout, locales.CliImportMetaCount(label, len(list)))
 	for _, n := range list {
 		fmt.Fprintf(stdout, "  %s\n", n)
 	}
@@ -407,20 +407,20 @@ func cmdAdd(args []string, stdout, stderr io.Writer, pre *globalFlags) int {
 	g := &globalFlags{}
 	fs := newFlagSet("add", stderr, g, pre)
 	af := &addFlags{}
-	fs.StringVar(&af.local, "local", "", i18n.T("cli.flag.addLocal"))
-	fs.StringVar(&af.github, "github", "", i18n.T("cli.flag.addGithub"))
-	fs.StringVar(&af.subPath, "sub-path", "", i18n.T("cli.flag.addSubPath"))
-	fs.StringVar(&af.ref, "ref", "", i18n.T("cli.flag.addRef"))
-	fs.StringVar(&af.name, "name", "", i18n.T("cli.flag.addName"))
+	fs.StringVar(&af.local, "local", "", locales.CliFlagAddLocal())
+	fs.StringVar(&af.github, "github", "", locales.CliFlagAddGithub())
+	fs.StringVar(&af.subPath, "sub-path", "", locales.CliFlagAddSubPath())
+	fs.StringVar(&af.ref, "ref", "", locales.CliFlagAddRef())
+	fs.StringVar(&af.name, "name", "", locales.CliFlagAddName())
 	positional, err := parseArgs(fs, args)
 	if err != nil {
 		return usageError(stderr, err)
 	}
 	if len(positional) > 0 {
-		return printError(g, stderr, i18n.T("cli.err.addPositional"))
+		return printError(g, stderr, locales.CliErrAddPositional())
 	}
 	if (af.local == "") == (af.github == "") {
-		return printError(g, stderr, i18n.T("cli.err.addUsage"))
+		return printError(g, stderr, locales.CliErrAddUsage())
 	}
 	c, err := resolveConfig(g)
 	if err != nil {
@@ -447,7 +447,7 @@ func cmdAdd(args []string, stdout, stderr io.Writer, pre *globalFlags) int {
 			fmt.Fprintf(stderr, "kura: %s\n", ce.Error())
 			return ExitError
 		}
-		return printError(g, stderr, i18n.Tf("cli.err.addFailed", err))
+		return printError(g, stderr, locales.CliErrAddFailed(err))
 	}
 	if g.json {
 		return writeJSONOrErr(stdout, resultJSON{
@@ -471,8 +471,8 @@ func cmdAdd(args []string, stdout, stderr io.Writer, pre *globalFlags) int {
 func cmdUpdate(args []string, stdout, stderr io.Writer, pre *globalFlags) int {
 	g := &globalFlags{}
 	fs := newFlagSet("update", stderr, g, pre)
-	check := fs.Bool("check", false, i18n.T("cli.flag.check"))
-	all := fs.Bool("all", false, i18n.T("cli.flag.all"))
+	check := fs.Bool("check", false, locales.CliFlagCheck())
+	all := fs.Bool("all", false, locales.CliFlagAll())
 	positional, err := parseArgs(fs, args)
 	if err != nil {
 		return usageError(stderr, err)
@@ -480,7 +480,7 @@ func cmdUpdate(args []string, stdout, stderr io.Writer, pre *globalFlags) int {
 	if !*check {
 		// 原有路径：直接更新。
 		if len(positional) != 1 || *all {
-			return printError(g, stderr, i18n.T("cli.err.usageUpdate"))
+			return printError(g, stderr, locales.CliErrUsageUpdate())
 		}
 		return runUpdateApply(g, positional[0], stdout, stderr)
 	}
@@ -488,16 +488,16 @@ func cmdUpdate(args []string, stdout, stderr io.Writer, pre *globalFlags) int {
 	if *all {
 		if len(positional) != 0 {
 			// 用法错误：--all 不接受 NAME。
-			fmt.Fprint(stderr, i18n.T("cli.usage.checkAllWithName"))
-			_ = writeJSON(stderr, errorJSON{Error: i18n.T("cli.err.checkAllWithName")})
+			fmt.Fprint(stderr, locales.CliUsageCheckAllWithName())
+			_ = writeJSON(stderr, errorJSON{Error: locales.CliErrCheckAllWithName()})
 			return ExitUsage
 		}
 		return runUpdateCheckAll(g, stdout, stderr)
 	}
 	if len(positional) != 1 {
 		// 用法错误（缺 NAME）：按约定退出 2，并把用法写进 stderr。
-		fmt.Fprint(stderr, i18n.T("cli.usage.checkNeedsName"))
-		_ = writeJSON(stderr, errorJSON{Error: i18n.T("cli.err.checkNeedsName")})
+		fmt.Fprint(stderr, locales.CliUsageCheckNeedsName())
+		_ = writeJSON(stderr, errorJSON{Error: locales.CliErrCheckNeedsName()})
 		return ExitUsage
 	}
 	return runUpdateCheck(g, positional[0], stdout, stderr)
@@ -511,7 +511,7 @@ func runUpdateApply(g *globalFlags, name string, stdout, stderr io.Writer) int {
 	}
 	res, err := c.Update(name)
 	if err != nil {
-		return printError(g, stderr, i18n.Tf("cli.err.updateFailed", err))
+		return printError(g, stderr, locales.CliErrUpdateFailed(err))
 	}
 	if g.json {
 		return writeJSONOrErr(stdout, resultJSON{
@@ -589,7 +589,7 @@ func runUpdateCheck(g *globalFlags, name string, stdout, stderr io.Writer) int {
 	}
 	p, err := c.PreviewUpdate(name)
 	if err != nil {
-		return printError(g, stderr, i18n.Tf("cli.err.checkFailed", err))
+		return printError(g, stderr, locales.CliErrCheckFailed(err))
 	}
 	cj := toCheckJSON(p)
 	if g.json {
@@ -635,7 +635,7 @@ func runUpdateCheckAll(g *globalFlags, stdout, stderr io.Writer) int {
 	}
 	skills, err := c.Scan()
 	if err != nil {
-		return printError(g, stderr, i18n.Tf("cli.err.scanRootFailed", err))
+		return printError(g, stderr, locales.CliErrScanRootFailed(err))
 	}
 	names := make([]string, len(skills))
 	for i, s := range skills {
@@ -662,12 +662,12 @@ func runUpdateCheckAll(g *globalFlags, stdout, stderr io.Writer) int {
 	} else {
 		for _, r := range out.Results {
 			if r.Error != "" {
-				fmt.Fprint(stdout, i18n.Tf("cli.checkAll.failed", r.Skill, r.Error))
+				fmt.Fprint(stdout, locales.CliCheckAllFailed(r.Skill, r.Error))
 				continue
 			}
 			printCheckText(stdout, r.Check)
 		}
-		fmt.Fprint(stdout, i18n.Tf("cli.checkAll.summary", len(out.Results), countPending(out.Results)))
+		fmt.Fprint(stdout, locales.CliCheckAllSummary(len(out.Results), countPending(out.Results)))
 	}
 	if pending {
 		return ExitDoctorProblem
@@ -692,28 +692,26 @@ func printCheckText(w io.Writer, cj *checkJSON) {
 		note := ""
 		switch cj.Basis {
 		case store.BasisCommit:
-			note = i18n.T("cli.check.noteCommit")
+			note = locales.CliCheckNoteCommit()
 		case store.BasisTree:
-			note = i18n.T("cli.check.noteTree")
+			note = locales.CliCheckNoteTree()
 		}
-		fmt.Fprint(w, i18n.Tf("cli.check.upToDate", cj.Skill, note))
+		fmt.Fprint(w, locales.CliCheckUpToDate(cj.Skill, note))
 		if cj.LocalModified {
-			fmt.Fprint(w, i18n.T("cli.check.localModifiedNote"))
+			fmt.Fprint(w, locales.CliCheckLocalModifiedNote())
 		}
 		return
 	}
-	fmt.Fprint(w, i18n.Tf("cli.check.changes",
-		cj.Skill, len(cj.Files),
-		statusCount(cj, store.DiffAdded), statusCount(cj, store.DiffChanged), statusCount(cj, store.DiffRemoved)))
+	fmt.Fprint(w, locales.CliCheckChanges(cj.Skill, len(cj.Files), statusCount(cj, store.DiffAdded), statusCount(cj, store.DiffChanged), statusCount(cj, store.DiffRemoved)))
 	for _, f := range cj.Files {
 		fmt.Fprintf(w, "  %-8s +%-4d -%-4d %s\n", statusLabel(f.Status), f.Added, f.Removed, f.Path)
 	}
-	fmt.Fprint(w, i18n.Tf("cli.check.hash", shortHashCLI(cj.OldHash), shortHashCLI(cj.NewHash)))
+	fmt.Fprint(w, locales.CliCheckHash(shortHashCLI(cj.OldHash), shortHashCLI(cj.NewHash)))
 	if cj.Commit != "" {
-		fmt.Fprint(w, i18n.Tf("cli.check.commit", cj.Commit))
+		fmt.Fprint(w, locales.CliCheckCommit(cj.Commit))
 	}
 	if cj.LocalModified {
-		fmt.Fprint(w, i18n.T("cli.check.localModifiedWarn"))
+		fmt.Fprint(w, locales.CliCheckLocalModifiedWarn())
 	}
 }
 
@@ -722,11 +720,11 @@ func printCheckText(w io.Writer, cj *checkJSON) {
 func statusLabel(status string) string {
 	switch status {
 	case store.DiffAdded:
-		return i18n.T("cli.status.added")
+		return locales.CliStatusAdded()
 	case store.DiffRemoved:
-		return i18n.T("cli.status.removed")
+		return locales.CliStatusRemoved()
 	default:
-		return i18n.T("cli.status.changed")
+		return locales.CliStatusChanged()
 	}
 }
 

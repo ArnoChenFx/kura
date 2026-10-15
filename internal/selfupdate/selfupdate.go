@@ -23,7 +23,7 @@
 package selfupdate
 
 import (
-	"github.com/ArnoChenFx/kura/internal/i18n"
+	"github.com/ArnoChenFx/kura/locales"
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/plugins/updater"
 	"github.com/egoist/mygo/plugins/updater/native"
@@ -54,8 +54,8 @@ func CheckForUpdates() {
 // 它是产品名，不随界面语言变，所以不进目录。
 const appMenuLabel = "kura"
 
-// aboutLabel / quitLabel 是菜单项文字，随界面语言变（见 catalog.go 的
-// selfupdate.menu.about / selfupdate.menu.quit）。带 Role 的退出条目其 Click
+// aboutLabel / quitLabel 是菜单项文字，随界面语言变（见 locales 的
+// selfupdateMenuAbout / selfupdateMenuQuit）。带 Role 的退出条目其 Click
 // 与行为被保留，只覆盖显示文字（RoleQuit 的默认文字是英文 "Quit"）。
 
 // AppMenu 构建 kura 的应用菜单并交给应用。必须在应用就绪后调用——正确
@@ -77,14 +77,14 @@ func appMenu(updateItem *mygo.MenuItem) *mygo.Menu {
 			// macOS：系统标准关于面板（mac-only role，Windows/Linux 自动隐藏）。
 			{Role: mygo.RoleAbout},
 			// 三端一致的「关于」：原生消息框显示名字与版本。
-			{Label: i18n.T("selfupdate.menu.about"), Click: func(*mygo.MenuItem, *mygo.Window) { showAbout() }},
+			{Label: locales.SelfupdateMenuAbout(), Click: func(*mygo.MenuItem, *mygo.Window) { showAbout() }},
 			mygo.Separator(),
 			// 「检查更新…」：打开 MyGo 原生更新窗口（检查 → 发布说明 →
 			// 下载进度 → 替换 → 重启）。
 			updateItem,
 			mygo.Separator(),
 			// 退出：保留 RoleQuit 的默认行为，只换文字。
-			{Role: mygo.RoleQuit, Label: i18n.T("selfupdate.menu.quit")},
+			{Role: mygo.RoleQuit, Label: locales.SelfupdateMenuQuit()},
 		}},
 		// 编辑/窗口菜单保住 Ctrl/Cmd+C、V 等标准快捷键与窗口管理。
 		{Role: mygo.RoleEditMenu},
@@ -103,16 +103,16 @@ func appVersion() string {
 // 阻塞弹窗是官方示例的做法（examples/native/main.go 的 Confirm 同款）。
 //
 // 正文由两整段拼成（正文 + 更新说明），版本行按需插在中间：每段都是完整
-// 句子，在目录里各自成条（见 catalog.go），不做词序相关的拼接。
+// 句子，在目录里各自成条（见 locales/），不做词序相关的拼接。
 func showAbout() {
-	msg := i18n.T("selfupdate.about.body")
+	msg := locales.SelfupdateAboutBody()
 	if v := appVersion(); v != "" {
-		msg += i18n.Tf("selfupdate.about.version", v)
+		msg += locales.SelfupdateAboutVersion(v)
 	}
-	msg += i18n.T("selfupdate.about.updater")
+	msg += locales.SelfupdateAboutUpdater()
 	_, _ = mygo.Dialog.Message(mygo.MessageOptions{
-		Title:   i18n.T("selfupdate.about.title"),
+		Title:   locales.SelfupdateAboutTitle(),
 		Message: msg,
-		Buttons: []string{i18n.T("selfupdate.about.ok")},
+		Buttons: []string{locales.SelfupdateAboutOk()},
 	})
 }

@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/ArnoChenFx/kura/internal/i18n"
+	"github.com/ArnoChenFx/kura/locales"
 )
 
 // RootsDir 是追加根目录私有状态在 Home 下的父目录名。
@@ -27,17 +28,17 @@ const RootsDir = "roots"
 
 var (
 	// ErrRootExists 表示要添加的根目录已在列表里。
-	ErrRootExists = i18n.NewError("store.err.rootExists")
+	ErrRootExists = i18n.NewError("storeErrRootExists", func() string { return locales.StoreErrRootExists() })
 	// ErrUnknownRoot 表示要移除的根目录不在列表里。
-	ErrUnknownRoot = i18n.NewError("store.err.unknownRoot")
+	ErrUnknownRoot = i18n.NewError("storeErrUnknownRoot", func() string { return locales.StoreErrUnknownRoot() })
 	// ErrDefaultRoot 表示试图移除默认根目录。
-	ErrDefaultRoot = i18n.NewError("store.err.defaultRoot")
+	ErrDefaultRoot = i18n.NewError("storeErrDefaultRoot", func() string { return locales.StoreErrDefaultRoot() })
 	// ErrNotDir 表示要添加的路径不存在或不是文件夹。
-	ErrNotDir = i18n.NewError("store.err.notDir")
+	ErrNotDir = i18n.NewError("storeErrNotDir", func() string { return locales.StoreErrNotDir() })
 	// ErrUnknownTheme 表示外观偏好不是 system、light 或 dark。
-	ErrUnknownTheme = i18n.NewError("store.err.unknownTheme")
+	ErrUnknownTheme = i18n.NewError("storeErrUnknownTheme", func() string { return locales.StoreErrUnknownTheme() })
 	// ErrUnknownView 表示排列模式不是 grid 或 list。
-	ErrUnknownView = i18n.NewError("store.err.unknownView")
+	ErrUnknownView = i18n.NewError("storeErrUnknownView", func() string { return locales.StoreErrUnknownView() })
 )
 
 // 外观偏好的取值（config.json 的 theme）。
@@ -170,7 +171,7 @@ func (l *Library) Configs() []*Config {
 func (l *Library) AddRoot(root string) error {
 	abs, err := filepath.Abs(root)
 	if err != nil {
-		return i18n.Wrapf(err, "store.err.resolvePath", root)
+		return i18n.Wrapf(err, "storeErrResolvePath", func() string { return locales.StoreErrResolvePath(root) })
 	}
 	info, err := os.Stat(abs)
 	if err != nil || !info.IsDir() {
@@ -212,7 +213,7 @@ func (l *Library) MoveRoot(root string, to int) error {
 		case i == 0 || to == 0:
 			return nil, ErrDefaultRoot
 		case to < 0 || to >= len(cur):
-			return nil, i18n.Errorf("store.err.posOutOfRange", to)
+			return nil, i18n.NewError("storeErrPosOutOfRange", func() string { return locales.StoreErrPosOutOfRange(to) })
 		}
 		moved := cur[i]
 		return slices.Insert(slices.Delete(cur, i, i+1), to, moved), nil

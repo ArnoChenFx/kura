@@ -18,6 +18,7 @@ import (
 	"strings"
 
 	"github.com/ArnoChenFx/kura/internal/i18n"
+	"github.com/ArnoChenFx/kura/locales"
 )
 
 // 发现的边界值。巨型仓库（如把整个 monorepo 克隆下来）递归扫描可能失控，
@@ -31,7 +32,7 @@ const (
 
 // ErrTooManySkills 表示仓库内的技能候选超过上限（见 maxDiscoverSkills）。
 // 用 errors.Is 判断。
-var ErrTooManySkills = i18n.NewError("store.err.tooManySkills")
+var ErrTooManySkills = i18n.NewError("storeErrTooManySkills", func() string { return locales.StoreErrTooManySkills() })
 
 // DiscoverResult 是一次发现的结果：Paths 按字典序排序，元素是相对仓库根
 // 的 slash 路径（形如 "skills/engineering/tdd"），可直接当作 SubPath 使用。
@@ -56,13 +57,13 @@ type CandidatesError struct {
 // Error 实现 error 接口。
 func (e *CandidatesError) Error() string {
 	var b strings.Builder
-	b.WriteString(i18n.Tf("store.err.tooManyCandidates", e.Repo, len(e.Paths)))
+	b.WriteString(locales.StoreErrTooManyCandidates(e.Repo, len(e.Paths)))
 	for i, p := range e.Paths {
 		b.WriteString("\n  ")
 		b.WriteString(p)
 		if i >= 63 { // 防御：Paths 正常不会超过 maxDiscoverSkills，这里兜底截断
 			b.WriteString("\n  ")
-			b.WriteString(i18n.T("store.term.truncated"))
+			b.WriteString(locales.StoreTermTruncated())
 			break
 		}
 	}
@@ -88,7 +89,7 @@ type pluginJSON struct {
 //  3. 否则递归扫描：每个含 SKILL.md 的目录都是一个候选。
 func DiscoverSkills(dir string) (*DiscoverResult, error) {
 	if !fileExists(dir) {
-		return nil, i18n.Errorf("store.err.repoDirMissing", dir)
+		return nil, i18n.NewError("storeErrRepoDirMissing", func() string { return locales.StoreErrRepoDirMissing(dir) })
 	}
 	// 1) 仓库根本身是技能：最简单也最常见的单技能仓库布局。
 	if fileExists(filepath.Join(dir, "SKILL.md")) {
@@ -192,7 +193,7 @@ func discoverByScan(dir string) (*DiscoverResult, error) {
 			}
 			if fileExists(filepath.Join(dir, filepath.FromSlash(sub), "SKILL.md")) {
 				if len(paths) >= maxDiscoverSkills {
-					return sentinelErr(ErrTooManySkills, "store.err.tooManySkillsLimit", maxDiscoverSkills)
+					return sentinelErr(ErrTooManySkills, "storeErrTooManySkillsLimit", func() string { return locales.StoreErrTooManySkillsLimit(maxDiscoverSkills) })
 				}
 				paths = append(paths, sub)
 				// 命中即停：技能目录不该再往下钻出「技能里的技能」，

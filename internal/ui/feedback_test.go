@@ -5,6 +5,7 @@ package ui
 // 数据全在 t.TempDir() 里；翻译一律用假实现。
 
 import (
+	"github.com/ArnoChenFx/kura/locales"
 	"os"
 	"path/filepath"
 	"slices"
@@ -214,7 +215,7 @@ func TestFullTextShowsTranslationAndSendsWholeDoc(t *testing.T) {
 	a.settle()
 	tt.Frame()
 	calls := f.calls
-	detClickTab(t, a, tt, detailTabFull)
+	detClickTab(t, a, tt, locales.UiDetailTabFull())
 
 	if !detHasText(tt, "仅界面显示，不改动技能文件") {
 		t.Errorf("译文全文页应注明仅界面显示，文本 %v", tt.Texts())

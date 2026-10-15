@@ -20,6 +20,7 @@ import (
 	"github.com/ArnoChenFx/kura/internal/i18n"
 	"github.com/ArnoChenFx/kura/internal/store"
 	kuraui "github.com/ArnoChenFx/kura/internal/ui"
+	"github.com/ArnoChenFx/kura/locales"
 	"github.com/egoist/mygo"
 	myui "github.com/egoist/mygo/ui"
 )
@@ -65,8 +66,8 @@ func TestAppMenuStructure(t *testing.T) {
 	if sub[0].Role != mygo.RoleAbout {
 		t.Errorf("第 1 项应为 RoleAbout，得到 role=%q label=%q", sub[0].Role, sub[0].Label)
 	}
-	if sub[1].Label != i18n.T("selfupdate.menu.about") || sub[1].Click == nil {
-		t.Errorf("第 2 项应为 %q 且有 Click，得到 %+v", i18n.T("selfupdate.menu.about"), sub[1])
+	if sub[1].Label != locales.SelfupdateMenuAbout() || sub[1].Click == nil {
+		t.Errorf("第 2 项应为 %q 且有 Click，得到 %+v", locales.SelfupdateMenuAbout(), sub[1])
 	}
 	if sub[2].Type != mygo.MenuItemSeparator || sub[4].Type != mygo.MenuItemSeparator {
 		t.Errorf("第 3/5 项应为分隔线，得到 %q / %q", sub[2].Type, sub[4].Type)
@@ -74,9 +75,9 @@ func TestAppMenuStructure(t *testing.T) {
 	if sub[3].Label != stub.Label || sub[3].Click != nil {
 		t.Errorf("第 4 项应为注入的更新项（label=%q，替身无 Click），得到 %+v", stub.Label, sub[3])
 	}
-	if sub[5].Label != i18n.T("selfupdate.menu.quit") || sub[5].Role != mygo.RoleQuit {
+	if sub[5].Label != locales.SelfupdateMenuQuit() || sub[5].Role != mygo.RoleQuit {
 		t.Errorf("第 6 项应为 %q（RoleQuit），得到 label=%q role=%q",
-			i18n.T("selfupdate.menu.quit"), sub[5].Label, sub[5].Role)
+			locales.SelfupdateMenuQuit(), sub[5].Label, sub[5].Role)
 	}
 }
 

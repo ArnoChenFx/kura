@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/ArnoChenFx/kura/internal/i18n"
+	"github.com/ArnoChenFx/kura/locales"
 )
 
 // 界面语言的存储取值（config.json 的 lang）。
@@ -25,7 +26,7 @@ const (
 )
 
 // ErrUnknownUILang 表示语言偏好不是 system、zh 或 en。
-var ErrUnknownUILang = i18n.NewError("store.err.unknownUILang")
+var ErrUnknownUILang = i18n.NewError("storeErrUnknownUILang", func() string { return locales.StoreErrUnknownUILang() })
 
 // NormalizeLang 把配置里的语言值规范成三个存储取值之一：空串（与
 // "system"、"auto"）是跟随系统；zh 与 en 的大小写变体、以及 zh-CN、en-US

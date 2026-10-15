@@ -8,7 +8,7 @@
 
 **任务**：
 
-- `test`：在 ubuntu-latest 和 windows-latest 各跑一遍 `gofmt -l .`（非空即失败）、`go vet ./...`、`go tool mygo vet .`、 `go test ./...`、`CGO_ENABLED=0 go test ./...`、`go build ./...`。
+- `test`：在 ubuntu-latest 和 windows-latest 各跑一遍 `gofmt -l .`（非空即失败）、`go vet ./...`、`go tool mygo vet .`、`go tool mygo i18n check`（catalogs 的 key、占位符类型与译文）、`go test ./...`、`CGO_ENABLED=0 go test ./...`、`go build ./...`。
 - `build-cli`：ubuntu-latest 上交叉编译 `./cmd/kura`（`CGO_ENABLED=0`），目标 linux/amd64、linux/arm64、windows/amd64、darwin/amd64、darwin/arm64，每个目标上传一个 workflow artifact，名称 `kura-cli-<os>-<arch>`。
 
 ### `.github/workflows/release.yml`（名称 Release）

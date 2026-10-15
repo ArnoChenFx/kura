@@ -24,6 +24,7 @@ import (
 	"strings"
 
 	"github.com/ArnoChenFx/kura/internal/i18n"
+	"github.com/ArnoChenFx/kura/locales"
 )
 
 // 文件差异状态常量（CLI JSON、UI 文案共用的稳定词汇）。
@@ -139,7 +140,7 @@ func (c *Config) PreviewUpdates(names []string) []PreviewResult {
 	var order []repoKey
 	for i, name := range names {
 		out[i].Name = name
-		meta, err := c.sourceMeta(name, msgMetaMissingCheck)
+		meta, err := c.sourceMeta(name, i18n.NewError("storeErrMetaMissingCheck", func() string { return locales.StoreErrMetaMissingCheck(name) }))
 		if err != nil {
 			out[i].Err = err
 			continue
@@ -255,7 +256,7 @@ func (c *Config) upToDatePreview(name string, meta *Meta, commit, basis string) 
 // contentPreview 逐文件比较已安装内容与上游目录 newDir。
 func (c *Config) contentPreview(name string, meta *Meta, newDir, commit string) (*UpdatePreview, error) {
 	if !fileExists(newDir) {
-		return nil, i18n.Errorf("store.err.upstreamDirMissing", newDir)
+		return nil, i18n.NewError("storeErrUpstreamDirMissing", func() string { return locales.StoreErrUpstreamDirMissing(newDir) })
 	}
 	p, err := diffTree(c.SkillPath(name), newDir)
 	if err != nil {
@@ -325,7 +326,7 @@ func hashTreeExcluding(dir string, exclude func(rel string) bool) (string, error
 		return nil
 	})
 	if err != nil {
-		return "", i18n.Wrapf(err, "store.err.walkDir", dir)
+		return "", i18n.Wrapf(err, "storeErrWalkDir", func() string { return locales.StoreErrWalkDir(dir) })
 	}
 	sort.Strings(paths)
 	h := sha256.New()
@@ -334,7 +335,7 @@ func hashTreeExcluding(dir string, exclude func(rel string) bool) (string, error
 		h.Write([]byte{0})
 		data, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(rel)))
 		if err != nil {
-			return "", i18n.Wrapf(err, "store.err.readFile", rel)
+			return "", i18n.Wrapf(err, "storeErrReadFile", func() string { return locales.StoreErrReadFile(rel) })
 		}
 		h.Write(data)
 		h.Write([]byte{0})
@@ -375,7 +376,7 @@ func diffTree(oldDir, newDir string) (*UpdatePreview, error) {
 			// 上游已删除：删除行数记为该文件行数，便于展示规模。
 			data, rerr := os.ReadFile(of)
 			if rerr != nil {
-				return nil, i18n.Wrapf(rerr, "store.err.readFile", rel)
+				return nil, i18n.Wrapf(rerr, "storeErrReadFile", func() string { return locales.StoreErrReadFile(rel) })
 			}
 			p.Files = append(p.Files, FileDiff{
 				Path: rel, Status: DiffRemoved,
@@ -385,7 +386,7 @@ func diffTree(oldDir, newDir string) (*UpdatePreview, error) {
 			// 上游新增：新增行数记为该文件行数。
 			data, rerr := os.ReadFile(nf)
 			if rerr != nil {
-				return nil, i18n.Wrapf(rerr, "store.err.readFile", rel)
+				return nil, i18n.Wrapf(rerr, "storeErrReadFile", func() string { return locales.StoreErrReadFile(rel) })
 			}
 			p.Files = append(p.Files, FileDiff{
 				Path: rel, Status: DiffAdded,
@@ -394,11 +395,11 @@ func diffTree(oldDir, newDir string) (*UpdatePreview, error) {
 		default:
 			od, rerr := os.ReadFile(of)
 			if rerr != nil {
-				return nil, i18n.Wrapf(rerr, "store.err.readFile", rel)
+				return nil, i18n.Wrapf(rerr, "storeErrReadFile", func() string { return locales.StoreErrReadFile(rel) })
 			}
 			nd, rerr := os.ReadFile(nf)
 			if rerr != nil {
-				return nil, i18n.Wrapf(rerr, "store.err.readFile", rel)
+				return nil, i18n.Wrapf(rerr, "storeErrReadFile", func() string { return locales.StoreErrReadFile(rel) })
 			}
 			if bytes.Equal(od, nd) {
 				p.Unchanged++
@@ -445,7 +446,7 @@ func listFiles(dir string) (map[string]string, error) {
 		return nil
 	})
 	if err != nil {
-		return nil, i18n.Wrapf(err, "store.err.walkDir", dir)
+		return nil, i18n.Wrapf(err, "storeErrWalkDir", func() string { return locales.StoreErrWalkDir(dir) })
 	}
 	return files, nil
 }

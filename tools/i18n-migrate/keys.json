@@ -1,0 +1,3331 @@
+{
+ "cli.check.changes": {
+  "en": "%s: %d files changed (added %d · modified %d · removed %d)\n",
+  "line": 170,
+  "pkg": "cli",
+  "verbs": [
+   "s",
+   "d",
+   "d",
+   "d",
+   "d"
+  ],
+  "zh": "%s: %d 个文件有变化（新增 %d · 修改 %d · 删除 %d）\n"
+ },
+ "cli.check.commit": {
+  "en": "  upstream commit: %s\n",
+  "line": 172,
+  "pkg": "cli",
+  "verbs": [
+   "s"
+  ],
+  "zh": "  上游 commit: %s\n"
+ },
+ "cli.check.hash": {
+  "en": "  hash: %s -> %s\n",
+  "line": 171,
+  "pkg": "cli",
+  "verbs": [
+   "s",
+   "s"
+  ],
+  "zh": "  哈希: %s -> %s\n"
+ },
+ "cli.check.localModifiedNote": {
+  "en": "  note: the local content differs from the installed one (edited)\n",
+  "line": 169,
+  "pkg": "cli",
+  "verbs": [],
+  "zh": "  注意: 本地内容与安装时不一致（被改过）\n"
+ },
+ "cli.check.localModifiedWarn": {
+  "en": "  note: the local content was edited; applying the update overwrites those edits (the old content is in the snapshot)\n",
+  "line": 173,
+  "pkg": "cli",
+  "verbs": [],
+  "zh": "  注意: 本地内容已被改过，应用更新会覆盖这些改动（旧内容在快照中）\n"
+ },
+ "cli.check.noteCommit": {
+  "en": " (upstream commit unchanged)",
+  "line": 166,
+  "pkg": "cli",
+  "verbs": [],
+  "zh": "（上游 commit 未变）"
+ },
+ "cli.check.noteTree": {
+  "en": " (upstream folder unchanged)",
+  "line": 167,
+  "pkg": "cli",
+  "verbs": [],
+  "zh": "（上游该目录未变）"
+ },
+ "cli.check.upToDate": {
+  "en": "%s: up to date%s\n",
+  "line": 168,
+  "pkg": "cli",
+  "verbs": [
+   "s",
+   "s"
+  ],
+  "zh": "%s: 已是最新%s\n"
+ },
+ "cli.checkAll.failed": {
+  "en": "[%s] check failed: %s\n",
+  "line": 164,
+  "pkg": "cli",
+  "verbs": [
+   "s",
+   "s"
+  ],
+  "zh": "[%s] 检查失败: %s\n"
+ },
+ "cli.checkAll.summary": {
+  "en": "%d skill(s) in total, %d with an update pending\n",
+  "line": 165,
+  "pkg": "cli",
+  "verbs": [
+   "d",
+   "d"
+  ],
+  "zh": "共 %d 个技能，%d 个有待更新\n"
+ },
+ "cli.doctor.allGood": {
+  "en": "all good (nothing to report)",
+  "line": 194,
+  "pkg": "cli",
+  "verbs": [],
+  "zh": "一切正常（没有发现问题）"
+ },
+ "cli.doctor.disabledLeftover": {
+  "en": "disabled holds a disabled skill (kura enable %s brings it back)",
+  "line": 188,
+  "pkg": "cli",
+  "verbs": [
+   "s"
+  ],
+  "zh": "disabled 中有已禁用的技能（可用 kura enable %s 恢复）"
+ },
+ "cli.doctor.hashDrift": {
+  "en": "the content does not match the metadata: now %s, recorded %s (kura update refreshes it)",
+  "line": 186,
+  "pkg": "cli",
+  "verbs": [
+   "s",
+   "s"
+  ],
+  "zh": "内容与元数据不符: 当前 %s，记录 %s（可用 kura update 刷新）"
+ },
+ "cli.doctor.metaMissing": {
+  "en": "the skill in %s has no .kura-meta.json (kura import-meta can fill it in from the lock file)",
+  "line": 183,
+  "pkg": "cli",
+  "verbs": [
+   "s"
+  ],
+  "zh": "%s 的技能缺少 .kura-meta.json（可用 kura import-meta 从 lock 文件补齐）"
+ },
+ "cli.doctor.noContentHash": {
+  "en": "the metadata has no contentHash, so content drift cannot be detected",
+  "line": 185,
+  "pkg": "cli",
+  "verbs": [],
+  "zh": "元数据缺少 contentHash，无法检测内容漂移"
+ },
+ "cli.doctor.problemCount": {
+  "en": "%d problem(s) found:\n",
+  "line": 195,
+  "pkg": "cli",
+  "verbs": [
+   "d"
+  ],
+  "zh": "发现 %d 个问题:\n"
+ },
+ "cli.doctor.readFailed": {
+  "en": "failed to read %s: %v",
+  "line": 192,
+  "pkg": "cli",
+  "verbs": [
+   "s",
+   "v"
+  ],
+  "zh": "读取 %s 失败: %v"
+ },
+ "cli.doctor.rootFileNotDir": {
+  "en": "a plain file shares the name of a skill; skills must be folders",
+  "line": 182,
+  "pkg": "cli",
+  "verbs": [],
+  "zh": "根目录下存在同名普通文件，技能必须是目录"
+ },
+ "cli.doctor.rootUnreadable": {
+  "en": "the root folder is unreadable: %v",
+  "line": 181,
+  "pkg": "cli",
+  "verbs": [
+   "v"
+  ],
+  "zh": "根目录不可读: %v"
+ },
+ "cli.doctor.scanDisabledFailed": {
+  "en": "failed to scan the disabled folder: %v",
+  "line": 187,
+  "pkg": "cli",
+  "verbs": [
+   "v"
+  ],
+  "zh": "扫描 disabled 目录失败: %v"
+ },
+ "cli.doctor.scanTrashFailed": {
+  "en": "failed to scan the trash folder: %v",
+  "line": 189,
+  "pkg": "cli",
+  "verbs": [
+   "v"
+  ],
+  "zh": "扫描 trash 目录失败: %v"
+ },
+ "cli.doctor.sideFileNotDir": {
+  "en": "a plain file under %s shares the name of a skill; skills must be folders",
+  "line": 193,
+  "pkg": "cli",
+  "verbs": [
+   "s"
+  ],
+  "zh": "%s 下存在同名普通文件，技能必须是目录"
+ },
+ "cli.doctor.skillMDMissing": {
+  "en": "the skill in %s has no SKILL.md",
+  "line": 184,
+  "pkg": "cli",
+  "verbs": [
+   "s"
+  ],
+  "zh": "%s 的技能缺少 SKILL.md"
+ },
+ "cli.doctor.trashEntryUnreadable": {
+  "en": "the trash entry is unreadable: %v",
+  "line": 190,
+  "pkg": "cli",
+  "verbs": [
+   "v"
+  ],
+  "zh": "回收站条目不可读: %v"
+ },
+ "cli.doctor.trashLeftover": {
+  "en": "the trash still holds %s/%s (kura restore %s --stamp %s brings it back)",
+  "line": 191,
+  "pkg": "cli",
+  "verbs": [
+   "s",
+   "s",
+   "s",
+   "s"
+  ],
+  "zh": "回收站中保留着 %s/%s（可用 kura restore %s --stamp %s 恢复）"
+ },
+ "cli.err.actionFailed": {
+  "en": "%s failed: %v",
+  "line": 121,
+  "pkg": "cli",
+  "verbs": [
+   "s",
+   "v"
+  ],
+  "zh": "%s 失败: %v"
+ },
+ "cli.err.addFailed": {
+  "en": "add failed: %v",
+  "line": 151,
+  "pkg": "cli",
+  "verbs": [
+   "v"
+  ],
+  "zh": "add 失败: %v"
+ },
+ "cli.err.addPositional": {
+  "en": "add takes no positional arguments",
+  "line": 149,
+  "pkg": "cli",
+  "verbs": [],
+  "zh": "add 不接受位置参数"
+ },
+ "cli.err.addUsage": {
+  "en": "usage: kura add --local PATH or kura add --github owner/repo (exactly one source must be given)",
+  "line": 150,
+  "pkg": "cli",
+  "verbs": [],
+  "zh": "用法: kura add --local PATH 或 kura add --github owner/repo（必须且只能提供一个来源）"
+ },
+ "cli.err.badFlag": {
+  "en": "kura: argument error: %v (see kura --help)\n",
+  "line": 97,
+  "pkg": "cli",
+  "verbs": [
+   "v"
+  ],
+  "zh": "kura: 参数错误: %v（用 kura --help 查看用法）\n"
+ },
+ "cli.err.badFlagJSON": {
+  "en": "argument error: %v",
+  "line": 98,
+  "pkg": "cli",
+  "verbs": [
+   "v"
+  ],
+  "zh": "参数错误: %v"
+ },
+ "cli.err.badLang": {
+  "en": "kura: argument error: unknown interface language %q (use system, zh or en; see kura --help)\n",
+  "line": 99,
+  "pkg": "cli",
+  "verbs": [
+   "q"
+  ],
+  "zh": "kura: 参数错误: 无法识别的界面语言 %q（只能是 system、zh 或 en；用 kura --help 查看用法）\n"
+ },
+ "cli.err.checkAllWithName": {
+  "en": "usage: kura update --check --all (NAME cannot be given here)",
+  "line": 158,
+  "pkg": "cli",
+  "verbs": [],
+  "zh": "用法: kura update --check --all（不能同时给 NAME）"
+ },
+ "cli.err.checkFailed": {
+  "en": "check failed: %v",
+  "line": 162,
+  "pkg": "cli",
+  "verbs": [
+   "v"
+  ],
+  "zh": "check 失败: %v"
+ },
+ "cli.err.checkNeedsName": {
+  "en": "usage: kura update --check <NAME> | kura update --check --all",
+  "line": 160,
+  "pkg": "cli",
+  "verbs": [],
+  "zh": "用法: kura update --check <NAME> | kura update --check --all"
+ },
+ "cli.err.doctorPositional": {
+  "en": "doctor takes no positional arguments",
+  "line": 179,
+  "pkg": "cli",
+  "verbs": [],
+  "zh": "doctor 不接受位置参数"
+ },
+ "cli.err.importMetaFailed": {
+  "en": "import-meta failed: %v: %s",
+  "line": 135,
+  "pkg": "cli",
+  "verbs": [
+   "v",
+   "s"
+  ],
+  "zh": "import-meta 失败: %v: %s"
+ },
+ "cli.err.importMetaFailedPlain": {
+  "en": "import-meta failed: %v",
+  "line": 136,
+  "pkg": "cli",
+  "verbs": [
+   "v"
+  ],
+  "zh": "import-meta 失败: %v"
+ },
+ "cli.err.importMetaPositional": {
+  "en": "import-meta takes no positional arguments",
+  "line": 134,
+  "pkg": "cli",
+  "verbs": [],
+  "zh": "import-meta 不接受位置参数"
+ },
+ "cli.err.jsonEncode": {
+  "en": "cli: failed to encode JSON",
+  "line": 109,
+  "pkg": "cli",
+  "verbs": [],
+  "zh": "cli: JSON 编码失败"
+ },
+ "cli.err.listPositional": {
+  "en": "list takes no positional arguments (got %q)",
+  "line": 112,
+  "pkg": "cli",
+  "verbs": [
+   "q"
+  ],
+  "zh": "list 不接受位置参数（得到 %q）"
+ },
+ "cli.err.removeFailed": {
+  "en": "remove failed: %v",
+  "line": 126,
+  "pkg": "cli",
+  "verbs": [
+   "v"
+  ],
+  "zh": "remove 失败: %v"
+ },
+ "cli.err.restoreFailed": {
+  "en": "restore failed: %v",
+  "line": 129,
+  "pkg": "cli",
+  "verbs": [
+   "v"
+  ],
+  "zh": "restore 失败: %v"
+ },
+ "cli.err.scanRootFailed": {
+  "en": "failed to scan the root folder: %v",
+  "line": 163,
+  "pkg": "cli",
+  "verbs": [
+   "v"
+  ],
+  "zh": "扫描根目录失败: %v"
+ },
+ "cli.err.unknownCommand": {
+  "en": "kura: unknown command %q\n\n",
+  "line": 100,
+  "pkg": "cli",
+  "verbs": [
+   "q"
+  ],
+  "zh": "kura: 未知命令 %q\n\n"
+ },
+ "cli.err.updateFailed": {
+  "en": "update failed: %v",
+  "line": 161,
+  "pkg": "cli",
+  "verbs": [
+   "v"
+  ],
+  "zh": "update 失败: %v"
+ },
+ "cli.err.usageRemove": {
+  "en": "usage: kura remove <NAME> [--stamp TS]",
+  "line": 125,
+  "pkg": "cli",
+  "verbs": [],
+  "zh": "用法: kura remove <NAME> [--stamp TS]"
+ },
+ "cli.err.usageRestore": {
+  "en": "usage: kura restore <NAME> [--stamp TS]",
+  "line": 128,
+  "pkg": "cli",
+  "verbs": [],
+  "zh": "用法: kura restore <NAME> [--stamp TS]"
+ },
+ "cli.err.usageToggle": {
+  "en": "usage: kura %s <NAME>",
+  "line": 120,
+  "pkg": "cli",
+  "verbs": [
+   "s"
+  ],
+  "zh": "用法: kura %s <NAME>"
+ },
+ "cli.err.usageUpdate": {
+  "en": "usage: kura update <NAME>",
+  "line": 156,
+  "pkg": "cli",
+  "verbs": [],
+  "zh": "用法: kura update <NAME>"
+ },
+ "cli.flag.addGithub": {
+  "en": "GitHub repository, owner/repo",
+  "line": 145,
+  "pkg": "cli",
+  "verbs": [],
+  "zh": "GitHub 仓库，格式 owner/repo"
+ },
+ "cli.flag.addLocal": {
+  "en": "Local skill folder",
+  "line": 144,
+  "pkg": "cli",
+  "verbs": [],
+  "zh": "本地技能目录"
+ },
+ "cli.flag.addName": {
+  "en": "Skill name after installing (defaults to the source folder name)",
+  "line": 148,
+  "pkg": "cli",
+  "verbs": [],
+  "zh": "安装后的技能名（默认取来源目录名）"
+ },
+ "cli.flag.addRef": {
+  "en": "Branch/tag/commit (optional for github)",
+  "line": 147,
+  "pkg": "cli",
+  "verbs": [],
+  "zh": "分支/标签/commit（github 来源可选）"
+ },
+ "cli.flag.addSubPath": {
+  "en": "Skill folder inside the repository (optional for github; when omitted the skills are discovered, and one must be picked if there are several)",
+  "line": 146,
+  "pkg": "cli",
+  "verbs": [],
+  "zh": "仓库内技能子目录（github 来源可选；省略时自动发现仓库内的技能，多个候选时必填其一）"
+ },
+ "cli.flag.all": {
+  "en": "With --check: check every skill in the root folder",
+  "line": 155,
+  "pkg": "cli",
+  "verbs": [],
+  "zh": "配合 --check：检查根目录全部技能"
+ },
+ "cli.flag.check": {
+  "en": "Preview what an update would change (writes nothing); exit code 3 when an update is pending",
+  "line": 154,
+  "pkg": "cli",
+  "verbs": [],
+  "zh": "预览更新会改什么（不修改任何文件）；有待更新时退出码 3"
+ },
+ "cli.flag.dryRun": {
+  "en": "Only report which skills would be imported, write nothing",
+  "line": 132,
+  "pkg": "cli",
+  "verbs": [],
+  "zh": "只分析将要导入哪些技能，不写文件"
+ },
+ "cli.flag.home": {
+  "en": "kura data folder (default $KURA_HOME or ~/.kura)",
+  "line": 105,
+  "pkg": "cli",
+  "verbs": [],
+  "zh": "kura 数据目录（默认 $KURA_HOME 或 ~/.kura）"
+ },
+ "cli.flag.json": {
+  "en": "Output JSON (errors go to stderr as JSON too)",
+  "line": 103,
+  "pkg": "cli",
+  "verbs": [],
+  "zh": "以 JSON 输出（错误也以 JSON 输出到 stderr）"
+ },
+ "cli.flag.lang": {
+  "en": "Interface language: system | zh | en (default $KURA_LANG, then config.json, then the system locale)",
+  "line": 106,
+  "pkg": "cli",
+  "verbs": [],
+  "zh": "界面语言：system | zh | en（默认 $KURA_LANG，其次 config.json 的 lang，最后跟随系统）"
+ },
+ "cli.flag.lock": {
+  "en": "Path of the lock file (default <root>/../.skill-lock.json)",
+  "line": 133,
+  "pkg": "cli",
+  "verbs": [],
+  "zh": "lock 文件路径（默认 <root>/../.skill-lock.json）"
+ },
+ "cli.flag.root": {
+  "en": "Skills root folder (default $KURA_ROOT or ~/.agents/skills)",
+  "line": 104,
+  "pkg": "cli",
+  "verbs": [],
+  "zh": "技能根目录（默认 $KURA_ROOT 或 ~/.agents/skills）"
+ },
+ "cli.flag.stampRemove": {
+  "en": "Timestamp folder name for the trash and the snapshot (defaults to now)",
+  "line": 124,
+  "pkg": "cli",
+  "verbs": [],
+  "zh": "回收站/快照时间戳目录名（默认当前时间）"
+ },
+ "cli.flag.stampRestore": {
+  "en": "Restore the trash copy with this timestamp (defaults to the newest)",
+  "line": 127,
+  "pkg": "cli",
+  "verbs": [],
+  "zh": "恢复回收站中指定时间戳的版本（默认最新一次）"
+ },
+ "cli.importMeta.count": {
+  "en": "%s %d skills:\n",
+  "line": 141,
+  "pkg": "cli",
+  "verbs": [
+   "s",
+   "d"
+  ],
+  "zh": "%s %d 个技能:\n"
+ },
+ "cli.importMeta.imported": {
+  "en": "imported",
+  "line": 137,
+  "pkg": "cli",
+  "verbs": [],
+  "zh": "已导入"
+ },
+ "cli.importMeta.lockMissing": {
+  "en": " (missing)",
+  "line": 139,
+  "pkg": "cli",
+  "verbs": [],
+  "zh": "（不存在）"
+ },
+ "cli.importMeta.nothing": {
+  "en": "no skills to import",
+  "line": 140,
+  "pkg": "cli",
+  "verbs": [],
+  "zh": "没有需要导入的技能"
+ },
+ "cli.importMeta.wouldImport": {
+  "en": "would import",
+  "line": 138,
+  "pkg": "cli",
+  "verbs": [],
+  "zh": "将要导入"
+ },
+ "cli.list.empty": {
+  "en": "(no skills)",
+  "line": 113,
+  "pkg": "cli",
+  "verbs": [],
+  "zh": "（没有技能）"
+ },
+ "cli.list.metaBroken": {
+  "en": "\t⚠ corrupt metadata: %s",
+  "line": 116,
+  "pkg": "cli",
+  "verbs": [
+   "s"
+  ],
+  "zh": "\t⚠ 元数据损坏: %s"
+ },
+ "cli.list.noMeta": {
+  "en": "\t(no metadata)",
+  "line": 117,
+  "pkg": "cli",
+  "verbs": [],
+  "zh": "\t(无元数据)"
+ },
+ "cli.list.noSkillMD": {
+  "en": "\t⚠ SKILL.md missing",
+  "line": 115,
+  "pkg": "cli",
+  "verbs": [],
+  "zh": "\t⚠ 缺少 SKILL.md"
+ },
+ "cli.list.trashed": {
+  "en": "\t(trash entry, its content lives in the timestamp subfolder)",
+  "line": 114,
+  "pkg": "cli",
+  "verbs": [],
+  "zh": "\t(回收站条目，内容在时间戳子目录中)"
+ },
+ "cli.status.added": {
+  "en": "added",
+  "line": 174,
+  "pkg": "cli",
+  "verbs": [],
+  "zh": "新增"
+ },
+ "cli.status.changed": {
+  "en": "modified",
+  "line": 175,
+  "pkg": "cli",
+  "verbs": [],
+  "zh": "修改"
+ },
+ "cli.status.removed": {
+  "en": "removed",
+  "line": 176,
+  "pkg": "cli",
+  "verbs": [],
+  "zh": "删除"
+ },
+ "cli.term.rootDir": {
+  "en": "the root folder",
+  "line": 180,
+  "pkg": "cli",
+  "verbs": [],
+  "zh": "根目录"
+ },
+ "cli.usage.checkAllWithName": {
+  "en": "kura: usage: kura update --check --all (NAME cannot be given here)\n",
+  "line": 157,
+  "pkg": "cli",
+  "verbs": [],
+  "zh": "kura: 用法: kura update --check --all（不能同时给 NAME）\n"
+ },
+ "cli.usage.checkNeedsName": {
+  "en": "kura: usage: kura update --check <NAME> | kura update --check --all\n",
+  "line": 159,
+  "pkg": "cli",
+  "verbs": [],
+  "zh": "kura: 用法: kura update --check <NAME> | kura update --check --all\n"
+ },
+ "cli.usage.text": {
+  "en": "kura — a manager for agent skills (headless command line)\n\nUsage:\n  kura <command> [args] [flags]\n\nCommands:\n  list                 List all skills (enabled + disabled + trashed)\n  scan                 Same as list (alias; handy with --root to override the root)\n  disable <NAME>       Disable a skill (move it to <home>/disabled/, a pure move)\n  enable <NAME>        Enable a skill (move it back from disabled/ to the root)\n  remove <NAME> [--stamp TS]\n                       Move to the trash (snapshot first); --stamp names the\n                       trash timestamp folder\n  restore <NAME> [--stamp TS]\n                       Restore from the trash; --stamp defaults to the newest\n  import-meta [--dry-run] [--lock PATH]\n                       Fill in missing .kura-meta.json from the\n                       .skill-lock.json next to the root; --dry-run only\n                       reports, it writes nothing; default folder only, added\n                       folders are rejected (exit 1)\n  add --local PATH [--name N]\n                       Install a skill from a local folder\n  add --github owner/repo [--sub-path P] [--ref R] [--name N]\n                       Install a skill from a GitHub repository; without\n                       --sub-path the skills inside are discovered: a single\n                       candidate installs directly, several candidates are\n                       listed and fail with exit 1, pick one with --sub-path\n  update <NAME>        Pull the recorded source again and replace the content\n                       (snapshot first)\n  update --check <NAME>\n                       Preview what updating NAME would change (writes nothing);\n                       exit 3 when an update is pending, 0 when up to date\n  update --check --all\n                       Preview every skill in the root (one block per skill)\n  doctor               Read-only check: missing metadata / corrupt metadata /\n                       content drift / missing SKILL.md / leftovers in disabled\n                       and trash\n  version              Print the version\n\nGlobal flags (may follow any subcommand):\n  --json        Output JSON; on errors the message goes to stderr as {\"error\": \"...\"}\n  --root PATH   Skills root folder (default $KURA_ROOT or ~/.agents/skills)\n  --home PATH   kura data folder (default $KURA_HOME or ~/.kura)\n  --lang LANG   Interface language: system | zh | en (default $KURA_LANG, then\n                config.json, then the system locale)\n\nExit codes:\n  0  success\n  1  operation failed (skill not found, name conflict, I/O error, ...)\n  2  usage error (unknown command, bad flag, wrong number of arguments)\n  3  doctor found problems (see its output)\n\nJSON shapes (with --json):\n  list/scan   {\"root\": string, \"skills\": [{name, state, hasSkillMd, dir,\n              sourceType?, sourceURL?, ref?, subPath?, pluginName?,\n              updatedAt?, metaError?}]}\n  changes     {\"id\": string, \"state\": string, \"dir\": string,\n              \"snapshotDir\"?: string}\n  doctor      {\"root\": string, \"problems\": [{kind, skill, detail}]}\n              kind in not-a-dir | no-meta | meta-parse | hash-drift |\n                      no-skillmd | leftover\n  import-meta {\"root\": string, \"lockPath\": string, \"dryRun\": bool,\n              \"wouldImport\"?: [string], \"imported\"?: [string]}\n  add (many candidates) {\"error\": string, \"repo\": string,\n              \"candidates\": [string]} (stderr, exit 1)\n  update --check NAME\n              {\"skill\": string, \"sourceType\": string, \"commit\"?: string,\n              \"hasChanges\": bool, \"basis\": string, \"localModified\": bool,\n              \"oldHash\": string, \"newHash\": string,\n              \"files\": [{path, status, added, removed, oldHash?, newHash?}],\n              \"unchanged\": int}\n              status in added | changed | removed; files holds only the\n              differing files, [] when there is nothing to do. Exit code: 3\n              when an update is pending, 0 when up to date.\n              basis in commit | tree | content: git sources compare the upstream\n              commit with git ls-remote (commit), when it changed the tree hash\n              of the skill folder (tree); neither downloads files, anything else\n              compares file by file (content). localModified true means the\n              installed content was edited (an unchanged upstream is not an\n              update, but applying one overwrites those edits).\n  update --check --all\n              {\"root\": string,\n              \"results\": [{skill, error?, check?}]}\n              check has the shape above; exit 3 if any skill has an update.\n              Skills from the same repository share one check and clone.\n",
+  "line": 18,
+  "pkg": "cli",
+  "verbs": [],
+  "zh": "kura —— agent skills 管理器（无界面命令行）\n\n用法:\n  kura <命令> [参数] [flags]\n\n命令:\n  list                 列出全部技能（enabled + disabled + trashed）\n  scan                 同 list（别名，习惯上配合 --root 覆盖根目录）\n  disable <NAME>       禁用技能（移动到 <home>/disabled/，纯移动）\n  enable <NAME>        启用技能（从 disabled/ 移回根目录）\n  remove <NAME> [--stamp TS]\n                       移入回收站（先写快照）；--stamp 指定回收站时间戳目录名\n  restore <NAME> [--stamp TS]\n                       从回收站恢复；--stamp 省略时取最新一次\n  import-meta [--dry-run] [--lock PATH]\n                       依据根目录同级的 .skill-lock.json 补写缺失的\n                       .kura-meta.json；--dry-run 只分析不写文件；\n                       只适用于默认目录，界面里追加的目录会被拒绝（退出码 1）\n  add --local PATH [--name N]\n                       从本地目录安装技能\n  add --github owner/repo [--sub-path P] [--ref R] [--name N]\n                       从 GitHub 仓库安装技能；不给 --sub-path 时自动发现\n                       仓库内的技能：唯一候选直接安装，多个候选列出清单\n                       并以退出码 1 失败，请用 --sub-path 指定其中一个\n  update <NAME>        按元数据记录的来源重新拉取并替换内容（先快照）\n  update --check <NAME>\n                       预览 NAME 的更新会改什么（不修改任何文件）；\n                       有待更新退出码 3，无变化退出码 0\n  update --check --all\n                       预览根目录全部技能的更新（每个技能一段结果）\n  doctor               只读体检：缺元数据 / 元数据损坏 / 内容漂移 /\n                       缺 SKILL.md / disabled 与 trash 中的残留条目\n  version              打印版本\n\n全局 flags（可写在任何子命令之后）:\n  --json        输出 JSON；出错时错误信息以 {\"error\": \"...\"} 输出到 stderr\n  --root PATH   技能根目录（默认 $KURA_ROOT 或 ~/.agents/skills）\n  --home PATH   kura 数据目录（默认 $KURA_HOME 或 ~/.kura）\n  --lang LANG   界面语言：system | zh | en（默认 $KURA_LANG，其次\n                config.json 的 lang，最后跟随系统）\n\n退出码:\n  0  成功\n  1  操作失败（技能不存在、同名冲突、IO 错误等）\n  2  用法错误（未知命令、flag 解析失败、参数个数不对）\n  3  doctor 发现问题（明细见其输出）\n\nJSON 输出形状（--json 时）:\n  list/scan   {\"root\": string, \"skills\": [{name, state, hasSkillMd, dir,\n              sourceType?, sourceURL?, ref?, subPath?, pluginName?,\n              updatedAt?, metaError?}]}\n  变更命令     {\"id\": string, \"state\": string, \"dir\": string,\n              \"snapshotDir\"?: string}\n  doctor      {\"root\": string, \"problems\": [{kind, skill, detail}]}\n              kind ∈ not-a-dir | no-meta | meta-parse | hash-drift |\n                      no-skillmd | leftover\n  import-meta {\"root\": string, \"lockPath\": string, \"dryRun\": bool,\n              \"wouldImport\"?: [string], \"imported\"?: [string]}\n  add（多候选） {\"error\": string, \"repo\": string,\n              \"candidates\": [string]}（输出到 stderr，退出码 1）\n  update --check NAME\n              {\"skill\": string, \"sourceType\": string, \"commit\"?: string,\n              \"hasChanges\": bool, \"basis\": string, \"localModified\": bool,\n              \"oldHash\": string, \"newHash\": string,\n              \"files\": [{path, status, added, removed, oldHash?, newHash?}],\n              \"unchanged\": int}\n              status ∈ added | changed | removed；files 只含差异文件，\n              无变化时为 []。退出码：有待更新 3，无变化 0。\n              basis ∈ commit | tree | content：git 来源先用 git ls-remote\n              比对上游 commit（commit），commit 变了再比对该技能目录的树哈希\n              （tree），这两种都不下载文件；其余情况才逐文件比较（content）。\n              localModified 为 true 表示已安装内容被改过（上游没变时不算\n              有更新，但应用更新会覆盖这些改动）。\n  update --check --all\n              {\"root\": string,\n              \"results\": [{skill, error?, check?}]}\n              check 的形状同上；任一技能有待更新退出码 3。同一仓库的技能\n              共用一次检查与 clone。\n"
+ },
+ "selfupdate.about.body": {
+  "en": "kura — an agent skill manager (github.com/ArnoChenFx/kura)",
+  "line": 22,
+  "pkg": "selfupdate",
+  "verbs": [],
+  "zh": "kura — agent 技能管理器（github.com/ArnoChenFx/kura）"
+ },
+ "selfupdate.about.ok": {
+  "en": "OK",
+  "line": 26,
+  "pkg": "selfupdate",
+  "verbs": [],
+  "zh": "好"
+ },
+ "selfupdate.about.title": {
+  "en": "About kura",
+  "line": 21,
+  "pkg": "selfupdate",
+  "verbs": [],
+  "zh": "关于 kura"
+ },
+ "selfupdate.about.updater": {
+  "en": "\n\nApp updates come from the MyGo updater: the \"Check for Updates...\" menu item looks for new versions.",
+  "line": 25,
+  "pkg": "selfupdate",
+  "verbs": [],
+  "zh": "\n\n应用更新由 MyGo 更新器提供：菜单里的「检查更新…」检查新版本。"
+ },
+ "selfupdate.about.version": {
+  "en": "\nversion %s",
+  "line": 24,
+  "pkg": "selfupdate",
+  "verbs": [
+   "s"
+  ],
+  "zh": "\n版本 %s"
+ },
+ "selfupdate.menu.about": {
+  "en": "About kura",
+  "line": 18,
+  "pkg": "selfupdate",
+  "verbs": [],
+  "zh": "关于 kura"
+ },
+ "selfupdate.menu.quit": {
+  "en": "Quit kura",
+  "line": 19,
+  "pkg": "selfupdate",
+  "verbs": [],
+  "zh": "退出 kura"
+ },
+ "store.err.addOptionsNil": {
+  "en": "store: AddOptions must not be nil",
+  "line": 77,
+  "pkg": "store",
+  "verbs": [],
+  "zh": "store: AddOptions 不能为空"
+ },
+ "store.err.addSource": {
+  "en": "store: provide exactly one of LocalPath or Repo",
+  "line": 74,
+  "pkg": "store",
+  "verbs": [],
+  "zh": "store: LocalPath 与 Repo 必须且只能提供一个"
+ },
+ "store.err.badRepo": {
+  "en": "store: Repo must look like owner/repo",
+  "line": 75,
+  "pkg": "store",
+  "verbs": [],
+  "zh": "store: Repo 格式应为 owner/repo"
+ },
+ "store.err.badSkillSubPath": {
+  "en": "store: the subfolder of skill %s must not start with / or contain ..",
+  "line": 84,
+  "pkg": "store",
+  "verbs": [
+   "s"
+  ],
+  "zh": "store: 技能 %s 的子目录不能以 / 开头或包含 .."
+ },
+ "store.err.badSubPath": {
+  "en": "store: SubPath must not start with / or contain ..",
+  "line": 76,
+  "pkg": "store",
+  "verbs": [],
+  "zh": "store: SubPath 不能以 / 开头或包含 .."
+ },
+ "store.err.cleanStaging": {
+  "en": "store: failed to clean the temp folder of the cross-volume move: %s",
+  "line": 130,
+  "pkg": "store",
+  "verbs": [
+   "s"
+  ],
+  "zh": "store: 清理跨卷移动的临时目录 %s 失败"
+ },
+ "store.err.copyFile": {
+  "en": "store: failed to copy %s",
+  "line": 138,
+  "pkg": "store",
+  "verbs": [
+   "s"
+  ],
+  "zh": "store: 复制 %s 失败"
+ },
+ "store.err.createDir": {
+  "en": "store: failed to create folder %s",
+  "line": 25,
+  "pkg": "store",
+  "verbs": [
+   "s"
+  ],
+  "zh": "store: 创建目录 %s 失败"
+ },
+ "store.err.createRootDir": {
+  "en": "store: failed to create the root folder",
+  "line": 57,
+  "pkg": "store",
+  "verbs": [],
+  "zh": "store: 创建根目录失败"
+ },
+ "store.err.createTrashDir": {
+  "en": "store: failed to create the trash folder",
+  "line": 49,
+  "pkg": "store",
+  "verbs": [],
+  "zh": "store: 创建回收站目录失败"
+ },
+ "store.err.crossVolumeCopy": {
+  "en": "store: cross-volume move of %s: failed to copy to %s (source untouched)",
+  "line": 131,
+  "pkg": "store",
+  "verbs": [
+   "s",
+   "s"
+  ],
+  "zh": "store: 跨卷移动 %s：复制到 %s 失败（原目录未改动）"
+ },
+ "store.err.crossVolumeRename": {
+  "en": "store: cross-volume move of %s: failed to place %s (source untouched)",
+  "line": 132,
+  "pkg": "store",
+  "verbs": [
+   "s",
+   "s"
+  ],
+  "zh": "store: 跨卷移动 %s：落位 %s 失败（原目录未改动）"
+ },
+ "store.err.crossVolumeSource": {
+  "en": "store: cross-volume move done, but deleting the source folder %s failed (the content is at %s)",
+  "line": 133,
+  "pkg": "store",
+  "verbs": [
+   "s",
+   "s"
+  ],
+  "zh": "store: 跨卷移动完成，但删除源目录 %s 失败（内容已在 %s）"
+ },
+ "store.err.defaultRoot": {
+  "en": "store: the default skills folder cannot be removed",
+  "line": 34,
+  "pkg": "store",
+  "verbs": [],
+  "zh": "store: 默认技能目录不能移除"
+ },
+ "store.err.deriveSkillName": {
+  "en": "store: cannot derive a skill name from the source: %s",
+  "line": 82,
+  "pkg": "store",
+  "verbs": [
+   "s"
+  ],
+  "zh": "store: 无法从来源推导技能名: %s"
+ },
+ "store.err.disableFailed": {
+  "en": "store: failed to disable %s",
+  "line": 54,
+  "pkg": "store",
+  "verbs": [
+   "s"
+  ],
+  "zh": "store: 禁用 %s 失败"
+ },
+ "store.err.disabledExists": {
+  "en": "store: a skill named %s already exists in disabled",
+  "line": 56,
+  "pkg": "store",
+  "verbs": [
+   "s"
+  ],
+  "zh": "store: disabled 中已存在同名技能 %s"
+ },
+ "store.err.emptyHome": {
+  "en": "store: home must not be empty (use DefaultConfig)",
+  "line": 23,
+  "pkg": "store",
+  "verbs": [],
+  "zh": "store: home 不能为空（可改用 DefaultConfig）"
+ },
+ "store.err.emptyMeta": {
+  "en": "store: cannot write empty metadata",
+  "line": 121,
+  "pkg": "store",
+  "verbs": [],
+  "zh": "store: 不能写入空元数据"
+ },
+ "store.err.emptyRoot": {
+  "en": "store: root must not be empty",
+  "line": 22,
+  "pkg": "store",
+  "verbs": [],
+  "zh": "store: root 不能为空"
+ },
+ "store.err.emptySettings": {
+  "en": "store: settings must not be nil",
+  "line": 144,
+  "pkg": "store",
+  "verbs": [],
+  "zh": "store: 设置不能为空"
+ },
+ "store.err.enableFailed": {
+  "en": "store: failed to enable %s",
+  "line": 53,
+  "pkg": "store",
+  "verbs": [
+   "s"
+  ],
+  "zh": "store: 启用 %s 失败"
+ },
+ "store.err.escapesTrash": {
+  "en": "store: invalid skill name: %q resolves outside the trash, nothing deleted",
+  "line": 61,
+  "pkg": "store",
+  "verbs": [
+   "q"
+  ],
+  "zh": "store: 非法的技能名: %q 解析后不在回收站内，未删除"
+ },
+ "store.err.gitFailed": {
+  "en": "store: git %s failed: %s",
+  "line": 105,
+  "pkg": "store",
+  "verbs": [
+   "s",
+   "s"
+  ],
+  "zh": "store: git %s 失败: %s"
+ },
+ "store.err.gitTimeout": {
+  "en": "store: git operation timed out",
+  "line": 103,
+  "pkg": "store",
+  "verbs": [],
+  "zh": "store: git 操作超时"
+ },
+ "store.err.gitTimeoutAfter": {
+  "en": "store: git operation timed out (%s took longer than %s)",
+  "line": 104,
+  "pkg": "store",
+  "verbs": [
+   "s",
+   "s"
+  ],
+  "zh": "store: git 操作超时（%s 超过 %s）"
+ },
+ "store.err.hashTrashCopy": {
+  "en": "store: failed to hash the trash copy %s, nothing deleted",
+  "line": 64,
+  "pkg": "store",
+  "verbs": [
+   "s"
+  ],
+  "zh": "store: 计算回收站副本 %s 的内容哈希失败，未删除"
+ },
+ "store.err.importDefaultOnly": {
+  "en": "store: .skill-lock.json only describes the default skills folder, so importing metadata is limited to that folder",
+  "line": 126,
+  "pkg": "store",
+  "verbs": [],
+  "zh": "store: .skill-lock.json 只描述默认技能目录，导入元数据只适用于默认目录"
+ },
+ "store.err.importMetaWrite": {
+  "en": "store: failed to write the metadata of %s",
+  "line": 127,
+  "pkg": "store",
+  "verbs": [
+   "s"
+  ],
+  "zh": "store: 写入 %s 的元数据失败"
+ },
+ "store.err.installSkill": {
+  "en": "store: failed to install %s",
+  "line": 83,
+  "pkg": "store",
+  "verbs": [
+   "s"
+  ],
+  "zh": "store: 安装 %s 失败"
+ },
+ "store.err.invalidName": {
+  "en": "store: invalid skill name",
+  "line": 45,
+  "pkg": "store",
+  "verbs": [],
+  "zh": "store: 非法的技能名"
+ },
+ "store.err.invalidStamp": {
+  "en": "store: invalid timestamp folder name %q",
+  "line": 47,
+  "pkg": "store",
+  "verbs": [
+   "q"
+  ],
+  "zh": "store: 非法的时间戳目录名 %q"
+ },
+ "store.err.invalidStampName": {
+  "en": "store: invalid skill name: timestamp folder name %q",
+  "line": 60,
+  "pkg": "store",
+  "verbs": [
+   "q"
+  ],
+  "zh": "store: 非法的技能名: 时间戳目录名 %q"
+ },
+ "store.err.localSourceGone": {
+  "en": "store: the local source is gone: %s",
+  "line": 93,
+  "pkg": "store",
+  "verbs": [
+   "s"
+  ],
+  "zh": "store: 本地来源不存在: %s"
+ },
+ "store.err.marshalConfig": {
+  "en": "store: failed to encode the config",
+  "line": 28,
+  "pkg": "store",
+  "verbs": [],
+  "zh": "store: 序列化配置失败"
+ },
+ "store.err.marshalMeta": {
+  "en": "store: failed to encode the metadata",
+  "line": 122,
+  "pkg": "store",
+  "verbs": [],
+  "zh": "store: 序列化元数据失败"
+ },
+ "store.err.marshalSettings": {
+  "en": "store: failed to encode the settings",
+  "line": 145,
+  "pkg": "store",
+  "verbs": [],
+  "zh": "store: 序列化设置失败"
+ },
+ "store.err.metaMissingCheck": {
+  "en": "store: %s has no .kura-meta.json, cannot check for updates",
+  "line": 90,
+  "pkg": "store",
+  "verbs": [
+   "s"
+  ],
+  "zh": "store: %s 缺少 .kura-meta.json，无法检查更新"
+ },
+ "store.err.metaMissingUpdate": {
+  "en": "store: %s has no .kura-meta.json, cannot update",
+  "line": 89,
+  "pkg": "store",
+  "verbs": [
+   "s"
+  ],
+  "zh": "store: %s 缺少 .kura-meta.json，无法更新"
+ },
+ "store.err.metaNoGithubURL": {
+  "en": "store: the metadata has no github source URL",
+  "line": 94,
+  "pkg": "store",
+  "verbs": [],
+  "zh": "store: 元数据缺少 github 来源 URL"
+ },
+ "store.err.metaNoLocalPath": {
+  "en": "store: the metadata has no local source path",
+  "line": 92,
+  "pkg": "store",
+  "verbs": [],
+  "zh": "store: 元数据缺少 local 来源路径"
+ },
+ "store.err.metaUnreadable": {
+  "en": "store: the metadata of %s is unreadable",
+  "line": 91,
+  "pkg": "store",
+  "verbs": [
+   "s"
+  ],
+  "zh": "store: %s 的元数据不可读"
+ },
+ "store.err.moveToTrash": {
+  "en": "store: failed to move (%s) to the trash",
+  "line": 50,
+  "pkg": "store",
+  "verbs": [
+   "s"
+  ],
+  "zh": "store: 移入回收站失败 (%s)"
+ },
+ "store.err.noDefaultBranch": {
+  "en": "store: the remote %s has no default branch",
+  "line": 106,
+  "pkg": "store",
+  "verbs": [
+   "s"
+  ],
+  "zh": "store: 远端 %s 没有默认分支"
+ },
+ "store.err.noDirInRepo": {
+  "en": "store: no such folder in the repository: %s",
+  "line": 109,
+  "pkg": "store",
+  "verbs": [
+   "s"
+  ],
+  "zh": "store: 仓库内不存在目录 %s"
+ },
+ "store.err.noSettings": {
+  "en": "store: no settings have been saved yet",
+  "line": 143,
+  "pkg": "store",
+  "verbs": [],
+  "zh": "store: 尚未保存任何设置"
+ },
+ "store.err.noSnapshotPath": {
+  "en": "store: no free snapshot path (%s/%s), nothing deleted",
+  "line": 70,
+  "pkg": "store",
+  "verbs": [
+   "s",
+   "s"
+  ],
+  "zh": "store: 找不到可用的快照位置 (%s/%s)，未删除"
+ },
+ "store.err.noSubdir": {
+  "en": "store: the folder has no subfolders",
+  "line": 71,
+  "pkg": "store",
+  "verbs": [],
+  "zh": "store: 目录下没有子目录"
+ },
+ "store.err.noSuchRef": {
+  "en": "store: the remote %s has no branch or tag %s",
+  "line": 107,
+  "pkg": "store",
+  "verbs": [
+   "s",
+   "s"
+  ],
+  "zh": "store: 远端 %s 不存在分支或标签 %s"
+ },
+ "store.err.notConfigured": {
+  "en": "store: translation is not configured: fill in the API address, key and model first",
+  "line": 142,
+  "pkg": "store",
+  "verbs": [],
+  "zh": "store: 翻译未配置：请先在设置里填写 API 地址、密钥与模型"
+ },
+ "store.err.notDir": {
+  "en": "store: the path does not exist or is not a folder",
+  "line": 35,
+  "pkg": "store",
+  "verbs": [],
+  "zh": "store: 路径不存在或不是文件夹"
+ },
+ "store.err.parseFile": {
+  "en": "store: failed to parse %s",
+  "line": 125,
+  "pkg": "store",
+  "verbs": [
+   "s"
+  ],
+  "zh": "store: 解析 %s 失败"
+ },
+ "store.err.parseJSON": {
+  "en": "store: failed to parse %s (corrupt JSON)",
+  "line": 27,
+  "pkg": "store",
+  "verbs": [
+   "s"
+  ],
+  "zh": "store: 解析 %s 失败（JSON 已损坏）"
+ },
+ "store.err.parseMeta": {
+  "en": "store: failed to parse %s (corrupt JSON)",
+  "line": 120,
+  "pkg": "store",
+  "verbs": [
+   "s"
+  ],
+  "zh": "store: 解析 %s 失败（JSON 损坏）"
+ },
+ "store.err.posOutOfRange": {
+  "en": "store: position %d is out of range",
+  "line": 39,
+  "pkg": "store",
+  "verbs": [
+   "d"
+  ],
+  "zh": "store: 位置 %d 超出列表范围"
+ },
+ "store.err.prepareContent": {
+  "en": "store: failed to prepare the new content",
+  "line": 96,
+  "pkg": "store",
+  "verbs": [],
+  "zh": "store: 准备新内容失败"
+ },
+ "store.err.purgeFailed": {
+  "en": "store: failed to delete %s permanently",
+  "line": 63,
+  "pkg": "store",
+  "verbs": [
+   "s"
+  ],
+  "zh": "store: 永久删除 %s 失败"
+ },
+ "store.err.readDir": {
+  "en": "store: failed to read folder %s",
+  "line": 137,
+  "pkg": "store",
+  "verbs": [
+   "s"
+  ],
+  "zh": "store: 读取目录 %s 失败"
+ },
+ "store.err.readFile": {
+  "en": "store: failed to read %s",
+  "line": 26,
+  "pkg": "store",
+  "verbs": [
+   "s"
+  ],
+  "zh": "store: 读取 %s 失败"
+ },
+ "store.err.replaceAndRestore": {
+  "en": "store: the swap failed and the automatic restore failed too (snapshot at %s)",
+  "line": 97,
+  "pkg": "store",
+  "verbs": [
+   "s"
+  ],
+  "zh": "store: 替换失败且自动恢复失败（快照在 %s）"
+ },
+ "store.err.replaceRestored": {
+  "en": "store: the swap failed (restored from the snapshot)",
+  "line": 98,
+  "pkg": "store",
+  "verbs": [],
+  "zh": "store: 替换失败（已从快照恢复）"
+ },
+ "store.err.repoDirMissing": {
+  "en": "store: no such repository folder: %s",
+  "line": 116,
+  "pkg": "store",
+  "verbs": [
+   "s"
+  ],
+  "zh": "store: 仓库目录不存在: %s"
+ },
+ "store.err.resolveLocalPath": {
+  "en": "store: failed to resolve the path",
+  "line": 79,
+  "pkg": "store",
+  "verbs": [],
+  "zh": "store: 解析路径失败"
+ },
+ "store.err.resolvePath": {
+  "en": "store: failed to resolve the path %s",
+  "line": 38,
+  "pkg": "store",
+  "verbs": [
+   "s"
+  ],
+  "zh": "store: 无法解析路径 %s"
+ },
+ "store.err.restoreFailed": {
+  "en": "store: failed to restore %s",
+  "line": 58,
+  "pkg": "store",
+  "verbs": [
+   "s"
+  ],
+  "zh": "store: 恢复 %s 失败"
+ },
+ "store.err.rootExists": {
+  "en": "store: that folder is already in the list",
+  "line": 32,
+  "pkg": "store",
+  "verbs": [],
+  "zh": "store: 该目录已在列表中"
+ },
+ "store.err.skillExists": {
+  "en": "store: a skill named %s already exists in the root folder",
+  "line": 55,
+  "pkg": "store",
+  "verbs": [
+   "s"
+  ],
+  "zh": "store: 根目录已存在同名技能 %s"
+ },
+ "store.err.snapshot": {
+  "en": "store: failed to snapshot %s",
+  "line": 46,
+  "pkg": "store",
+  "verbs": [
+   "s"
+  ],
+  "zh": "store: 快照 %s 失败"
+ },
+ "store.err.snapshotBeforePurge": {
+  "en": "store: failed to snapshot %s before deleting, nothing deleted",
+  "line": 68,
+  "pkg": "store",
+  "verbs": [
+   "s"
+  ],
+  "zh": "store: 永久删除前快照 %s 失败，未删除"
+ },
+ "store.err.snapshotCheck": {
+  "en": "store: failed to check the snapshot path %s; %s not deleted",
+  "line": 67,
+  "pkg": "store",
+  "verbs": [
+   "s",
+   "s"
+  ],
+  "zh": "store: 检查快照位置 %s 失败，未删除 %s"
+ },
+ "store.err.snapshotIsFile": {
+  "en": "store: the snapshot path %s is taken by a file; %s not deleted",
+  "line": 66,
+  "pkg": "store",
+  "verbs": [
+   "s",
+   "s"
+  ],
+  "zh": "store: 快照位置 %s 被文件占用，未删除 %s"
+ },
+ "store.err.snapshotIsSymlink": {
+  "en": "store: the snapshot path %s is a symlink, so it cannot serve as a snapshot; %s not deleted",
+  "line": 65,
+  "pkg": "store",
+  "verbs": [
+   "s",
+   "s"
+  ],
+  "zh": "store: 快照位置 %s 是符号链接，不能当作快照，未删除 %s"
+ },
+ "store.err.snapshotVerify": {
+  "en": "store: the snapshot of %s failed verification, nothing deleted",
+  "line": 69,
+  "pkg": "store",
+  "verbs": [
+   "s"
+  ],
+  "zh": "store: 永久删除前快照 %s 校验失败，未删除"
+ },
+ "store.err.sourceNoSkillMD": {
+  "en": "store: the source folder has no SKILL.md: %s",
+  "line": 78,
+  "pkg": "store",
+  "verbs": [
+   "s"
+  ],
+  "zh": "store: 来源目录缺少 SKILL.md: %s"
+ },
+ "store.err.sourceNotDir": {
+  "en": "store: the source is not a folder: %s",
+  "line": 81,
+  "pkg": "store",
+  "verbs": [
+   "s"
+  ],
+  "zh": "store: 来源不是目录: %s"
+ },
+ "store.err.sourceUnreadable": {
+  "en": "store: the source folder is not readable",
+  "line": 80,
+  "pkg": "store",
+  "verbs": [],
+  "zh": "store: 来源目录不可读"
+ },
+ "store.err.sparseCheckout": {
+  "en": "store: failed to set up the sparse checkout",
+  "line": 110,
+  "pkg": "store",
+  "verbs": [],
+  "zh": "store: 准备稀疏检出失败"
+ },
+ "store.err.tempDir": {
+  "en": "store: failed to create a temp folder",
+  "line": 108,
+  "pkg": "store",
+  "verbs": [],
+  "zh": "store: 创建临时目录失败"
+ },
+ "store.err.tooManyCandidates": {
+  "en": "store: the repository %s holds %d skills; pick one with --sub-path:",
+  "line": 115,
+  "pkg": "store",
+  "verbs": [
+   "s",
+   "d"
+  ],
+  "zh": "store: 仓库 %s 里有 %d 个技能，请用 --sub-path 指定其中一个："
+ },
+ "store.err.tooManySkills": {
+  "en": "store: too many skill candidates in the repository",
+  "line": 113,
+  "pkg": "store",
+  "verbs": [],
+  "zh": "store: 仓库内技能候选过多"
+ },
+ "store.err.tooManySkillsLimit": {
+  "en": "store: too many skill candidates in the repository (limit %d)",
+  "line": 114,
+  "pkg": "store",
+  "verbs": [
+   "d"
+  ],
+  "zh": "store: 仓库内技能候选过多（上限 %d 个）"
+ },
+ "store.err.translateDo": {
+  "en": "store: the translation request failed",
+  "line": 150,
+  "pkg": "store",
+  "verbs": [],
+  "zh": "store: 翻译请求失败"
+ },
+ "store.err.translateEmpty": {
+  "en": "store: the translation response is empty",
+  "line": 155,
+  "pkg": "store",
+  "verbs": [],
+  "zh": "store: 翻译响应内容为空"
+ },
+ "store.err.translateEndpoint": {
+  "en": "store: failed to build the translation request (check the API address %s)",
+  "line": 149,
+  "pkg": "store",
+  "verbs": [
+   "s"
+  ],
+  "zh": "store: 构造翻译请求失败（请检查 API 地址 %s）"
+ },
+ "store.err.translateNoChoices": {
+  "en": "store: the translation response has no choices (the server returned no translation)",
+  "line": 154,
+  "pkg": "store",
+  "verbs": [],
+  "zh": "store: 翻译响应里没有 choices（服务端未返回译文）"
+ },
+ "store.err.translateParse": {
+  "en": "store: failed to parse the translation response (not valid JSON)",
+  "line": 153,
+  "pkg": "store",
+  "verbs": [],
+  "zh": "store: 解析翻译响应失败（不是合法 JSON）"
+ },
+ "store.err.translateRead": {
+  "en": "store: failed to read the translation response",
+  "line": 151,
+  "pkg": "store",
+  "verbs": [],
+  "zh": "store: 读取翻译响应失败"
+ },
+ "store.err.translateRequest": {
+  "en": "store: failed to build the translation request",
+  "line": 148,
+  "pkg": "store",
+  "verbs": [],
+  "zh": "store: 构造翻译请求失败"
+ },
+ "store.err.translateStatus": {
+  "en": "store: the translation API returned %d: %s",
+  "line": 152,
+  "pkg": "store",
+  "verbs": [
+   "d",
+   "s"
+  ],
+  "zh": "store: 翻译接口返回 %d: %s"
+ },
+ "store.err.trashExists": {
+  "en": "store: the trash already contains %s/%s",
+  "line": 48,
+  "pkg": "store",
+  "verbs": [
+   "s",
+   "s"
+  ],
+  "zh": "store: 回收站中已存在 %s/%s"
+ },
+ "store.err.trashRead": {
+  "en": "store: failed to read %s from the trash",
+  "line": 62,
+  "pkg": "store",
+  "verbs": [
+   "s"
+  ],
+  "zh": "store: 读取回收站中的 %s 失败"
+ },
+ "store.err.unknownLang": {
+  "en": "store: unsupported translation target language",
+  "line": 141,
+  "pkg": "store",
+  "verbs": [],
+  "zh": "store: 不支持的翻译目标语言"
+ },
+ "store.err.unknownRoot": {
+  "en": "store: that folder is not in the list",
+  "line": 33,
+  "pkg": "store",
+  "verbs": [],
+  "zh": "store: 列表中没有该目录"
+ },
+ "store.err.unknownSkill": {
+  "en": "store: skill not found",
+  "line": 21,
+  "pkg": "store",
+  "verbs": [],
+  "zh": "store: 未找到该技能"
+ },
+ "store.err.unknownSkillInTrash": {
+  "en": "store: skill not found: %s (not in the trash)",
+  "line": 59,
+  "pkg": "store",
+  "verbs": [
+   "s"
+  ],
+  "zh": "store: 未找到该技能: %s（回收站中不存在）"
+ },
+ "store.err.unknownSourceType": {
+  "en": "store: unknown source type %q",
+  "line": 95,
+  "pkg": "store",
+  "verbs": [
+   "q"
+  ],
+  "zh": "store: 未知来源类型 %q"
+ },
+ "store.err.unknownTheme": {
+  "en": "store: the theme must be system, light or dark",
+  "line": 36,
+  "pkg": "store",
+  "verbs": [],
+  "zh": "store: 外观只能是 system、light 或 dark"
+ },
+ "store.err.unknownUILang": {
+  "en": "store: the UI language must be system, zh or en",
+  "line": 42,
+  "pkg": "store",
+  "verbs": [],
+  "zh": "store: 界面语言只能是 system、zh 或 en"
+ },
+ "store.err.unknownView": {
+  "en": "store: the view must be grid or list",
+  "line": 37,
+  "pkg": "store",
+  "verbs": [],
+  "zh": "store: 排列模式只能是 grid 或 list"
+ },
+ "store.err.updateMeta": {
+  "en": "store: failed to update the metadata",
+  "line": 99,
+  "pkg": "store",
+  "verbs": [],
+  "zh": "store: 更新元数据失败"
+ },
+ "store.err.upstreamDirMissing": {
+  "en": "store: no such upstream folder: %s",
+  "line": 100,
+  "pkg": "store",
+  "verbs": [
+   "s"
+  ],
+  "zh": "store: 上游目录不存在: %s"
+ },
+ "store.err.userHome": {
+  "en": "store: cannot locate the user home folder",
+  "line": 24,
+  "pkg": "store",
+  "verbs": [],
+  "zh": "store: 无法确定用户主目录"
+ },
+ "store.err.walkDir": {
+  "en": "store: failed to walk %s",
+  "line": 136,
+  "pkg": "store",
+  "verbs": [
+   "s"
+  ],
+  "zh": "store: 遍历 %s 失败"
+ },
+ "store.err.writeFile": {
+  "en": "store: failed to write %s",
+  "line": 29,
+  "pkg": "store",
+  "verbs": [
+   "s"
+  ],
+  "zh": "store: 写入 %s 失败"
+ },
+ "store.langName.de": {
+  "en": "Deutsch",
+  "line": 165,
+  "pkg": "store",
+  "verbs": [],
+  "zh": "Deutsch"
+ },
+ "store.langName.en": {
+  "en": "English",
+  "line": 158,
+  "pkg": "store",
+  "verbs": [],
+  "zh": "English"
+ },
+ "store.langName.enGB": {
+  "en": "English (UK)",
+  "line": 161,
+  "pkg": "store",
+  "verbs": [],
+  "zh": "English (UK)"
+ },
+ "store.langName.enUS": {
+  "en": "English (US)",
+  "line": 160,
+  "pkg": "store",
+  "verbs": [],
+  "zh": "English (US)"
+ },
+ "store.langName.es": {
+  "en": "Español",
+  "line": 166,
+  "pkg": "store",
+  "verbs": [],
+  "zh": "Español"
+ },
+ "store.langName.fr": {
+  "en": "Français",
+  "line": 164,
+  "pkg": "store",
+  "verbs": [],
+  "zh": "Français"
+ },
+ "store.langName.ja": {
+  "en": "日本語",
+  "line": 162,
+  "pkg": "store",
+  "verbs": [],
+  "zh": "日本語"
+ },
+ "store.langName.ko": {
+  "en": "한국어",
+  "line": 163,
+  "pkg": "store",
+  "verbs": [],
+  "zh": "한국어"
+ },
+ "store.langName.pt": {
+  "en": "Português",
+  "line": 167,
+  "pkg": "store",
+  "verbs": [],
+  "zh": "Português"
+ },
+ "store.langName.ru": {
+  "en": "Русский",
+  "line": 168,
+  "pkg": "store",
+  "verbs": [],
+  "zh": "Русский"
+ },
+ "store.langName.zhCN": {
+  "en": "简体中文",
+  "line": 159,
+  "pkg": "store",
+  "verbs": [],
+  "zh": "简体中文"
+ },
+ "store.term.truncated": {
+  "en": "… (truncated)",
+  "line": 117,
+  "pkg": "store",
+  "verbs": [],
+  "zh": "…（已截断）"
+ },
+ "store.word.repoRoot": {
+  "en": "the repository root",
+  "line": 85,
+  "pkg": "store",
+  "verbs": [],
+  "zh": "仓库根"
+ },
+ "ui.action.checkAll": {
+  "en": "Check all",
+  "line": 41,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "全部检查"
+ },
+ "ui.action.checkUpdate": {
+  "en": "Check for updates",
+  "line": 42,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "检查更新"
+ },
+ "ui.action.closeDetail": {
+  "en": "Close details",
+  "line": 48,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "关闭详情"
+ },
+ "ui.action.importMeta": {
+  "en": "Import metadata",
+  "line": 43,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "导入元数据"
+ },
+ "ui.action.install": {
+  "en": "Install skill",
+  "line": 45,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "安装技能"
+ },
+ "ui.action.moveTrash": {
+  "en": "Move to trash",
+  "line": 49,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "移入回收站"
+ },
+ "ui.action.purge": {
+  "en": "Delete permanently",
+  "line": 47,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "永久删除"
+ },
+ "ui.action.purgeTooltip": {
+  "en": "Delete a trashed skill permanently",
+  "line": 50,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "永久删除回收站里的技能"
+ },
+ "ui.action.refresh": {
+  "en": "Refresh",
+  "line": 40,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "刷新"
+ },
+ "ui.action.removeRoot": {
+  "en": "Remove this directory from the list",
+  "line": 44,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "从列表移除此目录"
+ },
+ "ui.action.restore": {
+  "en": "Restore",
+  "line": 46,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "恢复"
+ },
+ "ui.card.noDescription": {
+  "en": "No description",
+  "line": 91,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "没有描述"
+ },
+ "ui.card.switchLabel": {
+  "en": "%s switch",
+  "line": 90,
+  "pkg": "ui",
+  "verbs": [
+   "s"
+  ],
+  "zh": "%s 开关"
+ },
+ "ui.common.cancel": {
+  "en": "Cancel",
+  "line": 20,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "取消"
+ },
+ "ui.common.close": {
+  "en": "Close",
+  "line": 21,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "关闭"
+ },
+ "ui.common.listSep": {
+  "en": ", ",
+  "line": 23,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "、"
+ },
+ "ui.common.save": {
+  "en": "Save",
+  "line": 22,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "保存"
+ },
+ "ui.confirm.purgeMessage": {
+  "en": "Skill %s will be deleted from the trash permanently and cannot be restored. A content snapshot is written first and kept in the kura data directory.",
+  "line": 261,
+  "pkg": "ui",
+  "verbs": [
+   "s"
+  ],
+  "zh": "技能 %s 将从回收站永久删除，无法恢复。删除前会先写入一份内容快照，快照保留在 kura 的数据目录里。"
+ },
+ "ui.confirm.purgeTitle": {
+  "en": "Delete permanently?",
+  "line": 260,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "永久删除？"
+ },
+ "ui.confirm.trashMessage": {
+  "en": "Skill %s will be moved from the skill directory to the kura trash and can be restored at any time. A content snapshot is written before the move.",
+  "line": 258,
+  "pkg": "ui",
+  "verbs": [
+   "s"
+  ],
+  "zh": "技能 %s 将从技能目录移入 kura 回收站，可随时恢复；移动前会自动写入内容快照。"
+ },
+ "ui.confirm.trashOK": {
+  "en": "Move to trash",
+  "line": 259,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "确认移入"
+ },
+ "ui.confirm.trashTitle": {
+  "en": "Move to the trash?",
+  "line": 257,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "移入回收站？"
+ },
+ "ui.detail.busy": {
+  "en": "Working on %s…",
+  "line": 117,
+  "pkg": "ui",
+  "verbs": [
+   "s"
+  ],
+  "zh": "正在操作 %s…"
+ },
+ "ui.detail.checkLabel": {
+  "en": "Detail: check for updates",
+  "line": 119,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "详情:检查更新"
+ },
+ "ui.detail.installedAt": {
+  "en": "Installed",
+  "line": 115,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "安装"
+ },
+ "ui.detail.loading": {
+  "en": "Reading SKILL.md…",
+  "line": 121,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "正在读取 SKILL.md…"
+ },
+ "ui.detail.location": {
+  "en": "Location",
+  "line": 112,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "位置"
+ },
+ "ui.detail.metaFailed": {
+  "en": "Could not read the metadata: %s",
+  "line": 113,
+  "pkg": "ui",
+  "verbs": [
+   "s"
+  ],
+  "zh": "元数据读取失败：%s"
+ },
+ "ui.detail.metaGroup": {
+  "en": "Metadata",
+  "line": 111,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "元数据"
+ },
+ "ui.detail.noMeta": {
+  "en": "No .kura-meta.json (not installed by kura, or the metadata was never imported)",
+  "line": 114,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "没有 .kura-meta.json（非 kura 安装，或尚未导入元数据）"
+ },
+ "ui.detail.noSkillMD": {
+  "en": "No SKILL.md to show",
+  "line": 122,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "没有 SKILL.md 可显示"
+ },
+ "ui.detail.purgeLabel": {
+  "en": "Detail: delete permanently",
+  "line": 120,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "详情:永久删除"
+ },
+ "ui.detail.readFailed": {
+  "en": "Could not read SKILL.md: %s",
+  "line": 123,
+  "pkg": "ui",
+  "verbs": [
+   "s"
+  ],
+  "zh": "读取 SKILL.md 失败：%s"
+ },
+ "ui.detail.source": {
+  "en": "Source",
+  "line": 110,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "来源"
+ },
+ "ui.detail.tabFull": {
+  "en": "Full text",
+  "line": 109,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "全文"
+ },
+ "ui.detail.tabOverview": {
+  "en": "Overview",
+  "line": 108,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "概览"
+ },
+ "ui.detail.trashLabel": {
+  "en": "Detail: move to trash",
+  "line": 118,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "详情:移入回收站"
+ },
+ "ui.detail.updatedAt": {
+  "en": "Updated",
+  "line": 116,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "更新"
+ },
+ "ui.diff.added": {
+  "en": "Added",
+  "line": 252,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "新增"
+ },
+ "ui.diff.modified": {
+  "en": "Modified",
+  "line": 254,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "修改"
+ },
+ "ui.diff.removed": {
+  "en": "Removed",
+  "line": 253,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "删除"
+ },
+ "ui.empty.noDisabled": {
+  "en": "No disabled skills",
+  "line": 104,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "没有已停用的技能"
+ },
+ "ui.empty.noEnabled": {
+  "en": "No enabled skills",
+  "line": 103,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "没有已启用的技能"
+ },
+ "ui.empty.noMatch": {
+  "en": "No skills match “%s”",
+  "line": 101,
+  "pkg": "ui",
+  "verbs": [
+   "s"
+  ],
+  "zh": "没有匹配「%s」的技能"
+ },
+ "ui.empty.noMatchHint": {
+  "en": "Try another keyword",
+  "line": 102,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "换个关键词试试"
+ },
+ "ui.empty.noSkills": {
+  "en": "No skills in this directory yet",
+  "line": 99,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "这个目录里还没有技能"
+ },
+ "ui.empty.noSkillsHint": {
+  "en": "Click “Install skill” at the top right to install from GitHub or a local folder",
+  "line": 100,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "点右上角的「安装技能」，从 GitHub 或本地文件夹安装"
+ },
+ "ui.empty.noTrashed": {
+  "en": "No skills in the trash",
+  "line": 105,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "没有回收站的技能"
+ },
+ "ui.fileDialog.addRootButton": {
+  "en": "Add",
+  "line": 27,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "添加"
+ },
+ "ui.fileDialog.addRootTitle": {
+  "en": "Add skill directory",
+  "line": 26,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "添加技能目录"
+ },
+ "ui.filter.all": {
+  "en": "All %d",
+  "line": 58,
+  "pkg": "ui",
+  "verbs": [
+   "d"
+  ],
+  "zh": "全部 %d"
+ },
+ "ui.filter.disabled": {
+  "en": "Disabled %d",
+  "line": 60,
+  "pkg": "ui",
+  "verbs": [
+   "d"
+  ],
+  "zh": "停用 %d"
+ },
+ "ui.filter.enabled": {
+  "en": "Enabled %d",
+  "line": 59,
+  "pkg": "ui",
+  "verbs": [
+   "d"
+  ],
+  "zh": "启用 %d"
+ },
+ "ui.filter.trashed": {
+  "en": "Trash %d",
+  "line": 61,
+  "pkg": "ui",
+  "verbs": [
+   "d"
+  ],
+  "zh": "回收站 %d"
+ },
+ "ui.install.button": {
+  "en": "Install",
+  "line": 143,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "安装"
+ },
+ "ui.install.buttonSelect": {
+  "en": "Install selected skills",
+  "line": 144,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "安装选中的技能"
+ },
+ "ui.install.buttonSelected": {
+  "en": "Install %d selected",
+  "line": 145,
+  "pkg": "ui",
+  "verbs": [
+   "d"
+  ],
+  "zh": "安装选中的 %d 个"
+ },
+ "ui.install.choose": {
+  "en": "Choose…",
+  "line": 152,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "选择…"
+ },
+ "ui.install.confirmA11y": {
+  "en": "Confirm install",
+  "line": 163,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "确认安装"
+ },
+ "ui.install.failItem": {
+  "en": "%s: %s",
+  "line": 167,
+  "pkg": "ui",
+  "verbs": [
+   "s",
+   "s"
+  ],
+  "zh": "%s：%s"
+ },
+ "ui.install.folder": {
+  "en": "Folder",
+  "line": 150,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "文件夹"
+ },
+ "ui.install.folderPlaceholder": {
+  "en": "Folder containing SKILL.md",
+  "line": 151,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "包含 SKILL.md 的文件夹"
+ },
+ "ui.install.hintCandidates": {
+  "en": "Select the skills to install (multiple allowed) and use the button below to install them at once; each name comes from its own SKILL.md (when you select one, the “Install name” above is used).",
+  "line": 162,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "勾选要安装的技能（可多选），点下面的按钮一次装完；名字取各自 SKILL.md 里的 name（勾选一个时用上面的「安装名称」）。"
+ },
+ "ui.install.hintGitHub": {
+  "en": "Clones the repository with your local git; when the subdirectory is empty, skills in the repository are discovered automatically.",
+  "line": 161,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "会用本机的 git 克隆仓库；子目录留空时自动发现仓库里的技能。"
+ },
+ "ui.install.name": {
+  "en": "Install name",
+  "line": 159,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "安装名称"
+ },
+ "ui.install.namePlaceholder": {
+  "en": "Optional; defaults to the name in SKILL.md",
+  "line": 160,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "可选，默认取 SKILL.md 的 name"
+ },
+ "ui.install.noCandidates": {
+  "en": "store: no skill directory containing SKILL.md was found in the repository",
+  "line": 168,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "store: 仓库内未找到含 SKILL.md 的技能目录"
+ },
+ "ui.install.ref": {
+  "en": "Branch/tag",
+  "line": 157,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "分支/标签"
+ },
+ "ui.install.refPlaceholder": {
+  "en": "Optional; uses the default branch",
+  "line": 158,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "可选，默认分支"
+ },
+ "ui.install.repo": {
+  "en": "Repository",
+  "line": 153,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "仓库"
+ },
+ "ui.install.repoOrBranchChanged": {
+  "en": "The repository or branch changed; click “Install” to discover skills again.",
+  "line": 169,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "仓库或分支已改，点「安装」重新发现技能。"
+ },
+ "ui.install.repoPlaceholder": {
+  "en": "owner/repo, or paste a GitHub URL",
+  "line": 154,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "owner/repo，或粘贴 GitHub 网址"
+ },
+ "ui.install.repoRoot": {
+  "en": "Repository root",
+  "line": 146,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "仓库根"
+ },
+ "ui.install.selectAll": {
+  "en": "Select all",
+  "line": 165,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "全选"
+ },
+ "ui.install.selectNone": {
+  "en": "Deselect all",
+  "line": 166,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "全不选"
+ },
+ "ui.install.sourceGitHub": {
+  "en": "GitHub repository",
+  "line": 148,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "GitHub 仓库"
+ },
+ "ui.install.sourceLocal": {
+  "en": "Local folder",
+  "line": 149,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "本地文件夹"
+ },
+ "ui.install.subPath": {
+  "en": "Subdirectory",
+  "line": 155,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "子目录"
+ },
+ "ui.install.subPathPlaceholder": {
+  "en": "Optional; leave empty to discover automatically",
+  "line": 156,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "可选，留空自动发现"
+ },
+ "ui.install.subtitle": {
+  "en": "Installing into %s",
+  "line": 147,
+  "pkg": "ui",
+  "verbs": [
+   "s"
+  ],
+  "zh": "安装到 %s"
+ },
+ "ui.install.total": {
+  "en": "Skills: %d",
+  "line": 164,
+  "pkg": "ui",
+  "verbs": [
+   "d"
+  ],
+  "zh": "共 %d 个技能"
+ },
+ "ui.markdown.moreLines": {
+  "en": "… (%d more lines not shown)",
+  "line": 265,
+  "pkg": "ui",
+  "verbs": [
+   "d"
+  ],
+  "zh": "…（另有 %d 行未显示）"
+ },
+ "ui.markdown.truncated": {
+  "en": "(content too long; truncated)",
+  "line": 264,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "（内容过长，已截断）"
+ },
+ "ui.menu.copyPath": {
+  "en": "Copy path",
+  "line": 81,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "复制路径"
+ },
+ "ui.menu.disable": {
+  "en": "Disable",
+  "line": 84,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "停用"
+ },
+ "ui.menu.enable": {
+  "en": "Enable",
+  "line": 85,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "启用"
+ },
+ "ui.menu.moveTrash": {
+  "en": "Move to trash…",
+  "line": 83,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "移入回收站…"
+ },
+ "ui.menu.openFolder": {
+  "en": "Open folder",
+  "line": 78,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "打开文件夹"
+ },
+ "ui.menu.openSkillMD": {
+  "en": "Open SKILL.md",
+  "line": 80,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "打开 SKILL.md"
+ },
+ "ui.menu.purge": {
+  "en": "Delete permanently…",
+  "line": 87,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "永久删除…"
+ },
+ "ui.menu.removeFromList": {
+  "en": "Remove from list",
+  "line": 82,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "从列表移除"
+ },
+ "ui.menu.restore": {
+  "en": "Restore to skill directory",
+  "line": 86,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "恢复到技能目录"
+ },
+ "ui.menu.revealFolder": {
+  "en": "Show in folder",
+  "line": 79,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "在文件夹中显示"
+ },
+ "ui.panic.iconDecode": {
+  "en": "ui: could not decode the app icon: %s",
+  "line": 284,
+  "pkg": "ui",
+  "verbs": [
+   "s"
+  ],
+  "zh": "ui: 应用图标解码失败: %s"
+ },
+ "ui.pill.badMeta": {
+  "en": "Corrupt metadata",
+  "line": 95,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "元数据损坏"
+ },
+ "ui.pill.hasUpdate": {
+  "en": "Update available",
+  "line": 94,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "有更新"
+ },
+ "ui.pill.noSkillMD": {
+  "en": "Missing SKILL.md",
+  "line": 96,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "缺少 SKILL.md"
+ },
+ "ui.rail.checkUpdateTip": {
+  "en": "Check for kura app updates",
+  "line": 36,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "检查 kura 应用更新"
+ },
+ "ui.rail.settingsTip": {
+  "en": "Translation API and target language",
+  "line": 37,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "翻译 API 与目标语言"
+ },
+ "ui.review.apply": {
+  "en": "Apply update",
+  "line": 227,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "应用更新"
+ },
+ "ui.review.applyAll": {
+  "en": "Apply all updates",
+  "line": 226,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "应用全部更新"
+ },
+ "ui.review.applying": {
+  "en": "Applying…",
+  "line": 228,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "正在应用…"
+ },
+ "ui.review.basisCommit": {
+  "en": "upstream commit unchanged",
+  "line": 239,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "上游 commit 未变"
+ },
+ "ui.review.basisTree": {
+  "en": "upstream directory unchanged",
+  "line": 240,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "上游该目录未变"
+ },
+ "ui.review.checkFailed": {
+  "en": "Check failed",
+  "line": 233,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "检查失败"
+ },
+ "ui.review.counts": {
+  "en": "+%d ~%d -%d (%d file(s))",
+  "line": 236,
+  "pkg": "ui",
+  "verbs": [
+   "d",
+   "d",
+   "d",
+   "d"
+  ],
+  "zh": "+%d ~%d -%d（%d 个文件）"
+ },
+ "ui.review.latest": {
+  "en": "Up to date",
+  "line": 234,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "已是最新"
+ },
+ "ui.review.localChanged": {
+  "en": "Changed locally",
+  "line": 235,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "本地有改动"
+ },
+ "ui.review.localModified": {
+  "en": "The installed content differs from what was installed (modified locally)",
+  "line": 230,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "已安装的内容与安装时不一致（本地改过）"
+ },
+ "ui.review.localModifiedWithChanges": {
+  "en": "The installed content differs from what was installed (modified locally), and applying the update will overwrite these changes (old contents are in a snapshot)",
+  "line": 231,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "已安装的内容与安装时不一致（本地改过），应用更新会覆盖这些改动（旧内容在快照中）"
+ },
+ "ui.review.metaCommit": {
+  "en": "upstream commit: %s",
+  "line": 238,
+  "pkg": "ui",
+  "verbs": [
+   "s"
+  ],
+  "zh": "上游 commit: %s"
+ },
+ "ui.review.metaSource": {
+  "en": "Source: %s",
+  "line": 237,
+  "pkg": "ui",
+  "verbs": [
+   "s"
+  ],
+  "zh": "来源: %s"
+ },
+ "ui.review.newHash": {
+  "en": "new %s",
+  "line": 242,
+  "pkg": "ui",
+  "verbs": [
+   "s"
+  ],
+  "zh": "新 %s"
+ },
+ "ui.review.noResult": {
+  "en": "No check results to show",
+  "line": 232,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "没有可显示的检查结果"
+ },
+ "ui.review.nothingToCheck": {
+  "en": "No skills to check in this directory",
+  "line": 225,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "根目录里没有可检查的技能"
+ },
+ "ui.review.oldHash": {
+  "en": "old %s",
+  "line": 241,
+  "pkg": "ui",
+  "verbs": [
+   "s"
+  ],
+  "zh": "旧 %s"
+ },
+ "ui.review.scanFailed": {
+  "en": "Scan failed: %s",
+  "line": 243,
+  "pkg": "ui",
+  "verbs": [
+   "s"
+  ],
+  "zh": "根目录扫描失败: %s"
+ },
+ "ui.review.title": {
+  "en": "Update %s",
+  "line": 224,
+  "pkg": "ui",
+  "verbs": [
+   "s"
+  ],
+  "zh": "更新 %s"
+ },
+ "ui.review.upToDate": {
+  "en": "Matches upstream; nothing to update",
+  "line": 229,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "与上游一致，无需更新"
+ },
+ "ui.roots.addFolder": {
+  "en": "Add folder",
+  "line": 31,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "添加文件夹"
+ },
+ "ui.roots.loadFailed": {
+  "en": "Could not read the directory list: %s",
+  "line": 32,
+  "pkg": "ui",
+  "verbs": [
+   "s"
+  ],
+  "zh": "目录列表读取失败：%s"
+ },
+ "ui.roots.settingsLoadFailed": {
+  "en": "Could not read the settings: %s",
+  "line": 33,
+  "pkg": "ui",
+  "verbs": [
+   "s"
+  ],
+  "zh": "设置读取失败：%s"
+ },
+ "ui.roots.title": {
+  "en": "Skill directories",
+  "line": 30,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "技能目录"
+ },
+ "ui.search.placeholder": {
+  "en": "Search skills",
+  "line": 64,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "搜索技能"
+ },
+ "ui.settings.apiKey": {
+  "en": "API key",
+  "line": 272,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "密钥"
+ },
+ "ui.settings.baseURL": {
+  "en": "API URL",
+  "line": 271,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "API 地址"
+ },
+ "ui.settings.incomplete": {
+  "en": "Fill in the API URL, the key and the model to translate skill descriptions.",
+  "line": 279,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "API 地址、密钥、模型都填好后，才能翻译技能描述。"
+ },
+ "ui.settings.interfaceLang": {
+  "en": "Language",
+  "line": 275,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "界面语言"
+ },
+ "ui.settings.langSystem": {
+  "en": "System",
+  "line": 276,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "跟随系统"
+ },
+ "ui.settings.loadFailed": {
+  "en": "Could not read the settings file; saving will overwrite it: %s",
+  "line": 270,
+  "pkg": "ui",
+  "verbs": [
+   "s"
+  ],
+  "zh": "设置文件读取失败，保存会覆盖它：%s"
+ },
+ "ui.settings.model": {
+  "en": "Model",
+  "line": 273,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "模型"
+ },
+ "ui.settings.saveA11y": {
+  "en": "Confirm save",
+  "line": 280,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "确认保存"
+ },
+ "ui.settings.secretNote": {
+  "en": "The key is stored in plain text at ~/.kura/settings.json. Translations are shown in the interface only; skill files are never modified.",
+  "line": 278,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "密钥以明文保存在 ~/.kura/settings.json；译文只用于界面显示，不会改动技能文件。"
+ },
+ "ui.settings.targetLang": {
+  "en": "Target language",
+  "line": 274,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "目标语言"
+ },
+ "ui.settings.title": {
+  "en": "Settings",
+  "line": 268,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "设置"
+ },
+ "ui.settings.translateHeading": {
+  "en": "Translation API (OpenAI-compatible)",
+  "line": 269,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "翻译 API（OpenAI 兼容）"
+ },
+ "ui.settings.unknownTargetLang": {
+  "en": "The saved target language was not recognized; reset to %s. Save to apply.",
+  "line": 277,
+  "pkg": "ui",
+  "verbs": [
+   "s"
+  ],
+  "zh": "已保存的目标语言无法识别，已回到%s；保存后生效。"
+ },
+ "ui.source.local": {
+  "en": "Local",
+  "line": 247,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "本地"
+ },
+ "ui.source.noMeta": {
+  "en": "No metadata",
+  "line": 246,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "无元数据"
+ },
+ "ui.source.unknown": {
+  "en": "Unknown source",
+  "line": 248,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "未知来源"
+ },
+ "ui.source.unknownType": {
+  "en": "Unknown",
+  "line": 249,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "未知"
+ },
+ "ui.state.disabled": {
+  "en": "Disabled",
+  "line": 54,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "已停用"
+ },
+ "ui.state.enabled": {
+  "en": "Enabled",
+  "line": 53,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "已启用"
+ },
+ "ui.state.trashed": {
+  "en": "Trash",
+  "line": 55,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "回收站"
+ },
+ "ui.status.appUpdateChecking": {
+  "en": "Checking for kura updates…",
+  "line": 192,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "正在检查 kura 更新…"
+ },
+ "ui.status.appUpdateNotReady": {
+  "en": "Updates are not available (this development build has no update plugin)",
+  "line": 191,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "更新功能未就绪（开发构建未挂载更新插件）"
+ },
+ "ui.status.candidates": {
+  "en": "The repository has %d skills; select the ones to install",
+  "line": 214,
+  "pkg": "ui",
+  "verbs": [
+   "d"
+  ],
+  "zh": "仓库里有 %d 个技能，请勾选要安装的"
+ },
+ "ui.status.checkFailed": {
+  "en": "Check failed for %s: %v",
+  "line": 201,
+  "pkg": "ui",
+  "verbs": [
+   "s",
+   "v"
+  ],
+  "zh": "检查 %s 失败: %v"
+ },
+ "ui.status.checkSummary": {
+  "en": "%s: %d added · %d modified · %d removed (%d file(s))",
+  "line": 208,
+  "pkg": "ui",
+  "verbs": [
+   "s",
+   "d",
+   "d",
+   "d",
+   "d"
+  ],
+  "zh": "%s: 新增 %d · 修改 %d · 删除 %d（共 %d 个文件）"
+ },
+ "ui.status.checkedAll": {
+  "en": "Checked: %d",
+  "line": 203,
+  "pkg": "ui",
+  "verbs": [
+   "d"
+  ],
+  "zh": "已检查 %d 个技能"
+ },
+ "ui.status.checkingAll": {
+  "en": "Checking all skills for updates…",
+  "line": 202,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "正在检查全部更新…"
+ },
+ "ui.status.checkingUpdate": {
+  "en": "Checking %s for updates…",
+  "line": 200,
+  "pkg": "ui",
+  "verbs": [
+   "s"
+  ],
+  "zh": "正在检查更新 %s…"
+ },
+ "ui.status.disabled": {
+  "en": "Disabled %s",
+  "line": 175,
+  "pkg": "ui",
+  "verbs": [
+   "s"
+  ],
+  "zh": "已停用 %s"
+ },
+ "ui.status.discoverRootsFailed": {
+  "en": "Could not discover agent skill directories: %s",
+  "line": 188,
+  "pkg": "ui",
+  "verbs": [
+   "s"
+  ],
+  "zh": "自动发现技能目录失败：%s"
+ },
+ "ui.status.discovering": {
+  "en": "Looking for skills in the repository…",
+  "line": 215,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "正在查找仓库里的技能…"
+ },
+ "ui.status.discoveryFailed": {
+  "en": "Discovery failed",
+  "line": 216,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "查找失败"
+ },
+ "ui.status.enabled": {
+  "en": "Enabled %s",
+  "line": 174,
+  "pkg": "ui",
+  "verbs": [
+   "s"
+  ],
+  "zh": "已启用 %s"
+ },
+ "ui.status.imported": {
+  "en": "Imported metadata: %d",
+  "line": 183,
+  "pkg": "ui",
+  "verbs": [
+   "d"
+  ],
+  "zh": "已导入 %d 条元数据"
+ },
+ "ui.status.installFailed": {
+  "en": "Install failed",
+  "line": 210,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "安装失败"
+ },
+ "ui.status.installed": {
+  "en": "Installed %s",
+  "line": 211,
+  "pkg": "ui",
+  "verbs": [
+   "s"
+  ],
+  "zh": "已安装 %s"
+ },
+ "ui.status.installedCount": {
+  "en": "Installed %d skills",
+  "line": 212,
+  "pkg": "ui",
+  "verbs": [
+   "d"
+  ],
+  "zh": "已安装 %d 个技能"
+ },
+ "ui.status.installedPartial": {
+  "en": "Installed %d, %d failed",
+  "line": 213,
+  "pkg": "ui",
+  "verbs": [
+   "d",
+   "d"
+  ],
+  "zh": "已安装 %d 个，%d 个失败"
+ },
+ "ui.status.installing": {
+  "en": "Installing…",
+  "line": 209,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "正在安装…"
+ },
+ "ui.status.langSaveFailed": {
+  "en": "Could not save the interface language: %s",
+  "line": 195,
+  "pkg": "ui",
+  "verbs": [
+   "s"
+  ],
+  "zh": "界面语言没能保存：%s"
+ },
+ "ui.status.movedToTrash": {
+  "en": "Moved %s to the trash",
+  "line": 178,
+  "pkg": "ui",
+  "verbs": [
+   "s"
+  ],
+  "zh": "已移入回收站 %s"
+ },
+ "ui.status.movingToTrash": {
+  "en": "Moving %s to the trash…",
+  "line": 177,
+  "pkg": "ui",
+  "verbs": [
+   "s"
+  ],
+  "zh": "正在移入回收站 %s…"
+ },
+ "ui.status.nothingToImport": {
+  "en": "Nothing to import (no lock file, or every skill already has metadata)",
+  "line": 184,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "没有可导入的元数据（lock 文件不存在或技能已有元数据）"
+ },
+ "ui.status.openFailed": {
+  "en": "Could not open %s: %s",
+  "line": 190,
+  "pkg": "ui",
+  "verbs": [
+   "s",
+   "s"
+  ],
+  "zh": "无法打开 %s：%s"
+ },
+ "ui.status.pathCopied": {
+  "en": "Copied path %s",
+  "line": 187,
+  "pkg": "ui",
+  "verbs": [
+   "s"
+  ],
+  "zh": "已复制路径 %s"
+ },
+ "ui.status.pickFolderFailed": {
+  "en": "Could not choose a folder: %s",
+  "line": 221,
+  "pkg": "ui",
+  "verbs": [
+   "s"
+  ],
+  "zh": "选择文件夹失败: %s"
+ },
+ "ui.status.purged": {
+  "en": "Deleted %s permanently",
+  "line": 182,
+  "pkg": "ui",
+  "verbs": [
+   "s"
+  ],
+  "zh": "已永久删除 %s"
+ },
+ "ui.status.purging": {
+  "en": "Deleting %s permanently…",
+  "line": 181,
+  "pkg": "ui",
+  "verbs": [
+   "s"
+  ],
+  "zh": "正在永久删除 %s…"
+ },
+ "ui.status.repoChanged": {
+  "en": "The repository or branch changed; click “Install” to discover skills again.",
+  "line": 217,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "仓库或分支已改，点「安装」重新发现技能。"
+ },
+ "ui.status.restored": {
+  "en": "Restored %s",
+  "line": 180,
+  "pkg": "ui",
+  "verbs": [
+   "s"
+  ],
+  "zh": "已恢复 %s"
+ },
+ "ui.status.restoring": {
+  "en": "Restoring %s…",
+  "line": 179,
+  "pkg": "ui",
+  "verbs": [
+   "s"
+  ],
+  "zh": "正在恢复 %s…"
+ },
+ "ui.status.rootAdded": {
+  "en": "Added directory %s",
+  "line": 185,
+  "pkg": "ui",
+  "verbs": [
+   "s"
+  ],
+  "zh": "已添加目录 %s"
+ },
+ "ui.status.rootMissing": {
+  "en": "The skill directory does not exist: %s",
+  "line": 172,
+  "pkg": "ui",
+  "verbs": [
+   "s"
+  ],
+  "zh": "技能目录不存在: %s"
+ },
+ "ui.status.rootRemoved": {
+  "en": "Removed %s from the list (the folder is untouched)",
+  "line": 186,
+  "pkg": "ui",
+  "verbs": [
+   "s"
+  ],
+  "zh": "已从列表移除 %s（文件夹未改动）"
+ },
+ "ui.status.rootsDiscovered": {
+  "en": "Auto-added skill directories: %d",
+  "line": 189,
+  "pkg": "ui",
+  "verbs": [
+   "d"
+  ],
+  "zh": "已自动加入 %d 个 agent 技能目录"
+ },
+ "ui.status.savingSettings": {
+  "en": "Saving settings…",
+  "line": 196,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "正在保存设置…"
+ },
+ "ui.status.scanned": {
+  "en": "Scanned: %d",
+  "line": 173,
+  "pkg": "ui",
+  "verbs": [
+   "d"
+  ],
+  "zh": "已扫描 %d 个技能"
+ },
+ "ui.status.settingsSaveFailed": {
+  "en": "Could not save the settings: %s",
+  "line": 199,
+  "pkg": "ui",
+  "verbs": [
+   "s"
+  ],
+  "zh": "设置没能保存：%s"
+ },
+ "ui.status.settingsSaved": {
+  "en": "Settings saved",
+  "line": 197,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "设置已保存"
+ },
+ "ui.status.settingsSavedShort": {
+  "en": "Settings saved, but the translation API is incomplete, so translation is unavailable for now",
+  "line": 198,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "设置已保存，但翻译 API 还没填全，暂时不能翻译"
+ },
+ "ui.status.skillFound": {
+  "en": "Found skill %s",
+  "line": 219,
+  "pkg": "ui",
+  "verbs": [
+   "s"
+  ],
+  "zh": "发现技能 %s"
+ },
+ "ui.status.subPathFilled": {
+  "en": "The subdirectory is filled in; click “Install” to install it",
+  "line": 218,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "已填子目录，点「安装」装它"
+ },
+ "ui.status.themeSaveFailed": {
+  "en": "Could not save the appearance preference: %s",
+  "line": 193,
+  "pkg": "ui",
+  "verbs": [
+   "s"
+  ],
+  "zh": "外观偏好没能保存：%s"
+ },
+ "ui.status.toggling": {
+  "en": "Switching %s…",
+  "line": 176,
+  "pkg": "ui",
+  "verbs": [
+   "s"
+  ],
+  "zh": "正在切换 %s…"
+ },
+ "ui.status.total": {
+  "en": "Skills: %d",
+  "line": 220,
+  "pkg": "ui",
+  "verbs": [
+   "d"
+  ],
+  "zh": "共 %d 个技能"
+ },
+ "ui.status.updateFailed": {
+  "en": "Update failed: %s",
+  "line": 206,
+  "pkg": "ui",
+  "verbs": [
+   "s"
+  ],
+  "zh": "更新失败: %s"
+ },
+ "ui.status.updated": {
+  "en": "Updated: %d (old contents are in snapshots)",
+  "line": 205,
+  "pkg": "ui",
+  "verbs": [
+   "d"
+  ],
+  "zh": "已更新 %d 个技能（旧内容在快照中）"
+ },
+ "ui.status.updatedPartial": {
+  "en": "%d updated, %d failed: %v",
+  "line": 207,
+  "pkg": "ui",
+  "verbs": [
+   "d",
+   "d",
+   "v"
+  ],
+  "zh": "已更新 %d 个技能，%d 个失败: %v"
+ },
+ "ui.status.updating": {
+  "en": "Updating %s…",
+  "line": 204,
+  "pkg": "ui",
+  "verbs": [
+   "s"
+  ],
+  "zh": "正在更新 %s…"
+ },
+ "ui.status.viewSaveFailed": {
+  "en": "Could not save the layout mode: %s",
+  "line": 194,
+  "pkg": "ui",
+  "verbs": [
+   "s"
+  ],
+  "zh": "排列模式没能保存：%s"
+ },
+ "ui.theme.dark": {
+  "en": "Dark",
+  "line": 75,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "深色"
+ },
+ "ui.theme.label": {
+  "en": "Appearance",
+  "line": 72,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "外观"
+ },
+ "ui.theme.light": {
+  "en": "Light",
+  "line": 74,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "浅色"
+ },
+ "ui.theme.system": {
+  "en": "Auto",
+  "line": 73,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "跟随系统"
+ },
+ "ui.translate.chunkEmpty": {
+  "en": "part %d/%d: the translation was empty",
+  "line": 140,
+  "pkg": "ui",
+  "verbs": [
+   "d",
+   "d"
+  ],
+  "zh": "第 %d/%d 段：翻译结果为空"
+ },
+ "ui.translate.chunkFailed": {
+  "en": "part %d/%d: %s",
+  "line": 139,
+  "pkg": "ui",
+  "verbs": [
+   "d",
+   "d",
+   "s"
+  ],
+  "zh": "第 %d/%d 段：%s"
+ },
+ "ui.translate.configChanged": {
+  "en": "The translation settings changed",
+  "line": 137,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "翻译配置已变更"
+ },
+ "ui.translate.displayLang": {
+  "en": "Display language",
+  "line": 129,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "显示语言"
+ },
+ "ui.translate.emptyResult": {
+  "en": "The translation was empty",
+  "line": 138,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "翻译结果为空"
+ },
+ "ui.translate.failed": {
+  "en": "Translation failed: %s (switch back to Original and then to Translated to retry)",
+  "line": 133,
+  "pkg": "ui",
+  "verbs": [
+   "s"
+  ],
+  "zh": "翻译失败：%s（切回原文再切到译文可重试）"
+ },
+ "ui.translate.fullFailed": {
+  "en": "Full-text translation failed: %s (switch back to Original and then to Translated to retry)",
+  "line": 135,
+  "pkg": "ui",
+  "verbs": [
+   "s"
+  ],
+  "zh": "全文翻译失败：%s（切回原文再切到译文可重试）"
+ },
+ "ui.translate.fullInProgress": {
+  "en": "Translating the full text…",
+  "line": 134,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "翻译全文中…"
+ },
+ "ui.translate.inProgress": {
+  "en": "Translating…",
+  "line": 132,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "翻译中…"
+ },
+ "ui.translate.label": {
+  "en": "Translation",
+  "line": 126,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "翻译"
+ },
+ "ui.translate.notConfigured": {
+  "en": "Set up the translation API in Settings first",
+  "line": 130,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "先在设置里填翻译 API"
+ },
+ "ui.translate.note": {
+  "en": "Translated · %s · shown in the interface only; skill files are not modified",
+  "line": 136,
+  "pkg": "ui",
+  "verbs": [
+   "s"
+  ],
+  "zh": "译文 · %s · 仅界面显示，不改动技能文件"
+ },
+ "ui.translate.openSettings": {
+  "en": "Open settings",
+  "line": 131,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "打开设置"
+ },
+ "ui.translate.original": {
+  "en": "Original",
+  "line": 127,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "原文"
+ },
+ "ui.translate.translated": {
+  "en": "Translated",
+  "line": 128,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "译文"
+ },
+ "ui.view.grid": {
+  "en": "Grid",
+  "line": 68,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "卡片网格"
+ },
+ "ui.view.label": {
+  "en": "Layout",
+  "line": 67,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "排列"
+ },
+ "ui.view.list": {
+  "en": "List",
+  "line": 69,
+  "pkg": "ui",
+  "verbs": [],
+  "zh": "列表"
+ }
+}

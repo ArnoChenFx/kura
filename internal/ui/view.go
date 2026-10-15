@@ -9,6 +9,7 @@ import (
 
 	"github.com/ArnoChenFx/kura/internal/i18n"
 	"github.com/ArnoChenFx/kura/internal/store"
+	"github.com/ArnoChenFx/kura/locales"
 	"github.com/ArnoChenFx/kura/resources"
 	myui "github.com/egoist/mygo/ui"
 )
@@ -47,7 +48,7 @@ var appIcon = mustDecodeBitmap(resources.IconPNG)
 func mustDecodeBitmap(data []byte) *myui.Bitmap {
 	bm, err := myui.DecodeBitmap(data)
 	if err != nil {
-		panic(i18n.Tf("ui.panic.iconDecode", err))
+		panic(locales.UiPanicIconDecode(err.Error()))
 	}
 	return bm
 }
@@ -110,13 +111,13 @@ func (a *App) View(c *myui.Context) {
 
 	// 「移入回收站」与「永久删除」共用一个确认框；最后一个按钮是默认按钮（回车触发），
 	// Escape 或点按钮后 *open 置 false。
-	title, message, ok := i18n.T("ui.confirm.trashTitle"),
-		i18n.Tf("ui.confirm.trashMessage", a.confirm.name), i18n.T("ui.confirm.trashOK")
+	title, message, ok := locales.UiConfirmTrashTitle(),
+		locales.UiConfirmTrashMessage(a.confirm.name), locales.UiConfirmTrashOK()
 	if a.confirm.purge {
-		title, ok = i18n.T("ui.confirm.purgeTitle"), i18n.T("ui.action.purge")
-		message = i18n.Tf("ui.confirm.purgeMessage", a.confirm.name)
+		title, ok = locales.UiConfirmPurgeTitle(), locales.UiActionPurge()
+		message = locales.UiConfirmPurgeMessage(a.confirm.name)
 	}
-	if n := myui.AlertDialog(c, &a.confirm.open, title, message, i18n.T("ui.common.cancel"), ok); n == 1 {
+	if n := myui.AlertDialog(c, &a.confirm.open, title, message, locales.UiCommonCancel(), ok); n == 1 {
 		if a.confirm.purge {
 			a.PurgeAsync(a.confirm.name)
 		} else {
@@ -249,7 +250,7 @@ func dragWidth(cur, delta, lo, hi float32) float32 {
 func (a *App) viewRoots(c *myui.Context) {
 	t := c.Theme()
 	myui.Column(c).Width(a.rootsEff).Shrink(0).FillHeight().Background(a.pal.sidebar).Children(func() {
-		myui.Text(c, i18n.T("ui.roots.title")).FontSize(t.FontSize-1).FontWeight(600).TextColor(t.TextMuted).
+		myui.Text(c, locales.UiRootsTitle()).FontSize(t.FontSize-1).FontWeight(600).TextColor(t.TextMuted).
 			Padding(t.Space(4), t.Space(5), t.Space(1.5), t.Space(5))
 		myui.Scroll(c).Grow(1).FillWidth().Children(func() {
 			myui.Column(c).FillWidth().Padding(0, t.Space(2.5)).Gap(t.Space(0.5)).Children(func() {
@@ -259,16 +260,16 @@ func (a *App) viewRoots(c *myui.Context) {
 			})
 		})
 		if a.libErr != "" {
-			myui.Text(c, i18n.Tf("ui.roots.loadFailed", a.libErr)).MaxLines(3).
+			myui.Text(c, locales.UiRootsLoadFailed(a.libErr)).MaxLines(3).
 				FontSize(t.FontSize-2).TextColor(t.Danger).Padding(t.Space(1), t.Space(4))
 		}
 		if a.settingsErr != "" {
-			myui.Text(c, i18n.Tf("ui.roots.settingsLoadFailed", a.settingsErr)).MaxLines(3).
+			myui.Text(c, locales.UiRootsSettingsLoadFailed(a.settingsErr)).MaxLines(3).
 				FontSize(t.FontSize-2).TextColor(t.Danger).Padding(t.Space(1), t.Space(4))
 		}
 		myui.Column(c).FillWidth().Padding(t.Space(2), t.Space(3), t.Space(3), t.Space(3)).
 			Gap(t.Space(3)).Children(func() {
-			ab := myui.ButtonBase(c).Label(i18n.T("ui.roots.addFolder")).FillWidth().Disabled(a.adding).
+			ab := myui.ButtonBase(c).Label(locales.UiRootsAddFolder()).FillWidth().Disabled(a.adding).
 				Justify(myui.Start).Gap(t.Space(2)).Padding(t.Space(2), t.Space(3)).
 				Radius(t.Radius).Border(1, t.Border).TextColor(a.pal.textMid)
 			if ab.Hovered() {
@@ -276,7 +277,7 @@ func (a *App) viewRoots(c *myui.Context) {
 			}
 			ab.Children(func() {
 				myui.Icon(c, iconPlus)
-				myui.Text(c, i18n.T("ui.roots.addFolder"))
+				myui.Text(c, locales.UiRootsAddFolder())
 			})
 			if ab.Clicked() {
 				a.AddRootAsync()
@@ -286,15 +287,16 @@ func (a *App) viewRoots(c *myui.Context) {
 	})
 }
 
-// themeModes 是外观开关的三个选项，顺序即分段顺序。key 是显示名的目录 key：
-// 文案每帧现取（见 viewThemeSwitch），语言一切就跟着变。
+// themeModes 是外观开关的三个选项，顺序即分段顺序。label 是显示名的取值
+// 函数（locales）：每帧现取（见 viewThemeSwitch），语言一切就跟着变。
 var themeModes = []struct {
-	mode, key string
-	icon      *myui.SVG
+	mode  string
+	label func() string
+	icon  *myui.SVG
 }{
-	{store.ThemeSystem, "ui.theme.system", iconMonitor},
-	{store.ThemeLight, "ui.theme.light", iconSun},
-	{store.ThemeDark, "ui.theme.dark", iconMoon},
+	{store.ThemeSystem, locales.UiThemeSystem, iconMonitor},
+	{store.ThemeLight, locales.UiThemeLight, iconSun},
+	{store.ThemeDark, locales.UiThemeDark, iconMoon},
 }
 
 // themeIndex 返回外观模式在 themeModes 里的位置，不认识的当作跟随系统。
@@ -316,8 +318,8 @@ func (a *App) viewRootsFooter(c *myui.Context) {
 	myui.Row(c).FillWidth().AlignItems(myui.Center).Gap(t.Space(1)).Children(func() {
 		a.viewThemeSwitch(c)
 		myui.Spacer(c)
-		railButton(c, iconUpdate, i18n.T("ui.action.checkUpdate"), i18n.T("ui.rail.checkUpdateTip"), a.checkingUpdate, a.CheckAppUpdateAsync)
-		railButton(c, iconSettings, i18n.T("ui.settings.title"), i18n.T("ui.rail.settingsTip"), false, a.OpenSettings)
+		railButton(c, iconUpdate, locales.UiActionCheckUpdate(), locales.UiRailCheckUpdateTip(), a.checkingUpdate, a.CheckAppUpdateAsync)
+		railButton(c, iconSettings, locales.UiSettingsTitle(), locales.UiRailSettingsTip(), false, a.OpenSettings)
 	})
 }
 
@@ -348,10 +350,10 @@ func (a *App) viewThemeSwitch(c *myui.Context) {
 	t := c.Theme()
 	sel := themeIndex(a.themeMode)
 	seg := myui.SegmentedBase(c, &sel, len(themeModes))
-	track := seg.Track.Label(i18n.T("ui.theme.label")).Padding(t.Space(0.5)).Gap(t.Space(0.5)).
+	track := seg.Track.Label(locales.UiThemeLabel()).Padding(t.Space(0.5)).Gap(t.Space(0.5)).
 		Radius(t.Radius).Background(a.pal.card).Border(1, a.pal.line).Shrink(0).Children(func() {
 		for i, m := range themeModes {
-			b := seg.Segment(i).Label(i18n.T(m.key)).Tooltip(i18n.T(m.key)).
+			b := seg.Segment(i).Label(m.label()).Tooltip(m.label()).
 				Padding(t.Space(1.25), t.Space(2)).Radius(t.Radius - 2).TextColor(t.TextMuted)
 			switch {
 			case i == sel:
@@ -415,15 +417,15 @@ func (a *App) rootItem(c *myui.Context, root string, isDefault bool) {
 // rootMenu 是左栏目录项的右键菜单：打开文件夹、复制路径；追加的目录还能
 // 从列表移除（只改 config.json，不动文件夹）。右键不切换目录。
 func (a *App) rootMenu(c *myui.Context, m *myui.Menu, root string, isDefault bool) {
-	if m.Item(i18n.T("ui.menu.openFolder")).Chosen() {
+	if m.Item(locales.UiMenuOpenFolder()).Chosen() {
 		a.OpenPathAsync(root)
 	}
-	if m.Item(i18n.T("ui.menu.copyPath")).Chosen() {
+	if m.Item(locales.UiMenuCopyPath()).Chosen() {
 		a.copyPath(c, root)
 	}
 	if !isDefault {
 		m.Separator()
-		if m.Item(i18n.T("ui.menu.removeFromList")).Chosen() {
+		if m.Item(locales.UiMenuRemoveFromList()).Chosen() {
 			a.RemoveRootAsync(root)
 		}
 	}
@@ -432,7 +434,7 @@ func (a *App) rootMenu(c *myui.Context, m *myui.Menu, root string, isDefault boo
 // copyPath 把路径放进剪贴板，状态行说一声。只在菜单项被选中的那一帧调用。
 func (a *App) copyPath(c *myui.Context, path string) {
 	c.WriteClipboard(path)
-	a.status, a.statusErr = i18n.Tf("ui.status.pathCopied", path), false
+	a.status, a.statusErr = locales.UiStatusPathCopied(path), false
 }
 
 // rootLabel 是目录在左栏里的名字：最后两级路径（如 .agents/skills），
@@ -463,19 +465,19 @@ func (a *App) viewMainHeader(c *myui.Context) {
 		if a.scanning || a.checkingAll || a.checking != "" {
 			myui.Spinner(c)
 		}
-		ghostButton(c, iconRefresh, i18n.T("ui.action.refresh"), a.scanning, a.ReloadAsync)
-		ghostButton(c, iconCheckAll, i18n.T("ui.action.checkAll"), a.checkingAll || a.checking != "", a.CheckAllAsync)
+		ghostButton(c, iconRefresh, locales.UiActionRefresh(), a.scanning, a.ReloadAsync)
+		ghostButton(c, iconCheckAll, locales.UiActionCheckAll(), a.checkingAll || a.checking != "", a.CheckAllAsync)
 		// .skill-lock.json 只描述默认目录里的技能。
 		if isDefault {
-			ghostButton(c, iconImport, i18n.T("ui.action.importMeta"), false, a.ImportAsync)
+			ghostButton(c, iconImport, locales.UiActionImportMeta(), false, a.ImportAsync)
 		} else {
-			ghostButton(c, iconUnlink, i18n.T("ui.action.removeRoot"), false, func() { a.RemoveRootAsync(a.cfg.Root) })
+			ghostButton(c, iconUnlink, locales.UiActionRemoveRoot(), false, func() { a.RemoveRootAsync(a.cfg.Root) })
 		}
 		myui.Box(c).Width(t.Space(2))
-		ib := myui.PrimaryButton(c, "").Label(i18n.T("ui.action.install"))
+		ib := myui.PrimaryButton(c, "").Label(locales.UiActionInstall())
 		ib.Children(func() {
 			myui.Icon(c, iconPlus)
-			myui.Text(c, i18n.T("ui.action.install")).FontWeight(600)
+			myui.Text(c, locales.UiActionInstall()).FontWeight(600)
 		})
 		if ib.Clicked() {
 			a.OpenInstall()
@@ -493,22 +495,23 @@ func (a *App) viewFilterBar(c *myui.Context) {
 		searchBox(c, &a.query, a.pal.card).Grow(1).Basis(t.Space(50)).MaxWidth(t.Space(80))
 		myui.Spacer(c)
 		myui.Segmented(c, &a.filter,
-			i18n.Tf("ui.filter.all", en+dis), i18n.Tf("ui.filter.enabled", en),
-			i18n.Tf("ui.filter.disabled", dis), i18n.Tf("ui.filter.trashed", trash)).
+			locales.UiFilterAll(en+dis), locales.UiFilterEnabled(en),
+			locales.UiFilterDisabled(dis), locales.UiFilterTrashed(trash)).
 			Shrink(0)
 		myui.Box(c).Width(t.Space(1))
 		a.viewModeSwitch(c)
 	})
 }
 
-// viewModes 是排列模式开关的各个分段，顺序即分段顺序。key 是显示名的目录
-// key：文案每帧现取（见 viewModeSwitch），语言一切就跟着变。
+// viewModes 是排列模式开关的各个分段，顺序即分段顺序。label 是显示名的
+// 取值函数（locales）：每帧现取（见 viewModeSwitch），语言一切就跟着变。
 var viewModes = []struct {
-	mode, key string
-	icon      *myui.SVG
+	mode  string
+	label func() string
+	icon  *myui.SVG
 }{
-	{store.ViewGrid, "ui.view.grid", iconGrid},
-	{store.ViewList, "ui.view.list", iconRows},
+	{store.ViewGrid, locales.UiViewGrid, iconGrid},
+	{store.ViewList, locales.UiViewList, iconRows},
 }
 
 // viewIndex 返回排列模式在 viewModes 里的位置，不认识的当作卡片网格。
@@ -530,10 +533,10 @@ func (a *App) viewModeSwitch(c *myui.Context) {
 	t := c.Theme()
 	sel := viewIndex(a.viewMode)
 	seg := myui.SegmentedBase(c, &sel, len(viewModes))
-	track := seg.Track.Label(i18n.T("ui.view.label")).Padding(t.Space(0.5)).Gap(t.Space(0.5)).
+	track := seg.Track.Label(locales.UiViewLabel()).Padding(t.Space(0.5)).Gap(t.Space(0.5)).
 		Radius(t.Radius).Background(a.pal.card).Border(1, a.pal.line).Shrink(0).Children(func() {
 		for i, m := range viewModes {
-			b := seg.Segment(i).Label(i18n.T(m.key)).Tooltip(i18n.T(m.key)).
+			b := seg.Segment(i).Label(m.label()).Tooltip(m.label()).
 				Padding(t.Space(1.5), t.Space(2)).Radius(t.Radius - 2).TextColor(t.TextMuted)
 			switch {
 			case i == sel:
@@ -640,28 +643,28 @@ func (a *App) viewRow(c *myui.Context, s *store.Skill, selected bool) {
 				})
 				// 标签放在控件左侧，不挤压名字：只在有话要说时出现。
 				if a.updates[s.Name] {
-					pill(c, i18n.T("ui.pill.hasUpdate"), t.Accent)
+					pill(c, locales.UiPillHasUpdate(), t.Accent)
 				}
 				switch s.State {
 				case store.StateDisabled:
-					pill(c, i18n.T("ui.state.disabled"), t.Warning)
+					pill(c, locales.UiStateDisabled(), t.Warning)
 				case store.StateTrashed:
-					pill(c, i18n.T("ui.state.trashed"), t.Danger)
+					pill(c, locales.UiStateTrashed(), t.Danger)
 				}
 				if s.MetaErr != "" {
-					pill(c, i18n.T("ui.pill.badMeta"), t.Danger)
+					pill(c, locales.UiPillBadMeta(), t.Danger)
 				} else if !s.HasSKILLMD && s.State != store.StateTrashed {
-					pill(c, i18n.T("ui.pill.noSkillMD"), t.Warning)
+					pill(c, locales.UiPillNoSkillMD(), t.Warning)
 				}
 				switch {
 				case busy:
 					myui.Spinner(c)
 				case s.State == store.StateTrashed:
-					ghostButton(c, iconRestore, i18n.T("ui.action.restore"), false, func() { a.RestoreAsync(s.Name) })
+					ghostButton(c, iconRestore, locales.UiActionRestore(), false, func() { a.RestoreAsync(s.Name) })
 				default:
 					// 同卡片：Changed 返回 true 的这次构建里，on 已是目标状态。
 					on := s.State == store.StateEnabled
-					sw := kuraSwitch(c, &on, a.pal.toggle).Label(i18n.Tf("ui.card.switchLabel", s.Name))
+					sw := kuraSwitch(c, &on, a.pal.toggle).Label(locales.UiCardSwitchLabel(s.Name))
 					if sw.Changed() {
 						a.ToggleAsync(s.Name, on)
 					}
@@ -670,7 +673,7 @@ func (a *App) viewRow(c *myui.Context, s *store.Skill, selected bool) {
 			// 第 2 行：描述，单行省略；左缩进与名字对齐（头像宽 + 间距）。
 			desc, color := a.descText(translateCardPrefix, s), t.TextMuted
 			if desc == "" {
-				desc, color = i18n.T("ui.card.noDescription"), t.TextMuted.Alpha(0.6)
+				desc, color = locales.UiCardNoDescription(), t.TextMuted.Alpha(0.6)
 			}
 			// 缩进用占位盒子而不是外边距：FillWidth 加外边距会比父容器宽出缩进，
 			// 省略号就画到行边框之外。
@@ -711,21 +714,21 @@ func (a *App) viewGrid(c *myui.Context, rows []*store.Skill) {
 // 「目录里没有技能」。
 func (a *App) viewGridEmpty(c *myui.Context) {
 	t := c.Theme()
-	msg, hint := i18n.T("ui.empty.noSkills"), i18n.T("ui.empty.noSkillsHint")
+	msg, hint := locales.UiEmptyNoSkills(), locales.UiEmptyNoSkillsHint()
 	switch {
 	case a.query != "":
-		msg, hint = i18n.Tf("ui.empty.noMatch", a.query), i18n.T("ui.empty.noMatchHint")
+		msg, hint = locales.UiEmptyNoMatch(a.query), locales.UiEmptyNoMatchHint()
 	case a.filter != filterAll:
 		// 三种筛选各一条完整文案（不拿状态标签拼接：英文里句子中间不该插
 		// 一个大写开头的标签）。
 		hint = ""
 		switch a.filter {
 		case filterEnabled:
-			msg = i18n.T("ui.empty.noEnabled")
+			msg = locales.UiEmptyNoEnabled()
 		case filterDisabled:
-			msg = i18n.T("ui.empty.noDisabled")
+			msg = locales.UiEmptyNoDisabled()
 		default:
-			msg = i18n.T("ui.empty.noTrashed")
+			msg = locales.UiEmptyNoTrashed()
 		}
 	}
 	myui.Box(c).Grow(1).FillWidth().Center().Children(func() {
@@ -797,12 +800,12 @@ func (a *App) viewCard(c *myui.Context, s *store.Skill, selected bool) {
 			case busy:
 				myui.Spinner(c)
 			case s.State == store.StateTrashed:
-				ghostButton(c, iconRestore, i18n.T("ui.action.restore"), false, func() { a.RestoreAsync(s.Name) })
+				ghostButton(c, iconRestore, locales.UiActionRestore(), false, func() { a.RestoreAsync(s.Name) })
 			default:
 				// Switch 的输入在构建时应用：Changed 返回 true 的这次构建里，
 				// on 已是切换后的目标状态。
 				on := s.State == store.StateEnabled
-				sw := kuraSwitch(c, &on, a.pal.toggle).Label(i18n.Tf("ui.card.switchLabel", s.Name))
+				sw := kuraSwitch(c, &on, a.pal.toggle).Label(locales.UiCardSwitchLabel(s.Name))
 				if sw.Changed() {
 					a.ToggleAsync(s.Name, on)
 				}
@@ -811,23 +814,23 @@ func (a *App) viewCard(c *myui.Context, s *store.Skill, selected bool) {
 		// 译文模式下，选中技能的卡片显示译文（其余卡片仍是原文，见 translate.go）。
 		desc, color := a.descText(translateCardPrefix, s), t.TextMuted
 		if desc == "" {
-			desc, color = i18n.T("ui.card.noDescription"), t.TextMuted.Alpha(0.6)
+			desc, color = locales.UiCardNoDescription(), t.TextMuted.Alpha(0.6)
 		}
 		myui.Text(c, desc).MaxLines(2).FontSize(t.FontSize - 1).TextColor(color).Grow(1)
 		myui.Row(c).FillWidth().Gap(t.Space(1.5)).AlignItems(myui.Center).Children(func() {
 			if a.updates[s.Name] {
-				pill(c, i18n.T("ui.pill.hasUpdate"), t.Accent)
+				pill(c, locales.UiPillHasUpdate(), t.Accent)
 			}
 			switch s.State {
 			case store.StateDisabled:
-				pill(c, i18n.T("ui.state.disabled"), t.Warning)
+				pill(c, locales.UiStateDisabled(), t.Warning)
 			case store.StateTrashed:
-				pill(c, i18n.T("ui.state.trashed"), t.Danger)
+				pill(c, locales.UiStateTrashed(), t.Danger)
 			}
 			if s.MetaErr != "" {
-				pill(c, i18n.T("ui.pill.badMeta"), t.Danger)
+				pill(c, locales.UiPillBadMeta(), t.Danger)
 			} else if !s.HasSKILLMD && s.State != store.StateTrashed {
-				pill(c, i18n.T("ui.pill.noSkillMD"), t.Warning)
+				pill(c, locales.UiPillNoSkillMD(), t.Warning)
 			}
 		})
 	})
@@ -839,48 +842,48 @@ func (a *App) viewCard(c *myui.Context, s *store.Skill, selected bool) {
 // 恢复。技能正忙时改状态的项置灰。移入回收站仍走确认框。
 func (a *App) cardMenu(c *myui.Context, m *myui.Menu, s *store.Skill) {
 	busy := a.isBusy(s.Name)
-	if m.Item(i18n.T("ui.menu.openFolder")).Chosen() {
+	if m.Item(locales.UiMenuOpenFolder()).Chosen() {
 		a.OpenPathAsync(s.Dir)
 	}
-	if m.Item(i18n.T("ui.menu.revealFolder")).Chosen() {
+	if m.Item(locales.UiMenuRevealFolder()).Chosen() {
 		a.RevealAsync(s.Dir)
 	}
 	if s.State != store.StateTrashed {
-		if m.Item(i18n.T("ui.menu.openSkillMD")).Disabled(!s.HasSKILLMD).Chosen() {
+		if m.Item(locales.UiMenuOpenSkillMD()).Disabled(!s.HasSKILLMD).Chosen() {
 			a.OpenPathAsync(filepath.Join(s.Dir, "SKILL.md"))
 		}
 	}
-	if m.Item(i18n.T("ui.menu.copyPath")).Chosen() {
+	if m.Item(locales.UiMenuCopyPath()).Chosen() {
 		a.copyPath(c, s.Dir)
 	}
 	m.Separator()
 	trash := func() {
-		if m.Item(i18n.T("ui.menu.moveTrash")).Disabled(busy).Chosen() {
+		if m.Item(locales.UiMenuMoveTrash()).Disabled(busy).Chosen() {
 			a.confirm = confirmState{open: true, name: s.Name}
 		}
 	}
 	switch s.State {
 	case store.StateEnabled:
-		if m.Item(i18n.T("ui.menu.disable")).Disabled(busy).Chosen() {
+		if m.Item(locales.UiMenuDisable()).Disabled(busy).Chosen() {
 			a.ToggleAsync(s.Name, false)
 		}
-		if m.Item(i18n.T("ui.action.checkUpdate")).Disabled(busy || a.hasCheckTarget()).Chosen() {
+		if m.Item(locales.UiActionCheckUpdate()).Disabled(busy || a.hasCheckTarget()).Chosen() {
 			a.CheckAsync(s.Name)
 		}
 		m.Separator()
 		trash()
 	case store.StateDisabled:
-		if m.Item(i18n.T("ui.menu.enable")).Disabled(busy).Chosen() {
+		if m.Item(locales.UiMenuEnable()).Disabled(busy).Chosen() {
 			a.ToggleAsync(s.Name, true)
 		}
 		m.Separator()
 		trash()
 	case store.StateTrashed:
-		if m.Item(i18n.T("ui.menu.restore")).Disabled(busy).Chosen() {
+		if m.Item(locales.UiMenuRestore()).Disabled(busy).Chosen() {
 			a.RestoreAsync(s.Name)
 		}
 		m.Separator()
-		if m.Item(i18n.T("ui.menu.purge")).Disabled(busy).Chosen() {
+		if m.Item(locales.UiMenuPurge()).Disabled(busy).Chosen() {
 			a.confirm = confirmState{open: true, name: s.Name, purge: true}
 		}
 	}
@@ -911,16 +914,16 @@ func (a *App) viewDetail(c *myui.Context, s *store.Skill) {
 						myui.Row(c).Gap(t.Space(2)).AlignItems(myui.Center).Children(func() {
 							stateBadge(c, s.State)
 							if a.updates[s.Name] {
-								pill(c, i18n.T("ui.pill.hasUpdate"), t.Accent)
+								pill(c, locales.UiPillHasUpdate(), t.Accent)
 							}
 						})
 					})
-					ghostButton(c, iconClose, i18n.T("ui.action.closeDetail"), false, func() { a.selName = "" })
+					ghostButton(c, iconClose, locales.UiActionCloseDetail(), false, func() { a.selName = "" })
 				})
 				a.viewTranslateBar(c)
 				// 概览/全文 tab：绑定 a.detailTab。点选在下一次构建生效，
 				// 两个页面都按 a.detailTab 分支，本帧内的切换下一帧生效。
-				myui.Tabs(c, &a.detailTab, i18n.T("ui.detail.tabOverview"), i18n.T("ui.detail.tabFull")).FillWidth()
+				myui.Tabs(c, &a.detailTab, locales.UiDetailTabOverview(), locales.UiDetailTabFull()).FillWidth()
 				a.detailBody(c, s)
 			})
 		})
@@ -950,10 +953,10 @@ func (a *App) viewDetailOverview(c *myui.Context, s *store.Skill) {
 		a.viewTranslateNote(c, s)
 	}
 	if !s.HasSKILLMD && s.State != store.StateTrashed {
-		myui.Text(c, i18n.T("ui.pill.noSkillMD")).TextColor(t.Warning)
+		myui.Text(c, locales.UiPillNoSkillMD()).TextColor(t.Warning)
 	}
-	a.detailGroup(c, i18n.T("ui.detail.metaGroup"), true, func() { a.viewDetailMeta(c, s) })
-	a.detailGroup(c, i18n.T("ui.detail.location"), true, func() {
+	a.detailGroup(c, locales.UiDetailMetaGroup(), true, func() { a.viewDetailMeta(c, s) })
+	a.detailGroup(c, locales.UiDetailLocation(), true, func() {
 		myui.Text(c, s.Dir).FontSize(t.FontSize - 1).TextColor(t.TextMuted)
 	})
 }
@@ -970,14 +973,14 @@ func (a *App) viewTranslateBar(c *myui.Context) {
 	myui.Column(c).FillWidth().Gap(t.Space(1.5)).Children(func() {
 		myui.Row(c).FillWidth().AlignItems(myui.Center).Gap(t.Space(2)).Children(func() {
 			myui.Icon(c, iconTranslate).TextColor(t.TextMuted).FontSize(t.FontSize)
-			myui.Text(c, i18n.T("ui.translate.label")).SingleLine().FontSize(t.FontSize - 1).TextColor(t.TextMuted)
+			myui.Text(c, locales.UiTranslateLabel()).SingleLine().FontSize(t.FontSize - 1).TextColor(t.TextMuted)
 			myui.Spacer(c)
 			sel := 0
 			if a.trans.on {
 				sel = 1
 			}
-			if myui.Segmented(c, &sel, i18n.T("ui.translate.original"), i18n.T("ui.translate.translated")).
-				Label(i18n.T("ui.translate.displayLang")).Shrink(0).Changed() {
+			if myui.Segmented(c, &sel, locales.UiTranslateOriginal(), locales.UiTranslateTranslated()).
+				Label(locales.UiTranslateDisplayLang()).Shrink(0).Changed() {
 				a.SetTranslateOn(sel == 1)
 				c.Invalidate()
 			}
@@ -989,9 +992,9 @@ func (a *App) viewTranslateBar(c *myui.Context) {
 			myui.Box(c).FillWidth().Padding(t.Space(2), t.Space(3)).Radius(t.Radius).
 				Background(t.Warning.Alpha(0.10)).Border(1, t.Warning.Alpha(0.4)).Children(func() {
 				myui.Column(c).FillWidth().Gap(t.Space(1.5)).Children(func() {
-					myui.Text(c, i18n.T("ui.translate.notConfigured")).TextColor(t.Warning)
+					myui.Text(c, locales.UiTranslateNotConfigured()).TextColor(t.Warning)
 					myui.Row(c).FillWidth().Children(func() {
-						if myui.Button(c, i18n.T("ui.translate.openSettings")).Clicked() {
+						if myui.Button(c, locales.UiTranslateOpenSettings()).Clicked() {
 							a.OpenSettings()
 						}
 					})
@@ -1014,13 +1017,13 @@ func (a *App) viewTranslateNote(c *myui.Context, s *store.Skill) {
 	case !ok || e.pending:
 		myui.Row(c).Gap(t.Space(1.5)).AlignItems(myui.Center).Children(func() {
 			myui.Spinner(c)
-			myui.Text(c, i18n.T("ui.translate.inProgress")).FontSize(t.FontSize - 1).TextColor(t.TextMuted)
+			myui.Text(c, locales.UiTranslateInProgress()).FontSize(t.FontSize - 1).TextColor(t.TextMuted)
 		})
 	case e.err != "":
-		myui.Text(c, i18n.Tf("ui.translate.failed", e.err)).MaxLines(4).
+		myui.Text(c, locales.UiTranslateFailed(e.err)).MaxLines(4).
 			FontSize(t.FontSize - 1).TextColor(t.Danger)
 	default:
-		myui.Text(c, i18n.Tf("ui.translate.note", a.settings.LangLabel())).
+		myui.Text(c, locales.UiTranslateNote(a.settings.LangLabel())).
 			FontSize(t.FontSize - 2).TextColor(t.TextMuted)
 	}
 }
@@ -1040,9 +1043,9 @@ func (a *App) viewDetailFullText(c *myui.Context, s *store.Skill) {
 	doc := a.skillDocs[s.Name]
 	switch {
 	case doc.loading:
-		myui.Text(c, i18n.T("ui.detail.loading")).TextColor(c.Theme().TextMuted)
+		myui.Text(c, locales.UiDetailLoading()).TextColor(c.Theme().TextMuted)
 	case doc.noMD:
-		myui.Text(c, i18n.T("ui.detail.noSkillMD")).TextColor(c.Theme().TextMuted)
+		myui.Text(c, locales.UiDetailNoSkillMD()).TextColor(c.Theme().TextMuted)
 	case doc.err != nil:
 		myui.Text(c, doc.err.Error()).TextColor(c.Theme().Danger)
 	default:
@@ -1067,15 +1070,15 @@ func (a *App) viewFullTextBody(c *myui.Context, s *store.Skill, src string) {
 	case !ok || e.pending:
 		myui.Row(c).Gap(t.Space(1.5)).AlignItems(myui.Center).Children(func() {
 			myui.Spinner(c)
-			myui.Text(c, i18n.T("ui.translate.fullInProgress")).FontSize(t.FontSize - 1).TextColor(t.TextMuted)
+			myui.Text(c, locales.UiTranslateFullInProgress()).FontSize(t.FontSize - 1).TextColor(t.TextMuted)
 		})
 		a.viewMarkdown(c, src)
 	case e.err != "":
-		myui.Text(c, i18n.Tf("ui.translate.fullFailed", e.err)).MaxLines(4).
+		myui.Text(c, locales.UiTranslateFullFailed(e.err)).MaxLines(4).
 			FontSize(t.FontSize - 1).TextColor(t.Danger)
 		a.viewMarkdown(c, src)
 	default:
-		myui.Text(c, i18n.Tf("ui.translate.note", a.settings.LangLabel())).
+		myui.Text(c, locales.UiTranslateNote(a.settings.LangLabel())).
 			FontSize(t.FontSize - 2).TextColor(t.TextMuted)
 		a.viewMarkdown(c, e.dst)
 	}
@@ -1113,7 +1116,7 @@ func (a *App) startFullTextLoad(s *store.Skill) {
 			if err != nil {
 				// 错误文字随语言变（i18n.Errorf 到显示时才取文案），
 				// 所以这里存错误本身，不存字符串。
-				doc = fullTextDoc{err: i18n.Errorf("ui.detail.readFailed", err)}
+				doc = fullTextDoc{err: i18n.NewError("uiDetailReadFailed", func() string { return locales.UiDetailReadFailed(err.Error()) })}
 			} else {
 				doc = fullTextDoc{src: string(data)}
 			}
@@ -1157,10 +1160,10 @@ func (a *App) viewDetailMeta(c *myui.Context, s *store.Skill) {
 	switch {
 	case m != nil:
 	case s.MetaErr != "":
-		myui.Text(c, i18n.Tf("ui.detail.metaFailed", s.MetaErr)).TextColor(t.Danger)
+		myui.Text(c, locales.UiDetailMetaFailed(s.MetaErr)).TextColor(t.Danger)
 		return
 	default:
-		myui.Text(c, i18n.T("ui.detail.noMeta")).TextColor(t.TextMuted)
+		myui.Text(c, locales.UiDetailNoMeta()).TextColor(t.TextMuted)
 		return
 	}
 	// 标签用弱化色，值在 metaField 里单独设为正文色，主次分明。
@@ -1184,10 +1187,10 @@ func (a *App) viewDetailMeta(c *myui.Context, s *store.Skill) {
 				metaField(c, "Plugin", m.PluginName, false, nil)
 			}
 			if m.InstalledAt != "" {
-				metaField(c, i18n.T("ui.detail.installedAt"), shortTime(m.InstalledAt), false, nil)
+				metaField(c, locales.UiDetailInstalledAt(), shortTime(m.InstalledAt), false, nil)
 			}
 			if m.UpdatedAt != "" {
-				metaField(c, i18n.T("ui.detail.updatedAt"), shortTime(m.UpdatedAt), false, nil)
+				metaField(c, locales.UiDetailUpdatedAt(), shortTime(m.UpdatedAt), false, nil)
 			}
 		})
 	})
@@ -1202,14 +1205,14 @@ func (a *App) viewDetailActions(c *myui.Context, s *store.Skill, busy bool) {
 	if busy {
 		myui.Row(c).Gap(t.Space(2)).AlignItems(myui.Center).Children(func() {
 			myui.Spinner(c)
-			myui.Text(c, i18n.Tf("ui.detail.busy", s.Name)).SingleLine().TextColor(t.TextMuted)
+			myui.Text(c, locales.UiDetailBusy(s.Name)).SingleLine().TextColor(t.TextMuted)
 		})
 		return
 	}
 	// trashButton 是「移入回收站」：Label 保持「详情:移入回收站」供测试与无障碍。
 	trashButton := func() {
 		myui.Spacer(c)
-		b := myui.ButtonBase(c).Label(i18n.T("ui.detail.trashLabel")).Tooltip(i18n.T("ui.action.moveTrash")).
+		b := myui.ButtonBase(c).Label(locales.UiDetailTrashLabel()).Tooltip(locales.UiActionMoveTrash()).
 			Padding(t.Space(1.75)).Radius(t.Radius).TextColor(t.Danger)
 		if b.Hovered() {
 			b.Background(t.Danger.Alpha(0.1))
@@ -1223,42 +1226,42 @@ func (a *App) viewDetailActions(c *myui.Context, s *store.Skill, busy bool) {
 		switch s.State {
 		case store.StateEnabled:
 			// 检查更新：预览上游差异，弹出评审面板（不直接改盘）。
-			ub := myui.PrimaryButton(c, "").Label(i18n.T("ui.detail.checkLabel")).Disabled(a.hasCheckTarget())
+			ub := myui.PrimaryButton(c, "").Label(locales.UiDetailCheckLabel()).Disabled(a.hasCheckTarget())
 			ub.Children(func() {
 				myui.Icon(c, iconUpdate)
-				myui.Text(c, i18n.T("ui.action.checkUpdate"))
+				myui.Text(c, locales.UiActionCheckUpdate())
 			})
 			if ub.Clicked() {
 				a.CheckAsync(s.Name)
 			}
-			if myui.Button(c, i18n.T("ui.menu.disable")).Clicked() {
+			if myui.Button(c, locales.UiMenuDisable()).Clicked() {
 				a.ToggleAsync(s.Name, false)
 			}
 			trashButton()
 		case store.StateDisabled:
-			if myui.PrimaryButton(c, i18n.T("ui.menu.enable")).Clicked() {
+			if myui.PrimaryButton(c, locales.UiMenuEnable()).Clicked() {
 				a.ToggleAsync(s.Name, true)
 			}
 			trashButton()
 		case store.StateTrashed:
-			rb := myui.PrimaryButton(c, "").Label(i18n.T("ui.menu.restore"))
+			rb := myui.PrimaryButton(c, "").Label(locales.UiMenuRestore())
 			rb.Children(func() {
 				myui.Icon(c, iconRestore)
-				myui.Text(c, i18n.T("ui.menu.restore"))
+				myui.Text(c, locales.UiMenuRestore())
 			})
 			if rb.Clicked() {
 				a.RestoreAsync(s.Name)
 			}
 			// 永久删除：危险色的文字按钮，靠右放；走确认框，删除前 store 先快照。
 			myui.Spacer(c)
-			pb := myui.ButtonBase(c).Label(i18n.T("ui.detail.purgeLabel")).Tooltip(i18n.T("ui.action.purgeTooltip")).
+			pb := myui.ButtonBase(c).Label(locales.UiDetailPurgeLabel()).Tooltip(locales.UiActionPurgeTooltip()).
 				Padding(t.Space(1.75), t.Space(2.5)).Radius(t.Radius).TextColor(t.Danger)
 			if pb.Hovered() {
 				pb.Background(t.Danger.Alpha(0.1))
 			}
 			pb.Children(func() {
 				myui.Icon(c, iconTrash).FontSize(t.FontSize + 1)
-				myui.Text(c, i18n.T("ui.action.purge"))
+				myui.Text(c, locales.UiActionPurge())
 			})
 			if pb.Clicked() {
 				a.confirm = confirmState{open: true, name: s.Name, purge: true}
@@ -1286,7 +1289,7 @@ func (a *App) viewStatusBar(c *myui.Context) {
 		} else {
 			myui.Spacer(c)
 		}
-		myui.Text(c, i18n.Tf("ui.status.total", en+dis)).
+		myui.Text(c, locales.UiStatusTotal(en+dis)).
 			SingleLine().Shrink(0).FontSize(t.FontSize - 1).TextColor(t.TextMuted)
 	})
 }
@@ -1309,9 +1312,9 @@ func (a *App) viewReviewModal(c *myui.Context) {
 		myui.Column(c).Width(560).Gap(12).Children(func() {
 			switch {
 			case r.all:
-				myui.Text(c, i18n.T("ui.action.checkAll")).FontSize(16).Bold()
+				myui.Text(c, locales.UiActionCheckAll()).FontSize(16).Bold()
 				if len(r.entries) == 0 {
-					myui.Text(c, i18n.T("ui.review.nothingToCheck")).TextColor(t.TextMuted)
+					myui.Text(c, locales.UiReviewNothingToCheck()).TextColor(t.TextMuted)
 				}
 				myui.Scroll(c).Grow(1).Height(340).Children(func() {
 					myui.Column(c).FillWidth().Gap(10).Children(func() {
@@ -1321,12 +1324,12 @@ func (a *App) viewReviewModal(c *myui.Context) {
 					})
 				})
 				myui.Row(c).Gap(8).Justify(myui.End).Children(func() {
-					if myui.Button(c, i18n.T("ui.common.close")).Clicked() {
+					if myui.Button(c, locales.UiCommonClose()).Clicked() {
 						a.CloseReview()
 					}
-					label := i18n.T("ui.review.applyAll")
+					label := locales.UiReviewApplyAll()
 					if r.applyBusy {
-						label = i18n.T("ui.review.applying")
+						label = locales.UiReviewApplying()
 					}
 					if myui.PrimaryButton(c, label).Disabled(r.applyBusy || !reviewHasChanges(r.entries)).Clicked() {
 						a.ApplyAsync()
@@ -1334,19 +1337,19 @@ func (a *App) viewReviewModal(c *myui.Context) {
 				})
 			case r.preview != nil:
 				p := r.preview
-				myui.Text(c, i18n.Tf("ui.review.title", r.skill)).FontSize(16).Bold()
+				myui.Text(c, locales.UiReviewTitle(r.skill)).FontSize(16).Bold()
 				myui.Row(c).Gap(8).AlignItems(myui.Center).Children(func() {
 					myui.Text(c, previewMetaText(p)).SingleLine().TextColor(t.TextMuted)
 				})
 				if !p.HasChanges() {
-					myui.Text(c, i18n.T("ui.review.upToDate")).TextColor(t.Success)
+					myui.Text(c, locales.UiReviewUpToDate()).TextColor(t.Success)
 				}
 				if p.LocalModified {
 					// 上游没变时只是提醒；有变化时提示应用会覆盖本地改动。
 					// 两种情形各一条整句：句子中段拼接会译歪。
-					msg := i18n.T("ui.review.localModified")
+					msg := locales.UiReviewLocalModified()
 					if p.HasChanges() {
-						msg = i18n.T("ui.review.localModifiedWithChanges")
+						msg = locales.UiReviewLocalModifiedWithChanges()
 					}
 					myui.Text(c, msg).TextColor(t.Warning)
 				}
@@ -1358,12 +1361,12 @@ func (a *App) viewReviewModal(c *myui.Context) {
 					})
 				})
 				myui.Row(c).Gap(8).Justify(myui.End).Children(func() {
-					if myui.Button(c, i18n.T("ui.common.cancel")).Clicked() {
+					if myui.Button(c, locales.UiCommonCancel()).Clicked() {
 						a.CloseReview()
 					}
-					label := i18n.T("ui.review.apply")
+					label := locales.UiReviewApply()
 					if r.applyBusy {
-						label = i18n.T("ui.review.applying")
+						label = locales.UiReviewApplying()
 					}
 					// 无变化时禁用应用（ApplyAsync 对空名单也会直接返回）。
 					if myui.PrimaryButton(c, label).Disabled(r.applyBusy || !p.HasChanges()).Clicked() {
@@ -1372,8 +1375,8 @@ func (a *App) viewReviewModal(c *myui.Context) {
 				})
 			default:
 				// 理论不可达：open 但无数据。给占位并允许关闭，绝不 panic。
-				myui.Text(c, i18n.T("ui.review.noResult")).TextColor(t.TextMuted)
-				if myui.Button(c, i18n.T("ui.common.close")).Clicked() {
+				myui.Text(c, locales.UiReviewNoResult()).TextColor(t.TextMuted)
+				if myui.Button(c, locales.UiCommonClose()).Clicked() {
 					a.CloseReview()
 				}
 			}
@@ -1389,15 +1392,15 @@ func (a *App) viewReviewEntry(c *myui.Context, e skillReviewEntry) {
 			myui.Text(c, e.skill).Bold()
 			switch {
 			case e.err != "":
-				myui.Text(c, i18n.T("ui.review.checkFailed")).SingleLine().TextColor(t.Danger)
+				myui.Text(c, locales.UiReviewCheckFailed()).SingleLine().TextColor(t.Danger)
 			case !e.preview.HasChanges():
-				myui.Text(c, i18n.T("ui.review.latest")).SingleLine().TextColor(t.Success)
+				myui.Text(c, locales.UiReviewLatest()).SingleLine().TextColor(t.Success)
 				if e.preview.LocalModified {
-					myui.Text(c, i18n.T("ui.review.localChanged")).SingleLine().TextColor(t.Warning)
+					myui.Text(c, locales.UiReviewLocalChanged()).SingleLine().TextColor(t.Warning)
 				}
 			default:
 				added, changed, removed := e.preview.Counts()
-				myui.Text(c, i18n.Tf("ui.review.counts", added, changed, removed, len(e.preview.Files))).
+				myui.Text(c, locales.UiReviewCounts(added, changed, removed, len(e.preview.Files))).
 					SingleLine().TextColor(t.Warning)
 			}
 		})
@@ -1429,21 +1432,21 @@ func (a *App) viewDiffRow(c *myui.Context, f store.FileDiff) {
 
 // previewMetaText 生成单技能评审面板的元信息行。上游没变（凭 commit 或
 // 目录树哈希判定）时没有逐文件比较，只在本地被改过时才显示新旧哈希。
-// 这是纯函数（没有 App/Context），文案直接用 i18n.T 现取。
+// 这是纯函数（没有 App/Context），文案直接用 locales.Xxx() 现取。
 func previewMetaText(p *store.UpdatePreview) string {
-	parts := []string{i18n.Tf("ui.review.metaSource", p.SourceType)}
+	parts := []string{locales.UiReviewMetaSource(p.SourceType)}
 	if p.Commit != "" {
-		parts = append(parts, i18n.Tf("ui.review.metaCommit", shortCommit(p.Commit)))
+		parts = append(parts, locales.UiReviewMetaCommit(shortCommit(p.Commit)))
 	}
 	switch p.Basis {
 	case store.BasisCommit:
-		parts = append(parts, i18n.T("ui.review.basisCommit"))
+		parts = append(parts, locales.UiReviewBasisCommit())
 	case store.BasisTree:
-		parts = append(parts, i18n.T("ui.review.basisTree"))
+		parts = append(parts, locales.UiReviewBasisTree())
 	}
 	if p.Basis == store.BasisContent || p.LocalModified {
-		parts = append(parts, i18n.Tf("ui.review.oldHash", shortHash(p.OldHash)),
-			i18n.Tf("ui.review.newHash", shortHash(p.NewHash)))
+		parts = append(parts, locales.UiReviewOldHash(shortHash(p.OldHash)),
+			locales.UiReviewNewHash(shortHash(p.NewHash)))
 	}
 	return strings.Join(parts, " · ")
 }

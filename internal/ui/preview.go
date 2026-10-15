@@ -16,8 +16,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/ArnoChenFx/kura/internal/i18n"
 	"github.com/ArnoChenFx/kura/internal/store"
+	"github.com/ArnoChenFx/kura/locales"
 )
 
 // skillReviewEntry 是「全部检查」汇总里一个技能的结果。
@@ -56,7 +56,7 @@ func (a *App) CheckAsync(name string) {
 		return
 	}
 	a.checking = name
-	a.status, a.statusErr = i18n.Tf("ui.status.checkingUpdate", name), false
+	a.status, a.statusErr = locales.UiStatusCheckingUpdate(name), false
 	cfg, gen := a.cfg, a.gen
 	a.spawn(func() {
 		p, err := cfg.PreviewUpdate(name)
@@ -66,7 +66,7 @@ func (a *App) CheckAsync(name string) {
 				return // 期间切换了目录，结果作废
 			}
 			if err != nil {
-				a.status, a.statusErr = i18n.Tf("ui.status.checkFailed", name, err), true
+				a.status, a.statusErr = locales.UiStatusCheckFailed(name, err), true
 				return
 			}
 			// 有无变化都打开面板：面板内显式提示「与上游一致」，比只靠
@@ -86,7 +86,7 @@ func (a *App) CheckAllAsync() {
 		return
 	}
 	a.checkingAll = true
-	a.status, a.statusErr = i18n.T("ui.status.checkingAll"), false
+	a.status, a.statusErr = locales.UiStatusCheckingAll(), false
 	cfg, gen := a.cfg, a.gen
 	a.spawn(func() {
 		// 只扫根目录；扫描失败等价于没有可检查的技能。
@@ -94,7 +94,7 @@ func (a *App) CheckAllAsync() {
 		entries := make([]skillReviewEntry, 0, len(skills))
 		if err != nil {
 			for _, s := range skills {
-				entries = append(entries, skillReviewEntry{skill: s.Name, err: i18n.Tf("ui.review.scanFailed", err.Error())})
+				entries = append(entries, skillReviewEntry{skill: s.Name, err: locales.UiReviewScanFailed(err.Error())})
 			}
 		} else {
 			names := make([]string, len(skills))
@@ -121,7 +121,7 @@ func (a *App) CheckAllAsync() {
 			for _, e := range entries {
 				a.updates[e.skill] = e.preview != nil && e.preview.HasChanges()
 			}
-			a.status, a.statusErr = i18n.Tf("ui.status.checkedAll", len(entries)), false
+			a.status, a.statusErr = locales.UiStatusCheckedAll(len(entries)), false
 		})
 	})
 }
@@ -152,7 +152,7 @@ func (a *App) ApplyAsync() {
 	if cfg == nil {
 		cfg = a.cfg
 	}
-	a.status, a.statusErr = i18n.Tf("ui.status.updating", strings.Join(names, i18n.T("ui.common.listSep"))), false
+	a.status, a.statusErr = locales.UiStatusUpdating(strings.Join(names, locales.UiCommonListSep())), false
 	a.spawn(func() {
 		// 批量更新：同一仓库的技能共用一次 clone。
 		var done []string
@@ -181,11 +181,11 @@ func (a *App) ApplyAsync() {
 			}
 			switch {
 			case firstErr == nil:
-				a.status, a.statusErr = i18n.Tf("ui.status.updated", len(done)), false
+				a.status, a.statusErr = locales.UiStatusUpdated(len(done)), false
 			case len(done) == 0:
-				a.status, a.statusErr = i18n.Tf("ui.status.updateFailed", firstErr.Error()), true
+				a.status, a.statusErr = locales.UiStatusUpdateFailed(firstErr.Error()), true
 			default:
-				a.status, a.statusErr = i18n.Tf("ui.status.updatedPartial", len(done), failed, firstErr), true
+				a.status, a.statusErr = locales.UiStatusUpdatedPartial(len(done), failed, firstErr), true
 			}
 		})
 	})
@@ -197,5 +197,5 @@ func (a *App) CloseReview() { a.review.open = false }
 // checkSummary 生成单技能检查完成的状态行文案。
 func checkSummary(name string, p *store.UpdatePreview) string {
 	added, changed, removed := p.Counts()
-	return i18n.Tf("ui.status.checkSummary", name, added, changed, removed, len(p.Files))
+	return locales.UiStatusCheckSummary(name, added, changed, removed, len(p.Files))
 }

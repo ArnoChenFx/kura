@@ -1,5 +1,8 @@
 // i18n 自己的测试：语言解析（这是「第一次打开跟随系统」的判定核心）、
-// 目录完整性，以及「非测试代码里不留硬编码中文」的守卫。
+// 进程语言口径，以及「非测试代码里不留硬编码中文」的守卫。
+//
+// 文案本身不在这里测：它们住在 locales/（ARB），由 `go tool mygo generate`
+// 校验（key、占位符、复数形式），取值由 locales 包自己的测试覆盖。
 
 package i18n
 
@@ -9,6 +12,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/ArnoChenFx/kura/locales"
 )
 
 // TestFromLocale 验证系统 locale 到语言的映射：中文（含各种写法）是中文，
@@ -77,127 +82,86 @@ func TestNormalize(t *testing.T) {
 	}
 }
 
-// TestSetAndCurrent 验证 Set 只接受 zh/en，其它值落到默认（英文）。
+// TestSetAndCurrent 验证 Set 只接受 zh/en，其它值落到默认（英文），并且
+// locales 取值真的跟着进程语言变。
 func TestSetAndCurrent(t *testing.T) {
 	defer Set(Default)
 	if got := Set(ZH); got != ZH || Current() != ZH {
 		t.Fatalf("Set(zh) 后 Current() = %q", Current())
 	}
+	if got := locales.StoreErrUnknownSkill(); !strings.Contains(got, "未找到该技能") {
+		t.Errorf("Set(zh) 后文案应为中文，得到 %q", got)
+	}
 	if got := Set(EN); got != EN || Current() != EN {
 		t.Fatalf("Set(en) 后 Current() = %q", Current())
+	}
+	if got := locales.StoreErrUnknownSkill(); strings.Contains(got, "未找到该技能") {
+		t.Errorf("Set(en) 后文案应为英文，得到 %q", got)
 	}
 	if got := Set("de"); got != Default || Current() != Default {
 		t.Fatalf("Set(de) 应落到默认 %q，得到 %q", Default, got)
 	}
 }
 
-// TestTAndTf 验证取文案与格式化，以及缺 key 时返回 key 本身。
-func TestTAndTf(t *testing.T) {
-	RegisterZH(map[string]string{"test.hello": "你好，%s"})
-	RegisterEN(map[string]string{"test.hello": "Hello, %s"})
-	defer Set(Default)
-
-	Set(ZH)
-	if got := Tf("test.hello", "世界"); got != "你好，世界" {
-		t.Errorf("Tf = %q", got)
-	}
-	Set(EN)
-	if got := Tf("test.hello", "world"); got != "Hello, world" {
-		t.Errorf("Tf = %q", got)
-	}
-	if got := T("test.missing"); got != "test.missing" {
-		t.Errorf("缺 key 应返回 key 本身，得到 %q", got)
-	}
-	if !Has("test.hello") {
-		t.Error("Has(test.hello) 应为 true")
-	}
-}
-
-// TestRegisterDuplicatePanics 验证同一个 key 登记两次会被拦住（复制粘贴
-// 造成的静默覆盖比 panic 更难查）。
-func TestRegisterDuplicatePanics(t *testing.T) {
-	RegisterEN(map[string]string{"test.dup": "one"})
-	RegisterZH(map[string]string{"test.dup": "一"})
-	defer func() {
-		if recover() == nil {
-			t.Error("重复登记应 panic")
-		}
-	}()
-	RegisterZH(map[string]string{"test.dup": "二"})
-}
-
-// TestCatalogParity 验证两套目录的 key 完全一致（缺失的那个方向在界面上会
-// 显示成 key 本身）。
-func TestCatalogParity(t *testing.T) {
-	onlyZH, onlyEN := LangList()
-	if len(onlyZH) > 0 {
-		t.Errorf("只有中文的 key：%v", onlyZH)
-	}
-	if len(onlyEN) > 0 {
-		t.Errorf("只有英文的 key：%v", onlyEN)
-	}
-}
-
-// TestErrorIs 验证目录错误的身份：同一个 key 的错误彼此相等，errors.Is 可用。
+// TestErrorIs 验证目录错误的身份：同一个 key 的错误彼此相等，errors.Is 可用，
+// 与语言无关。
 func TestErrorIs(t *testing.T) {
 	defer Set(Default)
-	RegisterZH(map[string]string{
-		"test.err.outer":        "外层 %s",
-		"test.err.inner":        "内层出错",
-		"test.err.other":        "另一个",
-		"test.err.see-sentinel": "哨兵",
-	})
-	RegisterEN(map[string]string{
-		"test.err.outer": "outer %s",
-	})
-
-	sentinel := NewError("test.err.sentinel")
-	var target error = NewError("test.err.sentinel", "别的参数")
-	if !errors.Is(sentinel, target) {
+	sentinel := NewError("storeErrUnknownSkill", func() string { return locales.StoreErrUnknownSkill() })
+	same := NewError("storeErrUnknownSkill", func() string { return locales.StoreErrUnknownSkill() })
+	if !errors.Is(sentinel, same) {
 		t.Error("同一个 key 的错误应彼此相等")
 	}
-	if errors.Is(sentinel, NewError("test.err.other")) {
+	if errors.Is(sentinel, NewError("storeErrInvalidName", func() string { return locales.StoreErrInvalidName() })) {
 		t.Error("不同 key 的错误不应相等")
 	}
-	// 包住的底层错误仍可判定
-	inner := NewError("test.err.inner")
-	outer := Wrapf(inner, "test.err.outer", "x")
-	if !errors.Is(outer, inner) {
+	// 用 sentinel 造的错误：文字来自目录、身份是 base。
+	wrapped := WithSentinel(sentinel, "storeErrUnknownSkillInTrash",
+		func() string { return locales.StoreErrUnknownSkillInTrash("ghost") })
+	if !errors.Is(wrapped, sentinel) {
+		t.Error("WithSentinel 应保留哨兵身份")
+	}
+	if got := wrapped.Error(); !strings.Contains(got, "ghost") {
+		t.Errorf("WithSentinel 的文字应含参数，得到 %q", got)
+	}
+	// Wrapf 包住的底层错误仍可判定。
+	base := NewError("storeErrUnknownSkill", func() string { return locales.StoreErrUnknownSkill() })
+	outer := Wrapf(base, "storeErrInstallSkill", func() string { return locales.StoreErrInstallSkill("pdf-tools") })
+	if !errors.Is(outer, base) {
 		t.Error("Wrapf 应保留底层错误的身份")
 	}
-	Set(ZH)
-	if got := outer.Error(); got != "外层 x: 内层出错" {
-		t.Errorf("Wrapf 文案 = %q", got)
-	}
-	Set(EN)
-	if got := outer.Error(); got != "outer x: test.err.inner" {
-		t.Errorf("Wrapf 英文文案 = %q（内层没登记英文时显示 key，这是设计）", got)
+	if got, want := outer.Error(), locales.StoreErrInstallSkill("pdf-tools")+": "+locales.StoreErrUnknownSkill(); got != want {
+		t.Errorf("Wrapf 文案 = %q，想要 %q", got, want)
 	}
 }
 
 // TestErrorTextFollowsLanguage 验证同一条错误的文字随语言变化，而身份不变。
 func TestErrorTextFollowsLanguage(t *testing.T) {
-	RegisterZH(map[string]string{"test.err.text": "中文 %d"})
-	RegisterEN(map[string]string{"test.err.text": "English %d"})
-	e := NewError("test.err.text", 7)
 	defer Set(Default)
+	e := NewError("storeErrInstallSkill", func() string { return locales.StoreErrInstallSkill("pdf-tools") })
 	Set(ZH)
-	if got := e.Error(); got != "中文 7" {
-		t.Errorf("中文 = %q", got)
+	zh := e.Error()
+	if !strings.Contains(zh, "安装 pdf-tools 失败") {
+		t.Fatalf("中文 = %q", zh)
 	}
 	Set(EN)
-	if got := e.Error(); got != "English 7" {
-		t.Errorf("英文 = %q", got)
+	en := e.Error()
+	if strings.Contains(en, "安装") || en == zh {
+		t.Errorf("英文 = %q（应与中文不同且不含中文）", en)
+	}
+	// 身份与语言无关。
+	if !errors.Is(e, NewError("storeErrInstallSkill", func() string { return locales.StoreErrInstallSkill("x") })) {
+		t.Error("换语言后同一 key 的错误身份应不变")
 	}
 }
 
 // TestNoHardcodedCJK 是这个仓库的守卫：非测试的 Go 文件里不许有中文界面
-// 字面量，文案一律走目录（catalog*.go 自己除外）。漏掉的 key 会在界面上
-// 显示成 key 本身，这层防线是为了让「忘了登记」在 CI 里就失败。
+// 字面量，文案一律走 locales/。漏掉的 key 会在界面上显示成 key 本身，
+// 这层防线是为了让「忘了登记」在 CI 里就失败。
 func TestNoHardcodedCJK(t *testing.T) {
 	root := repoRoot(t)
-	// 迁移范围：应用自身的包（internal）与 main.go。tools/ 是开发者脚本，
-	// 不是用户界面，留着中文没问题。
+	// 迁移范围：应用自身的包（internal）。tools/ 是开发者脚本，不是用户
+	// 界面，留着中文没问题；locales/ 是文案本身，不在扫描范围。
 	found, err := CJKLiterals(filepath.Join(root, "internal"), allowedFiles()...)
 	if err != nil {
 		t.Fatal(err)
@@ -210,24 +174,15 @@ func TestNoHardcodedCJK(t *testing.T) {
 			continue
 		}
 		// 报错时把绝对路径缩成仓库相对路径，消息好读。
-		t.Errorf("%s 有硬编码中文界面文案；请移进 catalog 并用 i18n.T 取用",
+		t.Errorf("%s 有硬编码中文界面文案；请移进 locales 并用 locales.Xxx() 取用",
 			strings.TrimPrefix(filepath.ToSlash(f), filepath.ToSlash(root)+"/"))
 	}
 }
 
-// allowedFiles 是允许出现中文的文件名（i18n.CJKLiterals 按文件名匹配，
-// 所以这里只能给文件名）：各包的目录文件、i18n 包自己的实现与测试
-// （「文本不存在」这类错误是对程序员的，不是界面文案）。
-//
-// 加进这个清单的每个名字都要想清楚：它会放行**所有包**里的同名文件。
-// 要精确到某一个文件就用 allowedPaths。不要为了让它过而放宽别的判断
-// （例如整目录排除）。
-func allowedFiles() []string {
-	return []string{
-		"catalog.go", "catalog_zh.go", "catalog_en.go",
-		"i18n.go", "i18n_test.go", "locale_windows.go", "locale_other.go",
-	}
-}
+// allowedFiles 是允许出现中文的文件名（i18n.CJKLiterals 按文件名匹配）。
+// 迁移后没有任何界面包需要它：文案全在 locales/，各包的 catalog.go 已删除。
+// 留这个函数是为了让守卫的调用形状固定，将来真要放行某个文件时只在这里加。
+func allowedFiles() []string { return nil }
 
 // allowedPaths 是按完整路径（仓库相对、/ 分隔）允许含中文的文件，返回带
 // 结尾 ':' 的前缀（与 CJKLiterals 结果里的「路径:行号」对齐），给「文件名
@@ -272,5 +227,86 @@ func repoRoot(t *testing.T) string {
 			t.Fatal("找不到仓库根（go.mod）")
 		}
 		dir = parent
+	}
+}
+
+// TestCJKLiteralsFindsFilesInTheGivenDir 是守卫自身的自测：CJKLiterals 必须
+// 真的扫到 dir 里的文件，尤其调用方传 "."（相对路径）时。
+//
+// 这条测试是因为踩过坑：WalkDir 的第一个条目就是根目录自己，旧实现看到名字以
+// "." 开头就 SkipDir，于是 CJKLiterals(".") 一个文件都不扫、静默返回空——
+// internal/ui 的守卫测试因此一直是空转（把中文探针塞进 view.go 也照样 PASS）。
+func TestCJKLiteralsFindsFilesInTheGivenDir(t *testing.T) {
+	dir := t.TempDir()
+	sub := filepath.Join(dir, "sub")
+	if err := os.MkdirAll(filepath.Join(sub, ".hidden"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{
+		filepath.Join(dir, "probe.go"):           "package probe\n\nvar s = \"硬编码中文\"\n",
+		filepath.Join(sub, "nested.go"):          "package probe\n\nvar s = \"嵌套中文\"\n",
+		filepath.Join(dir, "probe_test.go"):      "package probe\n\nvar s = \"测试中文\"\n",
+		filepath.Join(dir, "comment.go"):         "package probe\n\n// 只有中文注释\nvar s = \"plain\"\n",
+		filepath.Join(sub, ".hidden", "skip.go"): "package probe\n\nvar s = \"点目录中文\"\n",
+	}
+	for p, body := range files {
+		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// 绝对路径：probe.go 与 sub/nested.go 各一条，测试文件/注释/点目录都不算。
+	got, err := CJKLiterals(dir)
+	if err != nil {
+		t.Fatalf("CJKLiterals(%q): %v", dir, err)
+	}
+	checkCJKFindings(t, dir, got)
+
+	// 相对路径 "."：这条正是 internal/ui 守卫的用法（旧实现在这里返回空）。
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := os.Chdir(wd); err != nil {
+			t.Fatalf("恢复工作目录: %v", err)
+		}
+	}()
+	got, err = CJKLiterals(".")
+	if err != nil {
+		t.Fatalf(`CJKLiterals("."): %v`, err)
+	}
+	if len(got) == 0 {
+		t.Fatal(`CJKLiterals(".") 一条都没找到：调用方传 "." 时扫描退化成了空转`)
+	}
+	for _, f := range got {
+		if !strings.HasPrefix(f, "probe.go:") && !strings.HasPrefix(f, "sub/") &&
+			!strings.HasPrefix(f, "sub\\") {
+			t.Errorf(`CJKLiterals(".") 的结果路径不以 "." 为基点：%s`, f)
+		}
+	}
+	if len(got) != 2 {
+		t.Errorf(`CJKLiterals(".") 找到 %d 条，想要 2 条：%v`, len(got), got)
+	}
+}
+
+// checkCJKFindings 断言扫描结果正好是期望的那两条（probe.go 与 sub/nested.go）。
+func checkCJKFindings(t *testing.T, dir string, got []string) {
+	t.Helper()
+	if len(got) != 2 {
+		t.Fatalf("CJKLiterals(%q) 找到 %d 条，想要 2 条：%v", dir, len(got), got)
+	}
+	for _, f := range got {
+		switch {
+		case strings.Contains(f, "_test.go"):
+			t.Errorf("测试文件不该被扫：%s", f)
+		case strings.Contains(f, ".hidden"):
+			t.Errorf("点开头目录不该被扫：%s", f)
+		case strings.Contains(f, "comment.go"):
+			t.Errorf("只有注释的文件不该报：%s", f)
+		}
 	}
 }

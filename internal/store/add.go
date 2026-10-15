@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/ArnoChenFx/kura/internal/i18n"
+	"github.com/ArnoChenFx/kura/locales"
 )
 
 // 技能来源类型常量。
@@ -39,16 +40,16 @@ type AddOptions struct {
 // validate 校验来源参数：必须且只能提供一种来源。
 func (o *AddOptions) validate() error {
 	if (o.LocalPath == "") == (o.Repo == "") {
-		return i18n.NewError("store.err.addSource")
+		return i18n.NewError("storeErrAddSource", func() string { return locales.StoreErrAddSource() })
 	}
 	if o.LocalPath != "" {
 		return nil
 	}
 	if strings.Count(o.Repo, "/") != 1 || strings.ContainsAny(o.Repo, " \t\\") {
-		return i18n.NewError("store.err.badRepo")
+		return i18n.NewError("storeErrBadRepo", func() string { return locales.StoreErrBadRepo() })
 	}
 	if strings.HasPrefix(o.SubPath, "/") || strings.Contains(o.SubPath, "..") {
-		return i18n.NewError("store.err.badSubPath")
+		return i18n.NewError("storeErrBadSubPath", func() string { return locales.StoreErrBadSubPath() })
 	}
 	return nil
 }
@@ -57,7 +58,7 @@ func (o *AddOptions) validate() error {
 // .kura-meta.json（记录来源、安装时间与内容哈希）。已存在同名技能时报错。
 func (c *Config) Add(opts *AddOptions) (*Result, error) {
 	if opts == nil {
-		return nil, i18n.NewError("store.err.addOptionsNil")
+		return nil, i18n.NewError("storeErrAddOptionsNil", func() string { return locales.StoreErrAddOptionsNil() })
 	}
 	if err := opts.validate(); err != nil {
 		return nil, err
@@ -126,7 +127,7 @@ func discoverForAdd(repo, tmp string) (string, string, error) {
 		}
 		return filepath.Join(tmp, filepath.FromSlash(dr.Paths[0])), dr.Paths[0], nil
 	case 0:
-		return "", "", i18n.Errorf("store.err.sourceNoSkillMD", tmp)
+		return "", "", i18n.NewError("storeErrSourceNoSkillMD", func() string { return locales.StoreErrSourceNoSkillMD(tmp) })
 	default:
 		return "", "", &CandidatesError{Repo: repo, Paths: dr.Paths}
 	}
@@ -136,14 +137,14 @@ func discoverForAdd(repo, tmp string) (string, string, error) {
 func (c *Config) resolveLocal(opts *AddOptions) (string, Source, error) {
 	abs, err := filepath.Abs(opts.LocalPath)
 	if err != nil {
-		return "", Source{}, i18n.Wrapf(err, "store.err.resolveLocalPath")
+		return "", Source{}, i18n.Wrapf(err, "storeErrResolveLocalPath", func() string { return locales.StoreErrResolveLocalPath() })
 	}
 	info, err := os.Stat(abs)
 	if err != nil {
-		return "", Source{}, i18n.Wrapf(err, "store.err.sourceUnreadable")
+		return "", Source{}, i18n.Wrapf(err, "storeErrSourceUnreadable", func() string { return locales.StoreErrSourceUnreadable() })
 	}
 	if !info.IsDir() {
-		return "", Source{}, i18n.Errorf("store.err.sourceNotDir", abs)
+		return "", Source{}, i18n.NewError("storeErrSourceNotDir", func() string { return locales.StoreErrSourceNotDir(abs) })
 	}
 	return abs, Source{Type: SourceLocal, Path: abs}, nil
 }
@@ -212,19 +213,19 @@ func (c *Config) installDir(srcDir string, src Source, nameOverride string) (*Re
 		name = skillDirName(srcDir, filepath.Base(srcDir))
 	}
 	if name == "." || name == string(filepath.Separator) || strings.ContainsAny(name, `\/`) {
-		return nil, i18n.Errorf("store.err.deriveSkillName", srcDir)
+		return nil, i18n.NewError("storeErrDeriveSkillName", func() string { return locales.StoreErrDeriveSkillName(srcDir) })
 	}
 	dst := c.SkillPath(name)
 	if fileExists(dst) {
-		return nil, i18n.Errorf("store.err.skillExists", name)
+		return nil, i18n.NewError("storeErrSkillExists", func() string { return locales.StoreErrSkillExists(name) })
 	}
 	if !fileExists(filepath.Join(srcDir, "SKILL.md")) {
-		return nil, i18n.Errorf("store.err.sourceNoSkillMD", srcDir)
+		return nil, i18n.NewError("storeErrSourceNoSkillMD", func() string { return locales.StoreErrSourceNoSkillMD(srcDir) })
 	}
 	// GitHub 来源的仓库根技能目录里带着 clone 的 .git，不能装进技能根目录，
 	// 复制时就跳过它。
 	if err := copyTree(srcDir, dst, src.Type == SourceGitHub); err != nil {
-		return nil, i18n.Wrapf(err, "store.err.installSkill", name)
+		return nil, i18n.Wrapf(err, "storeErrInstallSkill", func() string { return locales.StoreErrInstallSkill(name) })
 	}
 	hash, err := HashDir(dst)
 	if err != nil {
@@ -377,7 +378,7 @@ func (c *Config) AddMany(repo, ref string, specs []AddSpec) []AddResult {
 	for i, spec := range specs {
 		sub := cleanSubPath(spec.SubPath)
 		if strings.HasPrefix(spec.SubPath, "/") || strings.Contains(sub, "..") {
-			out[i].Err = i18n.Errorf("store.err.badSkillSubPath", spec.SubPath)
+			out[i].Err = i18n.NewError("storeErrBadSkillSubPath", func() string { return locales.StoreErrBadSkillSubPath(spec.SubPath) })
 			continue
 		}
 		if sub == "." {
@@ -405,7 +406,7 @@ func (c *Config) AddMany(repo, ref string, specs []AddSpec) []AddResult {
 	var todo []addItem
 	for _, it := range items {
 		if r := trees[it.sub]; r.Err != nil {
-			out[it.index].Err = i18n.Wrapf(r.Err, "store.err.installSkill", subLabel(it.sub))
+			out[it.index].Err = i18n.Wrapf(r.Err, "storeErrInstallSkill", func() string { return locales.StoreErrInstallSkill(subLabel(it.sub)) })
 			continue
 		}
 		todo = append(todo, it)
@@ -433,7 +434,7 @@ func (c *Config) AddMany(repo, ref string, specs []AddSpec) []AddResult {
 		}
 		res, err := c.installDir(u.Dir(it.sub), src, name)
 		if err != nil {
-			out[it.index].Err = i18n.Wrapf(err, "store.err.installSkill", subLabel(it.sub))
+			out[it.index].Err = i18n.Wrapf(err, "storeErrInstallSkill", func() string { return locales.StoreErrInstallSkill(subLabel(it.sub)) })
 			continue
 		}
 		out[it.index].Name = res.ID
@@ -484,7 +485,7 @@ func failItems(out []AddResult, items []addItem, err error) {
 // （标识本身也是界面文案，两种语言下都显示「仓库根」/“the repository root”）。
 func subLabel(sub string) string {
 	if sub == "" {
-		return i18n.T("store.word.repoRoot")
+		return locales.StoreWordRepoRoot()
 	}
 	return sub
 }

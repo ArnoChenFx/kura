@@ -8,6 +8,7 @@ package ui
 import (
 	"context"
 	"errors"
+	"github.com/ArnoChenFx/kura/locales"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -268,7 +269,7 @@ func TestTranslateDoesNotTouchSkillDir(t *testing.T) {
 	a.settle()
 	tt.Frame()
 	click(t, a, tt, "alpha")
-	detClickTab(t, a, tt, detailTabFull) // 译文模式下打开全文：翻译失败，说明原因并保留原文
+	detClickTab(t, a, tt, locales.UiDetailTabFull()) // 译文模式下打开全文：翻译失败，说明原因并保留原文
 	if !detHasText(tt, "全文翻译失败") {
 		t.Errorf("全文译文失败时应说明原因，文本 %v", tt.Texts())
 	}

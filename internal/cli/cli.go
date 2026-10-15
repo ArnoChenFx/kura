@@ -9,7 +9,7 @@
 //   - 所有子命令都支持 --json（机器可读输出）、--root/--home（目录覆盖）；
 //     环境变量 KURA_ROOT/KURA_HOME 等价于对应 flag，命令行参数优先级更高；
 //   - 界面语言由 --lang（或 KURA_LANG）切换：flag > 环境变量 > config.json 的
-//     lang > 跟随系统 locale（见 lang.go）；文案一律经 i18n 取（见 catalog.go），
+//     lang > 跟随系统 locale（见 lang.go）；文案一律经 locales 取（见 locales/），
 //     中文与英文两套；
 //   - 退出码：0 成功；1 操作失败（技能不存在、同名冲突、IO 错误等）；
 //     2 用法错误（未知命令、flag 解析失败、参数个数不对）；3 doctor 发现问题。
@@ -30,8 +30,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/ArnoChenFx/kura/internal/i18n"
 	"github.com/ArnoChenFx/kura/internal/store"
+	"github.com/ArnoChenFx/kura/locales"
 )
 
 // Version 是 CLI 打印的版本号，与 mygo.json 保持一致。
@@ -120,7 +120,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	case "doctor":
 		return cmdDoctor(sub, stdout, stderr, pre)
 	default:
-		fmt.Fprint(stderr, i18n.Tf("cli.err.unknownCommand", cmd))
+		fmt.Fprint(stderr, locales.CliErrUnknownCommand(cmd))
 		printUsage(stderr)
 		return ExitUsage
 	}
@@ -129,8 +129,8 @@ func Run(args []string, stdout, stderr io.Writer) int {
 // badFlags 报「全局 flag 解析失败」：人类可读的一行加（--json 时）stderr 上的
 // 结构化错误。文本与结构化错误都从目录取，两种语言下都完整成句。
 func badFlags(stderr io.Writer, err error) int {
-	fmt.Fprint(stderr, i18n.Tf("cli.err.badFlag", err))
-	_ = writeJSON(stderr, errorJSON{Error: i18n.Tf("cli.err.badFlagJSON", err)})
+	fmt.Fprint(stderr, locales.CliErrBadFlag(err))
+	_ = writeJSON(stderr, errorJSON{Error: locales.CliErrBadFlagJSON(err)})
 	return ExitUsage
 }
 
@@ -158,10 +158,10 @@ func newFlagSet(name string, stderr io.Writer, g *globalFlags, pre *globalFlags)
 	if pre != nil {
 		defJSON, defRoot, defHome, defLang = pre.json, pre.root, pre.home, pre.lang
 	}
-	fs.BoolVar(&g.json, "json", defJSON, i18n.T("cli.flag.json"))
-	fs.StringVar(&g.root, "root", defRoot, i18n.T("cli.flag.root"))
-	fs.StringVar(&g.home, "home", defHome, i18n.T("cli.flag.home"))
-	fs.StringVar(&g.lang, "lang", defLang, i18n.T("cli.flag.lang"))
+	fs.BoolVar(&g.json, "json", defJSON, locales.CliFlagJson())
+	fs.StringVar(&g.root, "root", defRoot, locales.CliFlagRoot())
+	fs.StringVar(&g.home, "home", defHome, locales.CliFlagHome())
+	fs.StringVar(&g.lang, "lang", defLang, locales.CliFlagLang())
 	return fs
 }
 
@@ -225,7 +225,7 @@ func parseArgs(fs *flag.FlagSet, args []string) ([]string, error) {
 }
 
 // printUsage 打印帮助文本（命令列表、全局 flag、退出码与 JSON 契约摘要）。
-// 全文按当前界面语言取（见 catalog.go 的 cli.usage.text）。
+// 全文按当前界面语言取（见 locales 的 cliUsageText）。
 func printUsage(w io.Writer) {
-	fmt.Fprint(w, i18n.T("cli.usage.text"))
+	fmt.Fprint(w, locales.CliUsageText())
 }

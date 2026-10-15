@@ -43,6 +43,8 @@ jobs:
         run: go vet ./...
       - name: mygo vet
         run: go tool mygo vet .
+      - name: mygo i18n check
+        run: go tool mygo i18n check
       - name: go test
         run: go test ./...
       - name: go test（CGO_ENABLED=0）

@@ -4,6 +4,7 @@ package ui
 // 布局的几种典型状态。全部数据造在 t.TempDir() 里。
 
 import (
+	"github.com/ArnoChenFx/kura/locales"
 	"os"
 	"path/filepath"
 	"testing"
@@ -129,6 +130,6 @@ func TestRenderDesignShots(t *testing.T) {
 	}, func(tt *myui.Tester) {
 		// detClickTab 完整跑两轮（全文先读盘、再翻译），截图才是译文而不是「翻译全文中…」。
 		detClickTab(t, a, tt, "译文")
-		detClickTab(t, a, tt, detailTabFull)
+		detClickTab(t, a, tt, locales.UiDetailTabFull())
 	})
 }

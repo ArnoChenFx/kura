@@ -7,8 +7,8 @@ package ui
 import (
 	"strings"
 
-	"github.com/ArnoChenFx/kura/internal/i18n"
 	"github.com/ArnoChenFx/kura/internal/store"
+	"github.com/ArnoChenFx/kura/locales"
 	myui "github.com/egoist/mygo/ui"
 )
 
@@ -26,14 +26,84 @@ type settingsState struct {
 	note    string // 打开时的提示（如已存的语言无法识别，已回到默认）
 }
 
-// targetLang 类型与 targetLangs（可选的目标语言表）、ifaceLangs（界面语言
-// 下拉的选项表）都在 catalog.go：它们的显示名是语言自称，不进目录。
+// targetLang 是设置里可选的一个目标语言：规范码 + 显示名的取值函数。
+type targetLang struct {
+	code  string        // 规范码，必须能被 store.NormalizeTargetLang 原样认回
+	label func() string // 显示名（语言的自称，两种界面语言下都不变）
+}
+
+// targetLangs 是设置里可选的目标语言，顺序即下拉顺序。每个 code 必须能被
+// store.NormalizeTargetLang 原样认回，否则保存会被拒
+// （TestTargetLangsAreNormalized 守着）。
+//
+// 这些显示名是**语言的自称**（简体中文、日本語、Français…）：说中文的人找
+// 「简体中文」，说日语的人找「日本語」，所以两种界面语言下都显示自称。名字
+// 仍然存在 locales 里（store 的 langLabel 用同一份，单一来源），只是不随
+// 界面语言变（对它们来说，两种语言的目录取值本来就相同）。
+var targetLangs = []targetLang{
+	{"zh-CN", locales.StoreLangNameZhCN},
+	{"en", locales.StoreLangNameEn},
+	{"en-US", locales.StoreLangNameEnUS},
+	{"en-GB", locales.StoreLangNameEnGB},
+	{"ja", locales.StoreLangNameJa},
+	{"ko", locales.StoreLangNameKo},
+	{"fr", locales.StoreLangNameFr},
+	{"de", locales.StoreLangNameDe},
+	{"es", locales.StoreLangNameEs},
+	{"pt", locales.StoreLangNamePt},
+	{"ru", locales.StoreLangNameRu},
+}
+
+// ifaceLang 是「界面语言」下拉的一个选项：config.json 的 lang 偏好值 + 显示名。
+type ifaceLang struct {
+	pref  string        // store.LangSystem / LangZH / LangEN
+	label func() string // 显示名：非自称项（跟随系统）随界面语言变
+}
+
+// ifaceLangs 是「界面语言」下拉的选项与顺序。简体中文 / English 显示自称：
+// 界面语言正是用当前语言命名的最容易认不清的一处，自称让任何语言的使用者都
+// 认得；只有「跟随系统」是随界面语言变的普通文案。
+var ifaceLangs = []ifaceLang{
+	{pref: "system", label: locales.UiSettingsLangSystem},
+	{pref: "zh", label: locales.StoreLangNameZhCN},
+	{pref: "en", label: locales.StoreLangNameEn},
+}
+
+// ifaceLangLabel 返回偏好在本帧语言下的显示名；不认识的偏好按跟随系统。
+func ifaceLangLabel(pref string) string {
+	for _, o := range ifaceLangs {
+		if o.pref == pref {
+			return o.label()
+		}
+	}
+	return ifaceLangs[0].label()
+}
+
+// ifaceLangLabels 返回下拉在本帧语言下的全部选项（顺序同 ifaceLangs）。
+func ifaceLangLabels() []string {
+	out := make([]string, len(ifaceLangs))
+	for i, o := range ifaceLangs {
+		out[i] = o.label()
+	}
+	return out
+}
+
+// ifaceLangPref 把下拉里的显示名换回偏好值：认不出来（不在表里）时按
+// 跟随系统，不猜——下拉只会给出表里的名字。
+func ifaceLangPref(label string) string {
+	for _, o := range ifaceLangs {
+		if o.label() == label {
+			return o.pref
+		}
+	}
+	return ifaceLangs[0].pref
+}
 
 // langLabels 返回 Select 用的选项（可读名，顺序同 targetLangs）。
 func langLabels() []string {
 	out := make([]string, len(targetLangs))
 	for i, l := range targetLangs {
-		out[i] = l.label
+		out[i] = l.label()
 	}
 	return out
 }
@@ -42,7 +112,7 @@ func langLabels() []string {
 func langLabelFor(code string) string {
 	for _, l := range targetLangs {
 		if l.code == code {
-			return l.label
+			return l.label()
 		}
 	}
 	return ""
@@ -52,7 +122,7 @@ func langLabelFor(code string) string {
 // store.NormalizeTargetLang 去拒绝它（不在这里猜）。
 func langCodeFor(label string) string {
 	for _, l := range targetLangs {
-		if l.label == label {
+		if l.label() == label {
 			return l.code
 		}
 	}
@@ -72,11 +142,11 @@ func (a *App) OpenSettings() {
 	code, err := store.NormalizeTargetLang(a.settings.TargetLang)
 	if err != nil {
 		code = store.DefaultTargetLang
-		s.note = i18n.Tf("ui.settings.unknownTargetLang", langLabelFor(code))
+		s.note = locales.UiSettingsUnknownTargetLang(langLabelFor(code))
 	}
 	s.lang = langLabelFor(code)
 	if s.lang == "" {
-		s.lang = targetLangs[0].label
+		s.lang = targetLangs[0].label()
 	}
 }
 
@@ -126,7 +196,7 @@ func (a *App) SaveSettingsAsync(s store.Settings) {
 		a.trans.reset()
 	}
 	a.settingsUI = settingsState{}
-	a.status, a.statusErr = i18n.T("ui.status.savingSettings"), false
+	a.status, a.statusErr = locales.UiStatusSavingSettings(), false
 
 	cfg := a.cfg
 	seq := a.settingsSeq.Add(1)
@@ -140,7 +210,7 @@ func (a *App) SaveSettingsAsync(s store.Settings) {
 		err := store.SaveSettings(cfg, &out)
 		a.publish(func() {
 			if err != nil {
-				a.status, a.statusErr = i18n.Tf("ui.status.settingsSaveFailed", err.Error()), true
+				a.status, a.statusErr = locales.UiStatusSettingsSaveFailed(err.Error()), true
 				return
 			}
 			a.settingsMu.Lock()
@@ -150,9 +220,9 @@ func (a *App) SaveSettingsAsync(s store.Settings) {
 			a.settingsMu.Unlock()
 			a.settingsErr, a.settingsLoaded = "", true
 			if a.settings.Ready() {
-				a.status, a.statusErr = i18n.T("ui.status.settingsSaved"), false
+				a.status, a.statusErr = locales.UiStatusSettingsSaved(), false
 			} else {
-				a.status, a.statusErr = i18n.T("ui.status.settingsSavedShort"), false
+				a.status, a.statusErr = locales.UiStatusSettingsSavedShort(), false
 			}
 		})
 	})
@@ -176,35 +246,35 @@ func (a *App) SaveSettingsAsync(s store.Settings) {
 func (a *App) viewSettingsModal(c *myui.Context) {
 	s := &a.settingsUI
 	t := c.Theme()
-	ifaceLabel := i18n.T("ui.settings.interfaceLang")
+	ifaceLabel := locales.UiSettingsInterfaceLang()
 	myui.Modal(c, &s.open, func() {
 		myui.Column(c).Width(520).Gap(t.Space(3)).Children(func() {
 			myui.Column(c).Gap(t.Space(1)).Children(func() {
-				myui.Text(c, i18n.T("ui.settings.title")).FontSize(t.FontSize + 3).Bold()
-				myui.Text(c, i18n.T("ui.settings.translateHeading")).FontSize(t.FontSize - 1).TextColor(t.TextMuted)
+				myui.Text(c, locales.UiSettingsTitle()).FontSize(t.FontSize + 3).Bold()
+				myui.Text(c, locales.UiSettingsTranslateHeading()).FontSize(t.FontSize - 1).TextColor(t.TextMuted)
 			})
 			// settings.json 读不出来（JSON 损坏）：说清楚，保存会覆盖它。
 			if a.settingsErr != "" {
 				myui.Box(c).FillWidth().Padding(t.Space(1.5), t.Space(3)).Radius(t.Radius).
 					Background(t.Warning.Alpha(0.10)).Border(1, t.Warning.Alpha(0.4)).Children(func() {
-					myui.Text(c, i18n.Tf("ui.settings.loadFailed", a.settingsErr)).MaxLines(4).TextColor(t.Warning)
+					myui.Text(c, locales.UiSettingsLoadFailed(a.settingsErr)).MaxLines(4).TextColor(t.Warning)
 				})
 			}
 			myui.Form(c, func() {
-				myui.Field(c, i18n.T("ui.settings.baseURL"), func() {
+				myui.Field(c, locales.UiSettingsBaseURL(), func() {
 					myui.TextInput(c, &s.baseURL).Background(a.pal.canvas).FillWidth().
-						Placeholder("https://api.openai.com/v1").Label(i18n.T("ui.settings.baseURL"))
+						Placeholder("https://api.openai.com/v1").Label(locales.UiSettingsBaseURL())
 				})
-				myui.Field(c, i18n.T("ui.settings.apiKey"), func() {
+				myui.Field(c, locales.UiSettingsApiKey(), func() {
 					myui.TextInput(c, &s.apiKey).Background(a.pal.canvas).FillWidth().
-						Placeholder("sk-…").Label(i18n.T("ui.settings.apiKey")).Password()
+						Placeholder("sk-…").Label(locales.UiSettingsApiKey()).Password()
 				})
-				myui.Field(c, i18n.T("ui.settings.model"), func() {
+				myui.Field(c, locales.UiSettingsModel(), func() {
 					myui.TextInput(c, &s.model).Background(a.pal.canvas).FillWidth().
-						Placeholder("gpt-4o-mini").Label(i18n.T("ui.settings.model"))
+						Placeholder("gpt-4o-mini").Label(locales.UiSettingsModel())
 				})
-				myui.Field(c, i18n.T("ui.settings.targetLang"), func() {
-					myui.Select(c, &s.lang, langLabels()).Label(i18n.T("ui.settings.targetLang"))
+				myui.Field(c, locales.UiSettingsTargetLang(), func() {
+					myui.Select(c, &s.lang, langLabels()).Label(locales.UiSettingsTargetLang())
 				})
 				myui.Field(c, ifaceLabel, func() {
 					// 下拉绑的是「本帧的显示名」而不是持久字段：语言一切，选项名
@@ -217,12 +287,12 @@ func (a *App) viewSettingsModal(c *myui.Context) {
 					}
 				})
 			})
-			myui.Text(c, i18n.T("ui.settings.secretNote")).
+			myui.Text(c, locales.UiSettingsSecretNote()).
 				FontSize(t.FontSize - 1).TextColor(t.TextMuted)
 			// 没填全不阻止保存（可能只想先选语言），只提醒翻译暂时用不了。
 			draft := s.settingsDraft()
 			if !draft.Ready() {
-				myui.Text(c, i18n.T("ui.settings.incomplete")).
+				myui.Text(c, locales.UiSettingsIncomplete()).
 					FontSize(t.FontSize - 1).TextColor(t.Warning)
 			}
 			if s.note != "" {
@@ -236,11 +306,11 @@ func (a *App) viewSettingsModal(c *myui.Context) {
 			}
 			myui.Row(c).FillWidth().Gap(t.Space(2)).AlignItems(myui.Center).Children(func() {
 				myui.Spacer(c)
-				if myui.Button(c, i18n.T("ui.common.cancel")).Disabled(s.busy).Clicked() {
+				if myui.Button(c, locales.UiCommonCancel()).Disabled(s.busy).Clicked() {
 					s.open = false
 				}
 				// 无障碍名称写成「确认保存」，与别处文字区分（同安装弹窗）。
-				if myui.PrimaryButton(c, i18n.T("ui.common.save")).Label(i18n.T("ui.settings.saveA11y")).Disabled(s.busy).Clicked() {
+				if myui.PrimaryButton(c, locales.UiCommonSave()).Label(locales.UiSettingsSaveA11y()).Disabled(s.busy).Clicked() {
 					a.SaveSettingsAsync(s.settingsDraft())
 				}
 			})

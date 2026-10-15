@@ -9,6 +9,7 @@ import (
 	"sort"
 
 	"github.com/ArnoChenFx/kura/internal/i18n"
+	"github.com/ArnoChenFx/kura/locales"
 )
 
 // HashDir 计算一个目录的内容哈希：sha256，输入为「相对路径 + 文件内容」的
@@ -36,7 +37,7 @@ func HashDir(dir string) (string, error) {
 		return nil
 	})
 	if err != nil {
-		return "", i18n.Wrapf(err, "store.err.walkDir", dir)
+		return "", i18n.Wrapf(err, "storeErrWalkDir", func() string { return locales.StoreErrWalkDir(dir) })
 	}
 	sort.Strings(paths)
 	h := sha256.New()
@@ -45,7 +46,7 @@ func HashDir(dir string) (string, error) {
 		h.Write([]byte{0})
 		data, err := os.ReadFile(filepath.Join(dir, rel))
 		if err != nil {
-			return "", i18n.Wrapf(err, "store.err.readFile", rel)
+			return "", i18n.Wrapf(err, "storeErrReadFile", func() string { return locales.StoreErrReadFile(rel) })
 		}
 		h.Write(data)
 		h.Write([]byte{0})

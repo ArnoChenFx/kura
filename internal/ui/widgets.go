@@ -5,6 +5,7 @@ package ui
 import (
 	"github.com/ArnoChenFx/kura/internal/i18n"
 	"github.com/ArnoChenFx/kura/internal/store"
+	"github.com/ArnoChenFx/kura/locales"
 	myui "github.com/egoist/mygo/ui"
 )
 
@@ -12,11 +13,11 @@ import (
 func stateText(s store.State) string {
 	switch s {
 	case store.StateDisabled:
-		return i18n.T("ui.state.disabled")
+		return locales.UiStateDisabled()
 	case store.StateTrashed:
-		return i18n.T("ui.state.trashed")
+		return locales.UiStateTrashed()
 	default:
-		return i18n.T("ui.state.enabled")
+		return locales.UiStateEnabled()
 	}
 }
 
@@ -87,15 +88,15 @@ func itoa(n int) string {
 // sourceText 概括技能的来源类型。
 func sourceText(s *store.Skill) string {
 	if s.Meta == nil {
-		return i18n.T("ui.source.noMeta")
+		return locales.UiSourceNoMeta()
 	}
 	switch s.Meta.Source.Type {
 	case store.SourceGitHub:
 		return "GitHub"
 	case store.SourceLocal:
-		return i18n.T("ui.source.local")
+		return locales.UiSourceLocal()
 	case "":
-		return i18n.T("ui.source.unknown")
+		return locales.UiSourceUnknown()
 	default:
 		return s.Meta.Source.Type
 	}
@@ -110,7 +111,7 @@ func sourceURLText(m *store.Meta) string {
 		return m.Source.Path
 	default:
 		if m.Source.Type == "" {
-			return i18n.T("ui.source.unknownType")
+			return locales.UiSourceUnknownType()
 		}
 		return m.Source.Type
 	}
@@ -168,7 +169,7 @@ func metaField(c *myui.Context, k, v string, wrap bool, render func()) {
 // 可选中的普通文本（所在「元数据」组已是 Selectable，见 detailGroup）。
 func metaFieldLink(c *myui.Context, m *store.Meta) {
 	url := sourceURLText(m)
-	myui.Field(c, i18n.T("ui.detail.source"), func() {
+	myui.Field(c, locales.UiDetailSource(), func() {
 		if m.Source.Type == store.SourceGitHub {
 			myui.Link(c, url, url).FontSize(c.Theme().FontSize)
 			return
@@ -181,11 +182,11 @@ func metaFieldLink(c *myui.Context, m *store.Meta) {
 func diffStatusText(status string) string {
 	switch status {
 	case store.DiffAdded:
-		return i18n.T("ui.diff.added")
+		return locales.UiDiffAdded()
 	case store.DiffRemoved:
-		return i18n.T("ui.diff.removed")
+		return locales.UiDiffRemoved()
 	default:
-		return i18n.T("ui.diff.modified")
+		return locales.UiDiffModified()
 	}
 }
 
@@ -234,7 +235,7 @@ func searchBox(c *myui.Context, query *string, bg myui.Color) myui.Element {
 	row.Children(func() {
 		myui.Icon(c, iconSearch).TextColor(t.TextMuted)
 		in := myui.TextInput(c, query).Grow(1).MinWidth(t.Space(15)).
-			Placeholder(i18n.T("ui.search.placeholder")).Label(i18n.T("ui.search.placeholder")).
+			Placeholder(locales.UiSearchPlaceholder()).Label(locales.UiSearchPlaceholder()).
 			// 外框由 row 画：输入框自身不再画边框与底色，避免框中套框。
 			Border(0, myui.Color{}).Background(myui.Color{}).Padding(0)
 		// 焦点在输入框里时 Escape 清空（与 SearchField 的行为一致）。
@@ -279,9 +280,9 @@ func shortTime(s string) string {
 func cardSource(s *store.Skill) string {
 	if s.Meta == nil {
 		if s.MetaErr != "" {
-			return i18n.T("ui.pill.badMeta")
+			return locales.UiPillBadMeta()
 		}
-		return i18n.T("ui.source.noMeta")
+		return locales.UiSourceNoMeta()
 	}
 	src := sourceText(s)
 	if s.Meta.Source.Type == store.SourceGitHub {

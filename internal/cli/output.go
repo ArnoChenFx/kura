@@ -10,6 +10,7 @@ import (
 	"io"
 
 	"github.com/ArnoChenFx/kura/internal/i18n"
+	"github.com/ArnoChenFx/kura/locales"
 )
 
 // resultJSON 是 disable/enable/remove/restore/add/update --json 的顶层形状，
@@ -31,7 +32,7 @@ func writeJSON(w io.Writer, v any) error {
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
 	if err := enc.Encode(v); err != nil {
-		return i18n.Wrapf(err, "cli.err.jsonEncode")
+		return i18n.Wrapf(err, "cliErrJsonEncode", func() string { return locales.CliErrJsonEncode() })
 	}
 	return nil
 }

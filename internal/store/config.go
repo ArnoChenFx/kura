@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 
 	"github.com/ArnoChenFx/kura/internal/i18n"
+	"github.com/ArnoChenFx/kura/locales"
 )
 
 // Config 是 kura 的全部目录建模：一个技能根目录 + kura 自有数据目录。
@@ -44,16 +45,16 @@ const (
 )
 
 // ErrUnknownSkill 表示请求的技能在根目录（或对应位置）不存在。
-var ErrUnknownSkill = i18n.NewError("store.err.unknownSkill")
+var ErrUnknownSkill = i18n.NewError("storeErrUnknownSkill", func() string { return locales.StoreErrUnknownSkill() })
 
 // NewConfig 构造自定义配置；root 或 home 为空时返回错误（root 不可为空，
 // home 为空时调用方应使用 DefaultConfig）。
 func NewConfig(root, home string) (*Config, error) {
 	if root == "" {
-		return nil, i18n.NewError("store.err.emptyRoot")
+		return nil, i18n.NewError("storeErrEmptyRoot", func() string { return locales.StoreErrEmptyRoot() })
 	}
 	if home == "" {
-		return nil, i18n.NewError("store.err.emptyHome")
+		return nil, i18n.NewError("storeErrEmptyHome", func() string { return locales.StoreErrEmptyHome() })
 	}
 	return &Config{Root: root, Home: home}, nil
 }
@@ -63,7 +64,7 @@ func NewConfig(root, home string) (*Config, error) {
 func DefaultConfig() (*Config, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return nil, i18n.Wrapf(err, "store.err.userHome")
+		return nil, i18n.Wrapf(err, "storeErrUserHome", func() string { return locales.StoreErrUserHome() })
 	}
 	return &Config{
 		Root: filepath.Join(home, ".agents", "skills"),
@@ -104,7 +105,7 @@ func (c *Config) SnapshotPath(name, stamp string) string {
 func (c *Config) ensureDirs() error {
 	for _, dir := range []string{c.Home, c.DisabledRoot(), c.TrashRoot(), c.SnapshotsRoot()} {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
-			return i18n.Wrapf(err, "store.err.createDir", dir)
+			return i18n.Wrapf(err, "storeErrCreateDir", func() string { return locales.StoreErrCreateDir(dir) })
 		}
 	}
 	return nil
@@ -118,11 +119,11 @@ func LoadHomeConfig(c *Config) (*HomeConfig, bool, error) {
 		return &HomeConfig{}, false, nil
 	}
 	if err != nil {
-		return nil, false, i18n.Wrapf(err, "store.err.readFile", c.ConfigPath())
+		return nil, false, i18n.Wrapf(err, "storeErrReadFile", func() string { return locales.StoreErrReadFile(c.ConfigPath()) })
 	}
 	var hc HomeConfig
 	if err := json.Unmarshal(data, &hc); err != nil {
-		return nil, false, i18n.Wrapf(err, "store.err.parseJSON", c.ConfigPath())
+		return nil, false, i18n.Wrapf(err, "storeErrParseJSON", func() string { return locales.StoreErrParseJSON(c.ConfigPath()) })
 	}
 	return &hc, true, nil
 }
@@ -134,10 +135,10 @@ func SaveHomeConfig(c *Config, hc *HomeConfig) error {
 	}
 	data, err := json.MarshalIndent(hc, "", "  ")
 	if err != nil {
-		return i18n.Wrapf(err, "store.err.marshalConfig")
+		return i18n.Wrapf(err, "storeErrMarshalConfig", func() string { return locales.StoreErrMarshalConfig() })
 	}
 	if err := os.WriteFile(c.ConfigPath(), data, 0o644); err != nil {
-		return i18n.Wrapf(err, "store.err.writeFile", c.ConfigPath())
+		return i18n.Wrapf(err, "storeErrWriteFile", func() string { return locales.StoreErrWriteFile(c.ConfigPath()) })
 	}
 	return nil
 }

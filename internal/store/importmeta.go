@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/ArnoChenFx/kura/internal/i18n"
+	"github.com/ArnoChenFx/kura/locales"
 )
 
 // LockEntry 是 .skill-lock.json 里一个技能条目的字段（v3 格式）。
@@ -37,11 +38,11 @@ func ReadLockFile(path string) (*LockFile, bool, error) {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil, false, nil
 		}
-		return nil, false, i18n.Wrapf(err, "store.err.readFile", path)
+		return nil, false, i18n.Wrapf(err, "storeErrReadFile", func() string { return locales.StoreErrReadFile(path) })
 	}
 	var lf LockFile
 	if err := json.Unmarshal(data, &lf); err != nil {
-		return nil, false, i18n.Wrapf(err, "store.err.parseFile", path)
+		return nil, false, i18n.Wrapf(err, "storeErrParseFile", func() string { return locales.StoreErrParseFile(path) })
 	}
 	return &lf, true, nil
 }
@@ -50,7 +51,7 @@ func ReadLockFile(path string) (*LockFile, bool, error) {
 func DefaultLockPath() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return "", i18n.Wrapf(err, "store.err.userHome")
+		return "", i18n.Wrapf(err, "storeErrUserHome", func() string { return locales.StoreErrUserHome() })
 	}
 	return filepath.Join(home, ".agents", ".skill-lock.json"), nil
 }
@@ -70,7 +71,7 @@ func lockSubPath(e LockEntry) string {
 
 // ErrImportDefaultOnly 表示对追加的根目录做「导入元数据」：.skill-lock.json
 // 只描述默认根目录，别的目录不能用它导入。
-var ErrImportDefaultOnly = i18n.NewError("store.err.importDefaultOnly")
+var ErrImportDefaultOnly = i18n.NewError("storeErrImportDefaultOnly", func() string { return locales.StoreErrImportDefaultOnly() })
 
 // CanImportMeta 报告该根目录能否「导入元数据」：只有默认根目录可以。
 // 追加的根目录（Library.Config 给它们非空的 Scope）不行。界面与命令行
@@ -127,7 +128,7 @@ func (c *Config) ImportMeta(lockPath string) ([]string, error) {
 			continue
 		}
 		if err := writeMeta(s.Dir, m); err != nil {
-			return imported, i18n.Wrapf(err, "store.err.importMetaWrite", s.Name)
+			return imported, i18n.Wrapf(err, "storeErrImportMetaWrite", func() string { return locales.StoreErrImportMetaWrite(s.Name) })
 		}
 		imported = append(imported, s.Name)
 	}

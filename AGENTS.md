@@ -71,12 +71,13 @@ kura 自己的目录：
 ## 4. 编码约定
 
 - **注释用中文**；包名、类型、函数、变量名用英文。
-- **用户可见的界面字符串不写在代码里**：一律进各包的 `catalog.go`（`map[key]string`，中文与英文两份，key 集合必须一致），用 `internal/i18n` 的 `T` / `Tf` 取。中文取值是用户实际看到的文案，改动等于改产品，必须是有意的。
-  - key 形如 `<领域>.<分类>.<名字>`（`ui.filter.all`、`store.err.skillExists`），全小写 ASCII、点分隔。整句进目录，**不拼接**：语序在中英文之间不同。
-  - 错误用 `i18n.NewError` / `i18n.Errorf` / `i18n.Wrapf`：身份稳定（`errors.Is` 可用），文字随当前语言变。
+- **用户可见的界面字符串不写在代码里**：一律进 `locales/`（ARB 格式，`en.json` 是 source、`zh-Hans.json` 是译文），用 `go tool mygo generate` 生成的类型化函数 `locales.Xxx(...)` 取（生成物 `locales/catalog_gen.go` 入库，`go build` / `go test` 不依赖 CLI）。中文取值是用户实际看到的文案，改动等于改产品，必须是有意的。
+  - **key 必须扁平**：字母开头、只含字母数字与下划线（`mygo generate` 的硬约束，点分 key 会被直接拒绝）。转换约定：去掉点、后段首字母大写，拼成 camelCase，`ui.status.installFailed` → `uiStatusInstallFailed`、`store.err.skillExists` → `storeErrSkillExists`，生成的函数名就是首字母大写。
+  - 占位符用 ICU 命名占位（`{name}`、`{path}`、`{count}`…），在 `@<key>.placeholders` 里声明类型（`String` / `int` / `float64` / `Object`）；整数参数写 `{count, number, ::group-off}` 以免加千分位（与旧的 `%d` 逐字一致）。整句进目录，**不拼接**：语序在中英文之间不同。
+  - 错误用 `internal/i18n` 的 `NewError` / `Errorf` / `Wrapf` / `WithSentinel`：文字在 `Error()` 时按当前语言现取（后台任务里产生、切语言后才显示的错误也要是新语言的句子），身份由 key 决定（`errors.Is` 跨语言成立）。渲染闭包由调用点传（`i18n.NewError("storeErrSkillExists", func() string { return locales.StoreErrSkillExists(name) })`），参数个数错误在编译期暴露。
   - **不翻译**：用户数据（技能名、描述、路径、URL、`owner/repo`）、语言的自称（`简体中文`、`日本語`…）、markdown 语法字符（`•`/`◦`/表格分隔/标点集合）。
-  - `internal/i18n` 的 `TestNoHardcodedCJK` 会拦住漏网的中文字面量；`TestCatalogParity` 保证两份目录 key 一致。
-  - 语言解析规则：`system` 时系统 locale 是 `zh*` 用中文，其余（含空、`C`、`POSIX`）一律英文（`i18n.Resolve`）。
+  - 语言：窗口应用由 `mygo.App.Locale()` / `SetLocale()` 决定（`main.go` 启动时 `app.SyncLang()`，用户切换走 `SetLangAsync`；菜单这类「设一次」的文字接 `mygo.App.OnLocaleChanged` 重设）。CLI 没有 MyGo 应用，用 `i18n.Set` 换掉官方 locale func。`~/.kura/config.json` 的 `lang`（`system`|`zh`|`en`）继续有效，经 `store.NormalizeLang` / `i18n.Normalize` 映射成 BCP 47（`zh-Hans`/`en`），其中 `system` 由 kura 自己按系统 locale 解（`internal/ui/app.go` 的 `localeForPref`，判据与 CLI 一致：`zh*` 算中文，其余算英文）——不要把它直接交给 MyGo 的 `SetLocale("")`，繁体系统（`zh-TW`/`zh-Hant`/`zh-HK`）匹配不上 `zh-Hans` 会落到英文。
+  - 守卫：`internal/i18n` 的 `TestNoHardcodedCJK` 拦住非测试 Go 文件里的中文字面量（另有 `internal/ui` 的 `TestUISourceHasNoHardcodedCJK`）；key 完整性、占位符类型与译文由 `go tool mygo i18n check` 保证。改 catalogs 后跑 `go tool mygo generate` 重新生成 `locales/catalog_gen.go`，并跑 `python tools/i18n-migrate/verify_catalog.py` 确认中文/英文措辞没被改（有意删除的 key 在它的 `DELETED` 里登记）。
 - 错误信息统一以 `store: ` 开头（英文用 `store: `），例如 `store: 未找到该技能` / `store: skill not found`。
 - **错误要能用 `errors.Is` / `errors.As` 判断**；已知可判定的情况导出哨兵错误（如 `ErrUnknownSkill`），不要只返回裸字符串。
 - 路径拼接一律 `filepath.Join`；不用字符串拼。
@@ -126,6 +127,7 @@ kura 自己的目录：
 gofmt -l .                      # 必须为空
 go vet ./...                    # 必须干净
 go tool mygo vet .              # 必须干净
+go tool mygo i18n check         # catalogs 必须无错（421 条消息）
 go test ./...                   # 全包通过
 CGO_ENABLED=0 go test ./...     # 全包通过
 CGO_ENABLED=0 go build ./...    # 成功
@@ -196,6 +198,6 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools/capture-window.ps1 \
 - [ ] 改 MyGo API 前读了固定版本源码，没有凭记忆猜
 - [ ] 破坏性操作前有快照，测试用 `t.TempDir()`
 - [ ] 慢 I/O 不在 UI 线程，结果经 `Window.Update` 回主线程
-- [ ] `gofmt -l`、`go vet`、`go tool mygo vet`、`go test ./...` 全绿
+- [ ] `gofmt -l`、`go vet`、`go tool mygo vet`、`go tool mygo i18n check`、`go test ./...` 全绿
 - [ ] 改了界面就真的启动了窗口看过
 - [ ] 报告里写清了「验证过什么」与「什么未验证」

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/ArnoChenFx/kura/internal/i18n"
+	"github.com/ArnoChenFx/kura/locales"
 )
 
 // Source 描述技能的安装来源。
@@ -62,11 +63,11 @@ func readMeta(dir string) metaReadResult {
 		if errors.Is(err, os.ErrNotExist) {
 			return metaReadResult{Found: false}
 		}
-		return metaReadResult{Found: true, Err: i18n.Wrapf(err, "store.err.readFile", path)}
+		return metaReadResult{Found: true, Err: i18n.Wrapf(err, "storeErrReadFile", func() string { return locales.StoreErrReadFile(path) })}
 	}
 	var m Meta
 	if err := json.Unmarshal(data, &m); err != nil {
-		return metaReadResult{Found: true, Err: i18n.Wrapf(err, "store.err.parseMeta", path)}
+		return metaReadResult{Found: true, Err: i18n.Wrapf(err, "storeErrParseMeta", func() string { return locales.StoreErrParseMeta(path) })}
 	}
 	return metaReadResult{Found: true, Meta: &m}
 }
@@ -74,17 +75,17 @@ func readMeta(dir string) metaReadResult {
 // writeMeta 把 m 写入 dir/.kura-meta.json（缩进两格）。写入前固化 metaVersion=1。
 func writeMeta(dir string, m *Meta) error {
 	if m == nil {
-		return i18n.NewError("store.err.emptyMeta")
+		return i18n.NewError("storeErrEmptyMeta", func() string { return locales.StoreErrEmptyMeta() })
 	}
 	m.MetaVersion = MetaVersion
 	data, err := json.MarshalIndent(m, "", "  ")
 	if err != nil {
-		return i18n.Wrapf(err, "store.err.marshalMeta")
+		return i18n.Wrapf(err, "storeErrMarshalMeta", func() string { return locales.StoreErrMarshalMeta() })
 	}
 	path := filepath.Join(dir, MetaFileName)
 	// 末尾补一个换行，符合常见文本文件习惯。
 	if err := os.WriteFile(path, append(data, '\n'), 0o644); err != nil {
-		return i18n.Wrapf(err, "store.err.writeFile", path)
+		return i18n.Wrapf(err, "storeErrWriteFile", func() string { return locales.StoreErrWriteFile(path) })
 	}
 	return nil
 }

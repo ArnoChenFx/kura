@@ -19,6 +19,7 @@ import (
 
 	"github.com/ArnoChenFx/kura/internal/i18n"
 	"github.com/ArnoChenFx/kura/internal/store"
+	"github.com/ArnoChenFx/kura/locales"
 	"github.com/egoist/mygo"
 	myui "github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/ui/markdown"
@@ -119,7 +120,11 @@ type App struct {
 	viewSeq        atomic.Int64    // 排列模式切换的序号：后台任务只执行最新一次
 	langPref       string          // 界面语言偏好：store.LangSystem / LangZH / LangEN
 	langSeq        atomic.Int64    // 语言切换的序号：后台任务只执行最新一次
-	review         reviewState     // 更新评审面板（Modal）
+	// setLocale 把语言偏好应用到「应用显示的语言」。生产环境交给 mygo.App
+	// （它同时重绘窗口、更新菜单、通知窗口与页面）；测试里 mygo 的事件循环
+	// 没跑，换成 internal/i18n 的进程级覆盖（见 app_test.go 的 newAppFor）。
+	setLocale func(pref string)
+	review    reviewState // 更新评审面板（Modal）
 
 	// 翻译设置与译文（翻译只用于界面显示，绝不写技能目录，见 translate.go）。
 	// settings 是 ~/.kura/settings.json 的内存副本：只在 UI 线程写，写时持
@@ -199,8 +204,8 @@ func NewApp(cfg *store.Config) *App {
 		win := a.win
 		a.mu.Unlock()
 		paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{
-			Parent: win, Title: i18n.T("ui.fileDialog.addRootTitle"),
-			ButtonLabel: i18n.T("ui.fileDialog.addRootButton"), Directory: true,
+			Parent: win, Title: locales.UiFileDialogAddRootTitle(),
+			ButtonLabel: locales.UiFileDialogAddRootButton(), Directory: true,
 		})
 		if err != nil || len(paths) == 0 {
 			return "", err
@@ -210,6 +215,9 @@ func NewApp(cfg *store.Config) *App {
 	a.openPath = mygo.Shell.OpenPath
 	a.reveal = mygo.Shell.ShowItemInFolder
 	a.setSource = func(mode string) { mygo.Theme.SetSource(mygo.ThemeSource(mode)) }
+	// 语言：把 config.json 的 lang 解成 BCP 47 标签交给 MyGo（见
+	// localeForPref：system 也由 kura 自己解，不直接把 "" 交给 MyGo）。
+	a.setLocale = func(pref string) { mygo.App.SetLocale(localeForPref(pref)) }
 	a.spawn = func(fn func()) { go fn() }
 	// 窗口接入前的兜底：发布闭包暂存 pending，等 SetWindow 回放，
 	// 保证任何 goroutine 都不会直接改 UI 状态。
@@ -357,7 +365,7 @@ func (a *App) applyScan(skills []*store.Skill, err error) {
 	}
 	a.loadErr = ""
 	if _, serr := os.Stat(a.cfg.Root); os.IsNotExist(serr) {
-		a.loadErr = i18n.Tf("ui.status.rootMissing", a.cfg.Root)
+		a.loadErr = locales.UiStatusRootMissing(a.cfg.Root)
 	}
 	a.skills = skills
 	n := 0
@@ -434,7 +442,7 @@ func (a *App) reload(announce bool) {
 			case announce:
 				// 与筛选栏的「全部」、状态条的总数一致：不含回收站。
 				en, dis, _ := a.counts()
-				a.status, a.statusErr = i18n.Tf("ui.status.scanned", en+dis), false
+				a.status, a.statusErr = locales.UiStatusScanned(en+dis), false
 			}
 		})
 	})
@@ -443,11 +451,11 @@ func (a *App) reload(announce bool) {
 // ToggleAsync 切换技能的启用状态；wantOn 是切换后的目标状态。
 // 实际的移动在后台执行，期间该卡片显示忙碌状态。
 func (a *App) ToggleAsync(name string, wantOn bool) {
-	okMsg := i18n.Tf("ui.status.disabled", name)
+	okMsg := locales.UiStatusDisabled(name)
 	if wantOn {
-		okMsg = i18n.Tf("ui.status.enabled", name)
+		okMsg = locales.UiStatusEnabled(name)
 	}
-	a.runOp(name, i18n.Tf("ui.status.toggling", name), okMsg, func(cfg *store.Config) error {
+	a.runOp(name, locales.UiStatusToggling(name), okMsg, func(cfg *store.Config) error {
 		var err error
 		if wantOn {
 			_, err = cfg.Enable(name)
@@ -460,7 +468,7 @@ func (a *App) ToggleAsync(name string, wantOn bool) {
 
 // RemoveAsync 把技能移入回收站（后台执行）。
 func (a *App) RemoveAsync(name string) {
-	a.runOp(name, i18n.Tf("ui.status.movingToTrash", name), i18n.Tf("ui.status.movedToTrash", name), func(cfg *store.Config) error {
+	a.runOp(name, locales.UiStatusMovingToTrash(name), locales.UiStatusMovedToTrash(name), func(cfg *store.Config) error {
 		_, err := cfg.Remove(name)
 		return err
 	})
@@ -468,7 +476,7 @@ func (a *App) RemoveAsync(name string) {
 
 // RestoreAsync 把回收站中最新一次的技能移回技能目录（后台执行）。
 func (a *App) RestoreAsync(name string) {
-	a.runOp(name, i18n.Tf("ui.status.restoring", name), i18n.Tf("ui.status.restored", name), func(cfg *store.Config) error {
+	a.runOp(name, locales.UiStatusRestoring(name), locales.UiStatusRestored(name), func(cfg *store.Config) error {
 		_, err := cfg.Restore(name, "")
 		return err
 	})
@@ -476,7 +484,7 @@ func (a *App) RestoreAsync(name string) {
 
 // PurgeAsync 从回收站永久删除技能 name（后台执行；删除前 store 先写快照）。
 func (a *App) PurgeAsync(name string) {
-	a.runOp(name, i18n.Tf("ui.status.purging", name), i18n.Tf("ui.status.purged", name), func(cfg *store.Config) error {
+	a.runOp(name, locales.UiStatusPurging(name), locales.UiStatusPurged(name), func(cfg *store.Config) error {
 		_, err := cfg.Purge(name)
 		return err
 	})
@@ -502,9 +510,9 @@ func (a *App) ImportAsync() {
 	cfg, gen := a.cfg, a.gen
 	a.spawn(func() {
 		ids, err := cfg.ImportMeta(a.path)
-		okMsg := i18n.Tf("ui.status.imported", len(ids))
+		okMsg := locales.UiStatusImported(len(ids))
 		if err == nil && len(ids) == 0 {
-			okMsg = i18n.T("ui.status.nothingToImport")
+			okMsg = locales.UiStatusNothingToImport()
 		}
 		a.publishAfterWork(cfg, gen, "", err, okMsg)
 	})
@@ -550,7 +558,7 @@ func (a *App) AddRootAsync() {
 				a.lib, a.libErr = lib, ""
 				a.SelectRoot(lib.Config(dir).Root)
 				if !existed {
-					a.status, a.statusErr = i18n.Tf("ui.status.rootAdded", a.cfg.Root), false
+					a.status, a.statusErr = locales.UiStatusRootAdded(a.cfg.Root), false
 				}
 			}
 		})
@@ -575,7 +583,7 @@ func (a *App) RemoveRootAsync(root string) {
 			if root == a.cfg.Root {
 				a.SelectRoot(lib.Default())
 			}
-			a.status, a.statusErr = i18n.Tf("ui.status.rootRemoved", root), false
+			a.status, a.statusErr = locales.UiStatusRootRemoved(root), false
 		})
 	})
 }
@@ -613,7 +621,7 @@ func (a *App) DiscoverAgentRootsAsync(home string) {
 		}
 		a.publish(func() {
 			if err != nil {
-				a.status, a.statusErr = i18n.Tf("ui.status.discoverRootsFailed", err.Error()), true
+				a.status, a.statusErr = locales.UiStatusDiscoverRootsFailed(err.Error()), true
 				return
 			}
 			if len(added) == 0 {
@@ -623,7 +631,7 @@ func (a *App) DiscoverAgentRootsAsync(home string) {
 			for r, n := range counts {
 				a.rootCounts[r] = n
 			}
-			a.status, a.statusErr = i18n.Tf("ui.status.rootsDiscovered", len(added)), false
+			a.status, a.statusErr = locales.UiStatusRootsDiscovered(len(added)), false
 		})
 	})
 }
@@ -641,7 +649,7 @@ func (a *App) libCopy() *store.Library {
 func (a *App) OpenPathAsync(path string) {
 	a.spawn(func() {
 		if err := a.openPath(path); err != nil {
-			a.publish(func() { a.status, a.statusErr = i18n.Tf("ui.status.openFailed", path, err.Error()), true })
+			a.publish(func() { a.status, a.statusErr = locales.UiStatusOpenFailed(path, err.Error()), true })
 		}
 	})
 }
@@ -656,12 +664,33 @@ func (a *App) RevealAsync(path string) {
 // 界面本身不依赖它：皮肤由 themeMode 决定。
 func (a *App) SyncTheme() { a.setSource(a.themeMode) }
 
-// SyncLang 按语言偏好与系统 locale 定下界面语言：偏好是 system 时看系统，
-// 中文（zh*）用中文、其余一律英文。main.go 在 mygo.App.Run 之前调用（与
-// SyncTheme 同型）；界面本身不依赖它——文案由每帧的 i18n.T 现取，切语言走
-// SetLangAsync。
-func (a *App) SyncLang() {
-	i18n.Set(i18n.Resolve(store.LangPref(a.langPref), i18n.SystemLocale()))
+// SyncLang 按语言偏好定下界面语言（见 localeForPref）。main.go 在
+// mygo.App.Run 之前调用（与 SyncTheme 同型）；界面本身不依赖它——文案由
+// 每帧的 locales.Xxx() 现取，切语言走 SetLangAsync。
+func (a *App) SyncLang() { a.setLocale(a.langPref) }
+
+// localeForPref 把 config.json 的 lang 取值解成交给 MyGo 的 BCP 47 标签：
+// 固定语言就是 zh-Hans / en；system（含空串与不认识的值）由 kura 自己按系统
+// locale 解（i18n.Resolve：主语言是 zh 的算中文，其余含空、C、POSIX 都算
+// 英文），与 CLI 的 --lang 判据完全一致。
+//
+// 为什么 system 不直接把 "" 交给 MyGo、让它跟随用户语言：MyGo 的匹配要求
+// 语言标签完全匹配，系统的 zh-TW / zh-Hant / zh-HK 匹配不上我们唯一的
+// zh-Hans，于是落到 catalogs 的 source 语言（英文）。迁移前这些机器显示的
+// 是中文，交给 MyGo 就是行为回退（同一个系统上 CLI 中文、窗口英文）。
+//
+// 代价是「跟随系统」不再在运行中实时变（用户改了系统语言要重启 kura），且
+// kura 的选择会被 MyGo 存进它自己的语言文件；但每次启动都按 config.json 与
+// 系统 locale 重新解一遍，所以重启后就是最新语言。
+func localeForPref(pref string) string { return localeFor(pref, i18n.SystemLocale()) }
+
+// localeFor 是 localeForPref 的实现：把系统 locale 作为参数，便于测试
+// （生产传入 i18n.SystemLocale()）。
+func localeFor(pref, sysLocale string) string {
+	if p := store.LangPref(pref); p != i18n.LangSystem {
+		return string(p)
+	}
+	return string(i18n.Resolve(i18n.LangSystem, sysLocale))
 }
 
 // CheckAppUpdateAsync 响应「检查更新」按钮：立刻在状态行给一句反馈
@@ -673,11 +702,11 @@ func (a *App) CheckAppUpdateAsync() {
 		return
 	}
 	if a.checkUpdates == nil {
-		a.status, a.statusErr = i18n.T("ui.status.appUpdateNotReady"), true
+		a.status, a.statusErr = locales.UiStatusAppUpdateNotReady(), true
 		return
 	}
 	a.checkingUpdate = true
-	a.status, a.statusErr = i18n.T("ui.status.appUpdateChecking"), false
+	a.status, a.statusErr = locales.UiStatusAppUpdateChecking(), false
 	a.spawn(func() {
 		a.checkUpdates()
 		a.publish(func() { a.checkingUpdate = false })
@@ -708,7 +737,7 @@ func (a *App) SetThemeAsync(mode string) {
 		}
 		a.setSource(mode)
 		if err := lib.SetTheme(mode); err != nil {
-			a.publish(func() { a.status, a.statusErr = i18n.Tf("ui.status.themeSaveFailed", err.Error()), true })
+			a.publish(func() { a.status, a.statusErr = locales.UiStatusThemeSaveFailed(err.Error()), true })
 		}
 	})
 }
@@ -737,14 +766,15 @@ func (a *App) SetViewAsync(mode string) {
 			return
 		}
 		if err := lib.SetView(mode); err != nil {
-			a.publish(func() { a.status, a.statusErr = i18n.Tf("ui.status.viewSaveFailed", err.Error()), true })
+			a.publish(func() { a.status, a.statusErr = locales.UiStatusViewSaveFailed(err.Error()), true })
 		}
 	})
 }
 
 // SetLangAsync 切换界面语言偏好为 pref（store.LangSystem / LangZH / LangEN）。
-// 界面立刻换文案——语言解析（system → zh/en）在 UI 线程当场做，下一帧的
-// i18n.T 就取到新语言；写 config.json 在后台做，写盘失败只在状态行报告，
+// 界面立刻换文案——交给 MyGo 解析（system → 用户语言），下一帧的
+// locales.Xxx() 就取到新语言；菜单这类「设一次」的文字由 MyGo 自己的
+// OnLocaleChanged 重新设置。写 config.json 在后台做，写盘失败只在状态行报告，
 // 不回滚已换的语言（同 SetThemeAsync / SetViewAsync）。相同的偏好直接返回
 // （幂等），连续切换只有最新一次写盘。
 func (a *App) SetLangAsync(pref string) {
@@ -757,7 +787,7 @@ func (a *App) SetLangAsync(pref string) {
 		return
 	}
 	a.langPref = pref
-	i18n.Set(i18n.Resolve(store.LangPref(pref), i18n.SystemLocale()))
+	a.setLocale(pref)
 	seq := a.langSeq.Add(1)
 	lib := a.libCopy()
 	a.spawn(func() {
@@ -769,7 +799,7 @@ func (a *App) SetLangAsync(pref string) {
 			return
 		}
 		if err := lib.SetLang(pref); err != nil {
-			a.publish(func() { a.status, a.statusErr = i18n.Tf("ui.status.langSaveFailed", err.Error()), true })
+			a.publish(func() { a.status, a.statusErr = locales.UiStatusLangSaveFailed(err.Error()), true })
 		}
 	})
 }

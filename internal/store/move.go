@@ -4,6 +4,7 @@ import (
 	"os"
 
 	"github.com/ArnoChenFx/kura/internal/i18n"
+	"github.com/ArnoChenFx/kura/locales"
 )
 
 // moveDir 把 src 目录移动到 dst，是所有「移动技能目录」操作的统一入口
@@ -34,20 +35,20 @@ func moveDir(src, dst string) error {
 	staging := dst + moveTmpSuffix
 	// 清掉上次崩溃可能遗留的同名 staging，避免复制进脏目录。
 	if err := os.RemoveAll(staging); err != nil {
-		return i18n.Wrapf(err, "store.err.cleanStaging", staging)
+		return i18n.Wrapf(err, "storeErrCleanStaging", func() string { return locales.StoreErrCleanStaging(staging) })
 	}
 	if err := copyDir(src, staging); err != nil {
 		os.RemoveAll(staging)
-		return i18n.Wrapf(err, "store.err.crossVolumeCopy", src, staging)
+		return i18n.Wrapf(err, "storeErrCrossVolumeCopy", func() string { return locales.StoreErrCrossVolumeCopy(src, staging) })
 	}
 	if err := os.Rename(staging, dst); err != nil {
 		os.RemoveAll(staging)
-		return i18n.Wrapf(err, "store.err.crossVolumeRename", src, dst)
+		return i18n.Wrapf(err, "storeErrCrossVolumeRename", func() string { return locales.StoreErrCrossVolumeRename(src, dst) })
 	}
 	// 复制与落位都成功后才删源目录。这一步失败不回滚（数据已在 dst），
 	// 只把残留状态说清楚，由调用方报给用户。
 	if err := os.RemoveAll(src); err != nil {
-		return i18n.Wrapf(err, "store.err.crossVolumeSource", src, dst)
+		return i18n.Wrapf(err, "storeErrCrossVolumeSource", func() string { return locales.StoreErrCrossVolumeSource(src, dst) })
 	}
 	return nil
 }

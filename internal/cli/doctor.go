@@ -11,8 +11,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/ArnoChenFx/kura/internal/i18n"
 	"github.com/ArnoChenFx/kura/internal/store"
+	"github.com/ArnoChenFx/kura/locales"
 )
 
 // doctor 问题类别（JSON 输出中 problem.kind 的全部取值，稳定契约）：
@@ -60,7 +60,7 @@ func cmdDoctor(args []string, stdout, stderr io.Writer, pre *globalFlags) int {
 		return usageError(stderr, err)
 	}
 	if len(positional) > 0 {
-		return printError(g, stderr, i18n.T("cli.err.doctorPositional"))
+		return printError(g, stderr, locales.CliErrDoctorPositional())
 	}
 	c, err := resolveConfig(g)
 	if err != nil {
@@ -93,10 +93,10 @@ func runDoctor(c *store.Config) doctorResult {
 	enabled, scanErr := c.Scan()
 	if scanErr != nil {
 		result.Problems = append(result.Problems, Problem{
-			Kind: KindNotADir, Detail: i18n.Tf("cli.err.scanRootFailed", scanErr),
+			Kind: KindNotADir, Detail: locales.CliErrScanRootFailed(scanErr),
 		})
 	} else {
-		result.Problems = append(result.Problems, checkSkills(enabled, i18n.T("cli.term.rootDir"), true)...)
+		result.Problems = append(result.Problems, checkSkills(enabled, locales.CliTermRootDir(), true)...)
 	}
 	result.Problems = append(result.Problems, checkDisabled(c)...)
 	result.Problems = append(result.Problems, checkTrash(c)...)
@@ -114,7 +114,7 @@ func checkRootEntries(c *store.Config) []Problem {
 		}
 		return []Problem{{
 			Kind:   KindNotADir,
-			Detail: i18n.Tf("cli.doctor.rootUnreadable", err),
+			Detail: locales.CliDoctorRootUnreadable(err),
 		}}
 	}
 	var problems []Problem
@@ -126,7 +126,7 @@ func checkRootEntries(c *store.Config) []Problem {
 			problems = append(problems, Problem{
 				Kind:   KindNotADir,
 				Skill:  e.Name(),
-				Detail: i18n.T("cli.doctor.rootFileNotDir"),
+				Detail: locales.CliDoctorRootFileNotDir(),
 			})
 		}
 	}
@@ -154,7 +154,7 @@ func checkSkills(skills []*store.Skill, where string, withDrift bool) []Problem 
 			problems = append(problems, Problem{
 				Kind:   KindNoMeta,
 				Skill:  s.Name,
-				Detail: i18n.Tf("cli.doctor.metaMissing", where),
+				Detail: locales.CliDoctorMetaMissing(where),
 			})
 		}
 		// 缺少 SKILL.md。
@@ -162,7 +162,7 @@ func checkSkills(skills []*store.Skill, where string, withDrift bool) []Problem 
 			problems = append(problems, Problem{
 				Kind:   KindNoSkillMD,
 				Skill:  s.Name,
-				Detail: i18n.Tf("cli.doctor.skillMDMissing", where),
+				Detail: locales.CliDoctorSkillMDMissing(where),
 			})
 		}
 		// 内容漂移：仅在元数据可读且有记录哈希时核对。
@@ -174,7 +174,7 @@ func checkSkills(skills []*store.Skill, where string, withDrift bool) []Problem 
 			problems = append(problems, Problem{
 				Kind:   KindNoMeta,
 				Skill:  s.Name,
-				Detail: i18n.T("cli.doctor.noContentHash"),
+				Detail: locales.CliDoctorNoContentHash(),
 			})
 			continue
 		}
@@ -183,10 +183,9 @@ func checkSkills(skills []*store.Skill, where string, withDrift bool) []Problem 
 		got, _ := store.HashDir(s.Dir)
 		if got != expected {
 			problems = append(problems, Problem{
-				Kind:  KindHashDrift,
-				Skill: s.Name,
-				Detail: i18n.Tf("cli.doctor.hashDrift",
-					shortHash(got), shortHash(expected)),
+				Kind:   KindHashDrift,
+				Skill:  s.Name,
+				Detail: locales.CliDoctorHashDrift(shortHash(got), shortHash(expected)),
 			})
 		}
 	}
@@ -202,7 +201,7 @@ func checkDisabled(c *store.Config) []Problem {
 	skills, err := c.ScanDisabled()
 	if err != nil {
 		problems = append(problems, Problem{
-			Kind: KindNotADir, Detail: i18n.Tf("cli.doctor.scanDisabledFailed", err),
+			Kind: KindNotADir, Detail: locales.CliDoctorScanDisabledFailed(err),
 		})
 		return problems
 	}
@@ -213,7 +212,7 @@ func checkDisabled(c *store.Config) []Problem {
 		problems = append(problems, Problem{
 			Kind:   KindLeftover,
 			Skill:  s.Name,
-			Detail: i18n.Tf("cli.doctor.disabledLeftover", s.Name),
+			Detail: locales.CliDoctorDisabledLeftover(s.Name),
 		})
 	}
 	return problems
@@ -227,7 +226,7 @@ func checkTrash(c *store.Config) []Problem {
 	names, err := c.ScanTrash()
 	if err != nil {
 		problems = append(problems, Problem{
-			Kind: KindNotADir, Detail: i18n.Tf("cli.doctor.scanTrashFailed", err),
+			Kind: KindNotADir, Detail: locales.CliDoctorScanTrashFailed(err),
 		})
 		return problems
 	}
@@ -237,7 +236,7 @@ func checkTrash(c *store.Config) []Problem {
 			problems = append(problems, Problem{
 				Kind:   KindNotADir,
 				Skill:  n.Name,
-				Detail: i18n.Tf("cli.doctor.trashEntryUnreadable", derr),
+				Detail: locales.CliDoctorTrashEntryUnreadable(derr),
 			})
 			continue
 		}
@@ -246,10 +245,9 @@ func checkTrash(c *store.Config) []Problem {
 				continue // 时间戳层的零散文件不影响 restore，忽略。
 			}
 			problems = append(problems, Problem{
-				Kind:  KindLeftover,
-				Skill: n.Name,
-				Detail: i18n.Tf("cli.doctor.trashLeftover",
-					n.Name, st.Name(), n.Name, st.Name()),
+				Kind:   KindLeftover,
+				Skill:  n.Name,
+				Detail: locales.CliDoctorTrashLeftover(n.Name, st.Name(), n.Name, st.Name()),
 			})
 		}
 	}
@@ -264,7 +262,7 @@ func checkSideEntries(dir, label string) []Problem {
 		if os.IsNotExist(err) {
 			return nil // 目录不存在：从未禁用/删除过，正常。
 		}
-		return []Problem{{Kind: KindNotADir, Detail: i18n.Tf("cli.doctor.readFailed", dir, err)}}
+		return []Problem{{Kind: KindNotADir, Detail: locales.CliDoctorReadFailed(dir, err)}}
 	}
 	var problems []Problem
 	for _, e := range entries {
@@ -275,7 +273,7 @@ func checkSideEntries(dir, label string) []Problem {
 			problems = append(problems, Problem{
 				Kind:   KindNotADir,
 				Skill:  e.Name(),
-				Detail: i18n.Tf("cli.doctor.sideFileNotDir", label),
+				Detail: locales.CliDoctorSideFileNotDir(label),
 			})
 		}
 	}
@@ -305,10 +303,10 @@ func sortProblems(ps []Problem) {
 func printDoctorText(w io.Writer, c *store.Config, result doctorResult) {
 	fmt.Fprintf(w, "root: %s\n", c.Root)
 	if len(result.Problems) == 0 {
-		fmt.Fprintln(w, i18n.T("cli.doctor.allGood"))
+		fmt.Fprintln(w, locales.CliDoctorAllGood())
 		return
 	}
-	fmt.Fprint(w, i18n.Tf("cli.doctor.problemCount", len(result.Problems)))
+	fmt.Fprint(w, locales.CliDoctorProblemCount(len(result.Problems)))
 	for _, p := range result.Problems {
 		fmt.Fprintf(w, "  [%s] %s: %s\n", p.Kind, skillOrDash(p.Skill), p.Detail)
 	}
