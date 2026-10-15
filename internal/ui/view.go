@@ -1046,7 +1046,7 @@ func (a *App) viewDetailFullText(c *myui.Context, s *store.Skill) {
 	case doc.err != nil:
 		myui.Text(c, doc.err.Error()).TextColor(c.Theme().Danger)
 	default:
-		// 渲染进外层已有的 Scroll，宽度铺满（renderMarkdown 只管内容列）。
+		// 渲染进外层已有的 Scroll，宽度铺满（官方视图自己处理块内布局）。
 		a.viewFullTextBody(c, s, doc.src)
 	}
 }
@@ -1058,7 +1058,7 @@ func (a *App) viewDetailFullText(c *myui.Context, s *store.Skill) {
 func (a *App) viewFullTextBody(c *myui.Context, s *store.Skill, src string) {
 	t := c.Theme()
 	if !a.trans.on || !a.settings.Ready() || strings.TrimSpace(src) == "" {
-		renderMarkdown(c, src)
+		a.viewMarkdown(c, src)
 		return
 	}
 	a.ensureDocTranslation(s.Name, src)
@@ -1069,15 +1069,15 @@ func (a *App) viewFullTextBody(c *myui.Context, s *store.Skill, src string) {
 			myui.Spinner(c)
 			myui.Text(c, i18n.T("ui.translate.fullInProgress")).FontSize(t.FontSize - 1).TextColor(t.TextMuted)
 		})
-		renderMarkdown(c, src)
+		a.viewMarkdown(c, src)
 	case e.err != "":
 		myui.Text(c, i18n.Tf("ui.translate.fullFailed", e.err)).MaxLines(4).
 			FontSize(t.FontSize - 1).TextColor(t.Danger)
-		renderMarkdown(c, src)
+		a.viewMarkdown(c, src)
 	default:
 		myui.Text(c, i18n.Tf("ui.translate.note", a.settings.LangLabel())).
 			FontSize(t.FontSize - 2).TextColor(t.TextMuted)
-		renderMarkdown(c, e.dst)
+		a.viewMarkdown(c, e.dst)
 	}
 }
 

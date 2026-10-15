@@ -21,6 +21,7 @@ import (
 	"github.com/ArnoChenFx/kura/internal/store"
 	"github.com/egoist/mygo"
 	myui "github.com/egoist/mygo/ui"
+	"github.com/egoist/mygo/ui/markdown"
 )
 
 // confirmState 是确认框的状态：移入回收站（purge 为假）或从回收站永久删除
@@ -90,6 +91,14 @@ type App struct {
 	// 会重新读。docGen 随失效递增，后台读盘任务只回写同一代的缓存。
 	skillDocs map[string]fullTextDoc
 	docGen    int
+	// md 是全文页（SKILL.md）的 Markdown 视图选项，交给官方 ui/markdown。
+	// 官方视图把解析状态放在 ui.Local 里，但 Options 是应用持有的指针，必须
+	// 跨帧稳定，所以存在这里，不能每帧在栈上造一个新 Options 再取地址。
+	// mdTheme 是上一次给 md.Theme 用的窗口主题：Theme 只在它变了（外观开关
+	// 或被跟随的系统外观变了）时重建，不每帧新建——原因与实测数据见
+	// fulltext.go 的 syncMarkdownTheme。
+	md      markdown.Options
+	mdTheme myui.Theme
 
 	busy           map[string]bool // 正在执行操作的技能（busyKey）
 	checking       string          // 正在预览更新的技能名（空为无）

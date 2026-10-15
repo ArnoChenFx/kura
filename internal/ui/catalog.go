@@ -646,6 +646,6 @@ const (
 	detailTabFull     = "全文"
 )
 
-// mdTruncatedNotice 是 markdown 被截断时追加的提示的中文取值：markdown_test.go
+// mdTruncatedNotice 是 markdown 被截断时追加的提示的中文取值：fulltext_test.go
 // 直接引用它，所以它留在这里；渲染时走目录（ui.markdown.truncated）。
 const mdTruncatedNotice = "（内容过长，已截断）"

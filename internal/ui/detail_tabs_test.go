@@ -67,7 +67,7 @@ func TestDetailTabResetsOnSkillSwitch(t *testing.T) {
 	}
 
 	// 换选 beta：tab 应回概览，元数据组（beta 的）应回来，且不残留
-	// alpha 的全文正文（概览分支不会渲染 renderMarkdown 的内容）。
+	// alpha 的全文正文（概览分支不会渲染全文）。
 	click(t, a, tt, "beta")
 	if a.detailTab != 0 {
 		t.Errorf("换技能后 detailTab = %d，想要 0（概览）", a.detailTab)
@@ -121,8 +121,8 @@ func TestDetailFullTextMissing(t *testing.T) {
 	}
 }
 
-// TestDetailFullTextRendersMarkdown 验证：全文页后台读出 SKILL.md 并用
-// renderMarkdown 渲染（标题、列表、代码块、正文都在帧里），tab 来回切
+// TestDetailFullTextRendersMarkdown 验证：全文页后台读出 SKILL.md 并交给官方
+// ui/markdown 渲染（标题、列表、代码块、正文都在帧里），tab 来回切
 // 走缓存不再重复读盘。
 func TestDetailFullTextRendersMarkdown(t *testing.T) {
 	a, cfg := newTestApp(t)

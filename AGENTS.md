@@ -101,7 +101,7 @@ kura 自己的目录：
 - **外观**：`App.themeMode` 决定皮肤（`View` 开头 `kuraScheme.apply(c, a.themeMode)`，跟随系统时读系统外观）。改它一律走 `SetThemeAsync`：立刻换皮肤，后台同步原生外观（`mygo.Theme.SetSource`）并写 `config.json`，连续切换只有最新一次执行，写盘失败只在状态行报告、不回滚皮肤。启动时 `main.go` 在 `App.Run` 之前调 `app.SyncTheme()`。
 - **窗口没有系统标题栏**（`main.go` 用 `mygo.TitleBarHidden` + `TitleBarHeight: 40`，但保留系统的最小化/最大化/关闭按钮）。`viewTitlebar` 自绘一条顶栏：高度取 `max(c.TitleBar().Height, titleBarMinHeight)`，内边距经 `c.TitleBar()` 的 `Left`/`Right` 避开窗口按钮，整条 `DragWindow()`（拖动窗口，双击 = 最大化/还原）。**标题栏里不放可交互元素**——它们会吃掉拖动手势。
 - **要能选中拷贝的文字放进 `Selectable()` 容器；容器内的控件必须 `Unselectable()`**，否则控件交互与选择打架（见 `detailGroup` 的 `selectable` 参数）。
-- **详情页的「概览 / 全文」tab 用 `myui.Tabs`**，tab 状态 `detailTab` 配 `detailSel`：换技能时重置回概览，避免看到上一个技能的全文。全文页在后台读 `SKILL.md`（`startFullTextLoad`，`spawn` 进 goroutine，按技能名缓存进 `skillDocs`），扫描后缓存整体失效并用 `docGen` 作废在途结果；渲染用 `internal/ui/markdown.go` 的 `renderMarkdown`（自写，不引第三方依赖）。
+- **详情页的「概览 / 全文」tab 用 `myui.Tabs`**，tab 状态 `detailTab` 配 `detailSel`：换技能时重置回概览，避免看到上一个技能的全文。全文页在后台读 `SKILL.md`（`startFullTextLoad`，`spawn` 进 goroutine，按技能名缓存进 `skillDocs`），扫描后缓存整体失效并用 `docGen` 作废在途结果；渲染用 mygo 官方的 `github.com/egoist/mygo/ui/markdown`：`App.md`（`markdown.Options`）跨帧稳定、主题每帧从窗口主题重建，kura 自己只保留 `internal/ui/fulltext.go` 里的两件事（剥掉开头的 YAML frontmatter `stripFrontmatter`、超大源码截断 `capSource`）。
 - **翻译开关只切显示**：`App.trans.on` 为真时，内存里的译文缓存（`translateState.items`，键形如 `card:<技能名>:description`）有值就显示译文、没有就回退原文，**界面永不留白**；发起请求只在 `ensureTranslations` / `TranslateAsync`（后台 + 超时），渲染路径只读缓存。翻译配置变更时 `translateState.epoch` 递增，在途结果作废。
 - 详见 `.agents/skills/mygo-maintenance/SKILL.md`；MyGo 的 API 以**固定版本源码**为准（`go list -m -f '{{.Dir}}' github.com/egoist/mygo`），不要凭记忆猜。
 
