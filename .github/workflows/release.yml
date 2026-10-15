@@ -79,7 +79,10 @@ jobs:
   # 每个平台目标一行 matrix，并行构建、各自上传：
   # - macOS 必须在 macOS runner（签名与 dmg 制作）；
   # - Windows 与 Linux 无 cgo，在 ubuntu 上构建即可；
-  #   Windows 安装器用 NSIS，Linux runner 需要先用 apt 装好。
+  #   Windows 安装器用 NSIS，Linux runner 需要先用 apt 装好；
+  # - Linux 的两个架构共用同一份 install.sh，必须在同一个 job 里构建：
+  #   两个 job 同时上传它时，`gh release upload --clobber` 的删除+创建会在
+  #   并发下撞「HTTP 422 ReleaseAsset.name already exists」（v0.1.6 发生过）。
   build:
     needs: draft-release
     name: ${{ matrix.name }}
@@ -91,8 +94,7 @@ jobs:
           - { name: macOS (arm64), os: macos-latest, platform: "darwin/arm64" }
           - { name: macOS (amd64), os: macos-latest, platform: "darwin/amd64" }
           - { name: Windows (amd64), os: ubuntu-latest, platform: "windows/amd64" }
-          - { name: Linux (amd64), os: ubuntu-latest, platform: "linux/amd64" }
-          - { name: Linux (arm64), os: ubuntu-latest, platform: "linux/arm64" }
+          - { name: Linux (amd64+arm64), os: ubuntu-latest, platform: "linux/amd64,linux/arm64" }
     defaults:
       run:
         shell: bash
