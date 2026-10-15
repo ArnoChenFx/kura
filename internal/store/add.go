@@ -21,11 +21,12 @@ type AddOptions struct {
 	LocalPath string
 	// Repo 是 GitHub 的 owner/repo。
 	Repo string
-	// SubPath 是仓库内技能目录（可选）。为空时默认用 Repo 根目录；
-	// 安装路径会先做仓库内技能发现（见 discoverForAdd）：仓库根是技能
-	// 或恰好只有一个候选时直接装，多个候选时报 CandidatesError 交由
-	// 调用方展示，零个候选时报「来源目录缺少 SKILL.md」。
+	// SubPath 是仓库内技能目录（可选）。为空（或写成 "."，两者同义）时
+	// 默认用 Repo 根目录；安装路径会先做仓库内技能发现（见 discoverForAdd）：
+	// 仓库根是技能或恰好只有一个候选时直接装，多个候选时报 CandidatesError
+	// 交由调用方展示，零个候选时报「来源目录缺少 SKILL.md」。
 	// 显式给了 SubPath 时按用户指定的目录安装，绝不自动换别的。
+	// "." 与空串的区别只在「用户显式指定了根」：此时整仓检出，不走发现。
 	SubPath string
 	// Ref 是分支/标签/commit（可选，默认仓库默认分支）。
 	Ref string
@@ -94,14 +95,13 @@ func (c *Config) Add(opts *AddOptions) (*Result, error) {
 			if err := c.checkoutSkill(u, &src); err != nil {
 				return nil, err
 			}
-			if sub == "" && name == "" {
-				// 仓库根本身是技能：临时目录名是随机的（kura-upstream-NNN），
-				// 不能当技能名。frontmatter 的 name 可用时由 installDir 用它，
-				// 否则默认取仓库名（owner/repo 的尾段）。
-				if !validSkillDirName(readSkillName(srcDir)) {
-					name = repoName(opts.Repo)
-				}
-			}
+		}
+		// 仓库根本身是技能（自动发现出来，或用户显式写 "."，resolveGitHub 已把
+		// 它归一化成空串）：临时目录名是随机的（kura-upstream-NNN），不能当
+		// 技能名。frontmatter 的 name 可用时由 installDir 用它，否则默认取
+		// 仓库名（owner/repo 的尾段）。
+		if src.SubPath == "" && name == "" && !validSkillDirName(readSkillName(srcDir)) {
+			name = repoName(opts.Repo)
 		}
 	}
 	return c.installDir(srcDir, src, name)
@@ -151,6 +151,7 @@ func (c *Config) resolveLocal(opts *AddOptions) (string, Source, error) {
 // resolveGitHub 浅 clone owner/repo（只取树，不取文件），再按需稀疏检出：
 // 仓库里与技能无关的文件不下载。返回 clone（调用方 defer Close）与来源。
 //   - 显式给了 SubPath：只检出该目录，来源里记下 SubPath、commit 与子目录树哈希；
+//     SubPath 写成 "." 与空串同义（都是「仓库根就是技能」，见下面 explicitRoot）；
 //   - 没给 SubPath：只检出发现技能要用的文件（各级 SKILL.md 与插件清单，见
 //     CheckoutDiscovery），来源里 SubPath/Tree 留空，由 Add 经 discoverForAdd
 //     选定技能后补全；DiscoverRepoSkills 直接在这份检出上做发现。
@@ -159,13 +160,21 @@ func (c *Config) resolveLocal(opts *AddOptions) (string, Source, error) {
 func (c *Config) resolveGitHub(opts *AddOptions) (*upstream, Source, error) {
 	url := githubURL(opts.Repo)
 	sub := cleanSubPath(opts.SubPath)
+	// "." 是「仓库根本身就是技能」的另一种写法：DiscoverSkills 用它表示根即技能，
+	// 界面的自动安装会把候选路径原样填回子目录。它与空串同义，但区别在「用户
+	// 显式指定了根」——不能落进下面的发现分支（那份检出只有 SKILL.md 与插件
+	// 清单，会漏掉 README、references 等内容），必须整仓检出。来源里仍记空串。
+	explicitRoot := sub == "."
+	if explicitRoot {
+		sub = ""
+	}
 	u, err := cloneUpstream(url, opts.Ref)
 	if err != nil {
 		return nil, Source{}, err
 	}
 	// 记录 commit 与子目录树哈希，检查更新时据此判断上游是否变化。
 	src := Source{Type: SourceGitHub, URL: url, Ref: opts.Ref, SubPath: sub, Commit: u.Commit}
-	if sub == "" {
+	if sub == "" && !explicitRoot {
 		if err := u.CheckoutDiscovery(); err != nil {
 			u.Close()
 			return nil, Source{}, err

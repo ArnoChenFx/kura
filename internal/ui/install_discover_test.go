@@ -780,3 +780,78 @@ func TestInstallExplicitSubPathSkipsDiscovery(t *testing.T) {
 		t.Fatalf("code-review 应已装进根目录: %v", err)
 	}
 }
+
+// rootSkillRepoUI 造一个「仓库根本身就是技能」的仓库（没有子目录）：SKILL.md
+// 直接在仓库根，另有 references/ 这类普通内容。提交并镜像成 github.com/<alias>。
+func rootSkillRepoUI(t *testing.T, alias string) string {
+	t.Helper()
+	repo := filepath.Join(t.TempDir(), "repo")
+	if err := os.MkdirAll(filepath.Join(repo, "references"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	name := alias[strings.Index(alias, "/")+1:]
+	skill := "---\nname: " + name + "\n---\n\n# 技能\n"
+	if err := os.WriteFile(filepath.Join(repo, "SKILL.md"), []byte(skill), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "references", "note.md"), []byte("# 说明\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	git := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = repo
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v: %s", args, err, out)
+		}
+	}
+	git("init", "-q")
+	git("symbolic-ref", "HEAD", "refs/heads/main")
+	git("config", "user.email", "t@t")
+	git("config", "user.name", "t")
+	git("add", ".")
+	git("commit", "-q", "-m", "init")
+	return repo
+}
+
+// TestInstallModalRepoRootSkillAutoInstalls 端到端钉住「仓库根本身是技能」这类
+// 仓库（SKILL.md 直接放在仓库根）在界面里点一次「安装」就能装上。
+//
+// 发现阶段返回的候选路径是 "."（DiscoverSkills 用它表示仓库根），它会被原样
+// 填回子目录；store 必须把 "." 当作空串（仓库根），否则会拿 HEAD:. 去 git 里
+// 找一个不存在的对象，安装报「仓库内不存在目录 .」。
+func TestInstallModalRepoRootSkillAutoInstalls(t *testing.T) {
+	repo := rootSkillRepoUI(t, "owner/root-skill")
+	mirrorAlias(t, repo, "owner/root-skill")
+
+	a, cfg := newTestApp(t)
+	tt := showApp(a, 1280, 800)
+
+	click(t, a, tt, "安装技能")
+	a.install.repo = "owner/root-skill"
+	refresh(a, tt)
+	click(t, a, tt, "确认安装")
+
+	if a.install.open {
+		t.Errorf("仓库根技能应直接装上并关闭弹窗，文本 %v（错误：%s）", tt.Texts(), a.install.err)
+	}
+	name := "root-skill"
+	if _, err := os.Stat(filepath.Join(cfg.SkillPath(name), "SKILL.md")); err != nil {
+		t.Fatalf("%s 应已装进根目录: %v（弹窗错误：%s）", name, err, a.install.err)
+	}
+	// 整仓内容都要在：只跑发现用的稀疏检出会漏掉 references/。
+	if _, err := os.Stat(filepath.Join(cfg.SkillPath(name), "references", "note.md")); err != nil {
+		t.Errorf("整仓内容都应装上（references/note.md 缺失）: %v", err)
+	}
+	// 元数据里 SubPath 必须是空串（仓库根），不能是 "."。
+	raw, err := os.ReadFile(filepath.Join(cfg.SkillPath(name), ".kura-meta.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), "\"subPath\": \".\"") {
+		t.Errorf("元数据的 subPath 应为空串而不是 \".\"：%s", raw)
+	}
+	if a.selName != name || a.statusErr {
+		t.Errorf("新装的技能应被选中且状态行无错误：selName=%q statusErr=%v err=%s", a.selName, a.statusErr, a.install.err)
+	}
+}

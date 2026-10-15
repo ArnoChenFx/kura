@@ -465,3 +465,60 @@ func TestValidSkillDirName(t *testing.T) {
 		}
 	}
 }
+
+// TestAddRepoRootSkillSubPathDot 验证子目录写成 "." 时按「仓库根」处理，与空串
+// 完全等价。UI 的自动安装发现到「仓库根本身是技能」时会把候选路径 "." 填回
+// 子目录（DiscoverSkills 用 "." 表示仓库根），这条路径必须能装上——否则
+// 这类「根即技能」的仓库在界面里永远装不上（CLI 里手写
+// `--sub-path .` 同样会失败）。
+func TestAddRepoRootSkillSubPathDot(t *testing.T) {
+	rootSkillRepo(t, "owner/rootdot", "---\nname: dot-root-skill\n---\n\n# 技能\n")
+	c := newTestConfig(t)
+
+	r, err := c.Add(&AddOptions{Repo: "owner/rootdot", SubPath: "."})
+	if err != nil {
+		t.Fatalf("子目录为 \".\" 时应按仓库根安装: %v", err)
+	}
+	if r.ID != "dot-root-skill" {
+		t.Errorf("默认名应取 SKILL.md 的 name，得到 %q", r.ID)
+	}
+	m := readMeta(c.SkillPath("dot-root-skill")).Meta
+	if m == nil || m.Source.SubPath != "" {
+		t.Errorf("仓库根安装的 SubPath 应记为空串（不能是 \".\"），得到 %+v", m)
+	}
+}
+
+// TestAddRepoRootSkillSubPathDotFallbackName 验证显式 "." 安装仓库根技能时，
+// 默认名同样退回仓库名。临时 clone 目录名（kura-upstream-NNN）不能当技能名，
+// 发现路径里有这条兜底，显式 "." 必须走同一套。
+func TestAddRepoRootSkillSubPathDotFallbackName(t *testing.T) {
+	rootSkillRepo(t, "owner/rootdotplain", "---\nname: .\n---\n\n# 技能\n")
+	c := newTestConfig(t)
+
+	r, err := c.Add(&AddOptions{Repo: "owner/rootdotplain", SubPath: "."})
+	if err != nil {
+		t.Fatalf("仓库根技能应能安装: %v", err)
+	}
+	if r.ID != "rootdotplain" {
+		t.Errorf("frontmatter 不可用时应退回仓库名，得到 %q", r.ID)
+	}
+}
+
+// TestAddManyRepoRootSkillSubPathDot 验证批量安装里 "." 与空串等价：
+// 两处都按仓库根装上（一个用显式名避开撞名）。
+func TestAddManyRepoRootSkillSubPathDot(t *testing.T) {
+	rootSkillRepo(t, "owner/rootdotmany", "---\nname: dot-many\n---\n\n# 技能\n")
+	c := newTestConfig(t)
+
+	results := c.AddMany("owner/rootdotmany", "", []AddSpec{{SubPath: "."}, {SubPath: "", Name: "dot-many-copy"}})
+	for i, r := range results {
+		if r.Err != nil {
+			t.Fatalf("第 %d 项应装上（SubPath=%q）: %v", i, r.SubPath, r.Err)
+		}
+	}
+	for _, name := range []string{"dot-many", "dot-many-copy"} {
+		if !fileExists(filepath.Join(c.SkillPath(name), "SKILL.md")) {
+			t.Errorf("%s 应已装上", name)
+		}
+	}
+}
