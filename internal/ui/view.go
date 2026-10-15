@@ -1189,7 +1189,6 @@ func (a *App) viewDetailMeta(c *myui.Context, s *store.Skill) {
 			if m.UpdatedAt != "" {
 				metaField(c, i18n.T("ui.detail.updatedAt"), shortTime(m.UpdatedAt), false, nil)
 			}
-			metaField(c, i18n.T("ui.detail.hash"), shortHash(m.ContentHash), false, nil)
 		})
 	})
 }

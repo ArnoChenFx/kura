@@ -4,6 +4,13 @@ kura 遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 的格�
 
 应用版本号的唯一来源是 `mygo.json` 的 `version` 字段(打包时由 MyGo 注入); `internal/cli` 的 `Version` 常量是 CLI 二进制自己的版本号,不参与自更新, 发版时需人工与 `mygo.json` 保持一致。
 
+## 0.1.6
+
+详情页不再显示内容哈希。
+
+- **删除详情「哈希」行**：右栏元数据里那一行哈希是内部指纹，对使用没有价值（版本对比看来源/Commit/时间，内容漂移由 `kura doctor` 与「检查更新」的评审面板提示），整行移除，中英文界面同步。评审面板里的「本地有改动」警告保留。
+- **文档同步**：README 与 `docs/note/updates.md` 的过期说法更新（自更新链路已在 Windows 上实测通关、mygo 版本号对齐），`REQUIREMENTS.md` 相应条目更新。
+
 ## 0.1.5
 
 界面支持中英双语：第一次打开跟随系统语言，系统是中文就用中文，否则用英文。
