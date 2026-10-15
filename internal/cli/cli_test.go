@@ -458,6 +458,25 @@ func TestDoctorCleanAndDrift(t *testing.T) {
 	requireString(t, p0, "skill", "clean")
 }
 
+// 禁用的技能元数据完好：doctor 只报告残留提醒（leftover），不能因为没有核对
+// 哈希而凭空报出 no-meta。
+func TestDoctorDisabledHealthySkillOnlyLeftover(t *testing.T) {
+	e := newEnv(t)
+	e.installWithMeta(t, "parked")
+	if code := e.run("disable", "parked"); code != ExitOK {
+		t.Fatalf("disable 应退出 0, got %d, stderr=%s", code, e.stderr.String())
+	}
+	code, out := e.runJSON(t, "doctor")
+	if code != ExitDoctorProblem {
+		t.Fatalf("残留应退出 3, got %d", code)
+	}
+	probs, _ := out["problems"].([]any)
+	if len(probs) != 1 {
+		t.Fatalf("只应有 1 条 leftover, got %v", probs)
+	}
+	requireString(t, probs[0].(map[string]any), "kind", KindLeftover)
+}
+
 func TestDoctorProblemKinds(t *testing.T) {
 	e := newEnv(t)
 	e.writeSkill("no-meta") // no-meta

@@ -96,7 +96,7 @@ func runDoctor(c *store.Config) doctorResult {
 			Kind: KindNotADir, Detail: i18n.Tf("cli.err.scanRootFailed", scanErr),
 		})
 	} else {
-		result.Problems = append(result.Problems, checkSkills(enabled, i18n.T("cli.term.rootDir"))...)
+		result.Problems = append(result.Problems, checkSkills(enabled, i18n.T("cli.term.rootDir"), true)...)
 	}
 	result.Problems = append(result.Problems, checkDisabled(c)...)
 	result.Problems = append(result.Problems, checkTrash(c)...)
@@ -133,11 +133,12 @@ func checkRootEntries(c *store.Config) []Problem {
 	return problems
 }
 
-// checkSkills 对一组 store.Skill 做完整检查：缺元数据 / 元数据损坏 /
-// 缺 SKILL.md / 内容哈希漂移。任何单点失败都转化为问题记录，绝不 panic。
+// checkSkills 对一组 store.Skill 做检查：缺元数据 / 元数据损坏 / 缺 SKILL.md，
+// withDrift 为真时再核对内容哈希漂移（要读完技能的全部文件，故只对需要的调用方
+// 开启）。任何单点失败都转化为问题记录，绝不 panic。
 // where 是已按当前语言取好的人类可读位置名（“根目录”/“the root folder”，
 // 或固定的 "disabled"、"trash"）。
-func checkSkills(skills []*store.Skill, where string) []Problem {
+func checkSkills(skills []*store.Skill, where string, withDrift bool) []Problem {
 	var problems []Problem
 	for _, s := range skills {
 		// 元数据损坏（文件存在但解析失败）：无法核对哈希，跳过漂移检查。
@@ -165,22 +166,28 @@ func checkSkills(skills []*store.Skill, where string) []Problem {
 			})
 		}
 		// 内容漂移：仅在元数据可读且有记录哈希时核对。
-		if s.MetaErr == "" && s.Meta != nil {
-			switch expected := s.Meta.ContentHash; {
-			case expected == "":
-				problems = append(problems, Problem{
-					Kind:   KindNoMeta,
-					Skill:  s.Name,
-					Detail: i18n.T("cli.doctor.noContentHash"),
-				})
-			case s.ContentHash != expected:
-				problems = append(problems, Problem{
-					Kind:  KindHashDrift,
-					Skill: s.Name,
-					Detail: i18n.Tf("cli.doctor.hashDrift",
-						shortHash(s.ContentHash), shortHash(expected)),
-				})
-			}
+		if !withDrift || s.MetaErr != "" || s.Meta == nil {
+			continue
+		}
+		expected := s.Meta.ContentHash
+		if expected == "" {
+			problems = append(problems, Problem{
+				Kind:   KindNoMeta,
+				Skill:  s.Name,
+				Detail: i18n.T("cli.doctor.noContentHash"),
+			})
+			continue
+		}
+		// 哈希在这里按需计算（扫描不算）。读失败时 got 为空，仍报告为漂移，
+		// 与扫描时忽略错误的旧行为一致。
+		got, _ := store.HashDir(s.Dir)
+		if got != expected {
+			problems = append(problems, Problem{
+				Kind:  KindHashDrift,
+				Skill: s.Name,
+				Detail: i18n.Tf("cli.doctor.hashDrift",
+					shortHash(got), shortHash(expected)),
+			})
 		}
 	}
 	return problems
@@ -200,15 +207,8 @@ func checkDisabled(c *store.Config) []Problem {
 		return problems
 	}
 	for _, s := range skills {
-		// 结构检查复用 checkSkills（损坏/缺失/SKILL.md），但不做哈希核对：
-		// 手工把 s.Meta.ContentHash 清空再交给 checkSkills 即可绕过漂移。
-		clone := *s
-		if clone.Meta != nil {
-			m := *clone.Meta
-			m.ContentHash = ""
-			clone.Meta = &m
-		}
-		problems = append(problems, checkSkills([]*store.Skill{&clone}, "disabled")...)
+		// 结构检查复用 checkSkills（损坏/缺失/SKILL.md），关闭哈希核对（withDrift 为 false）。
+		problems = append(problems, checkSkills([]*store.Skill{s}, "disabled", false)...)
 		// 残留提醒。
 		problems = append(problems, Problem{
 			Kind:   KindLeftover,

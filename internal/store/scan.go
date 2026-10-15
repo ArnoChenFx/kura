@@ -24,7 +24,6 @@ type Skill struct {
 	Description string
 	Meta        *Meta
 	MetaErr     string
-	ContentHash string
 }
 
 const (
@@ -98,7 +97,9 @@ func scanDir(dir string, state State) ([]*Skill, error) {
 	return skills, nil
 }
 
-// buildSkill 构造单个 Skill：读元数据（损坏时降级并记录原因），再计算内容哈希。
+// buildSkill 构造单个 Skill：读元数据（损坏时降级并记录原因）。不在这里算内容
+// 哈希：它要读完技能目录里的每个文件，列表扫描用不到；需要核对漂移的调用方
+// （kura doctor）自己调 HashDir。
 func buildSkill(dir, name string, state State) *Skill {
 	s := &Skill{
 		Name:       name,
@@ -115,7 +116,6 @@ func buildSkill(dir, name string, state State) *Skill {
 	} else if res.Found {
 		s.Meta = res.Meta
 	}
-	s.ContentHash, _ = HashDir(dir)
 	return s
 }
 

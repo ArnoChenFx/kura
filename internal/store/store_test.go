@@ -87,9 +87,6 @@ func TestScanSkills(t *testing.T) {
 		if s.State != StateEnabled || s.Meta != nil || s.MetaErr != "" {
 			t.Errorf("%s 状态错误: %+v", s.Name, s)
 		}
-		if s.ContentHash == "" || !strings.HasPrefix(s.ContentHash, "sha256:") {
-			t.Errorf("%s 哈希格式错误: %q", s.Name, s.ContentHash)
-		}
 	}
 }
 
