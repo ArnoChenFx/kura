@@ -68,6 +68,18 @@ kura 这边的三个接点(都在本里程碑落盘):
 
 其余细节见 `docs/note/ci.md`。
 
+## 设置里的「自动检查更新」开关与左栏的新版本蓝点
+
+kura 自己没有更新逻辑，这一节只说明界面上的两个入口怎么接回插件。
+
+- **「自动检查更新」偏好存在插件的 `updater.json`**（用户数据目录），不是 kura 的 `config.json`：读 `updater.AutomaticChecks()`、写 `updater.SetAutomaticChecks(on)`。这样只有一个真值源，默认值天然是「勾上」（插件默认开），也跟插件自己的调度一致（关掉后插件不再后台检查）。kura 侧只经 `internal/selfupdate` 的转发读写，两个钩子由 `main.go` 在窗口就绪后注入（`app.SetAutoChecks`）；`internal/ui` 不接插件，只拿一个 `func(bool)` 回调。
+- **后台查到新版本时，左栏左下角「检查更新」按钮的右上角有一个蓝色小圆点**（颜色取自 `internal/ui/theme.go` 的调色板，浅色/深色各一个值，视图代码里不写十六进制），悬停提示也换成「kura 有新版本可用」。蓝点是绝对定位的子元素，不改变按钮的位置与尺寸，也不吃点击（`PassThrough`）。
+- **为什么会多一次查询**：插件没有「发现新版本」的回调，也没有「后台发现新版但只提示、不弹窗」的模式。它只在自己完成一次成功检查时经 `updater.OnChange` 通知 `LastCheck` 变了（也会在用户动开关、回答更新窗口时通知）。所以 kura 在每次 `OnChange` 后自己再调一次 `mygo.Updater.Check`（`selfupdate.WatchUpdateFound`，30 秒超时），才知道「是不是真有新版本」。
+  - 用 `LastCheck()` 去重：时间没变就跳过，免得用户动一下开关就白跑一个请求。
+  - 一次只跑一个查询；查询失败（断网、清单取不到）**不动**蓝点状态——不因为一次抖动把用户已经看到的提示收回去；开发构建 `mygo.Updater.Check` 返回 `ErrUpdatesDisabled`，也算失败。
+  - 查询在后台 goroutine 里跑，结果经 `App.SetUpdateFound` → `Window.Update` 回主线程。
+- **蓝点与插件自己的更新窗口是两回事**：后台检查发现新版本且没勾自动安装时，插件仍会自己弹一个「不抢焦点」的更新窗口（现有行为，本任务没有改）。蓝点只是说「有新版本」，两者同时出现是正常的。
+- **点「检查更新」按钮会清掉蓝点**：用户已经在看更新窗口了。后台查到「没有新版本」时蓝点也清掉。
 ## 已验证 / 未验证
 
 **已验证**:
@@ -76,10 +88,14 @@ kura 这边的三个接点(都在本里程碑落盘):
 - `go tool mygo build -platform windows/amd64` 成功——挂上更新插件后应用仍能正常打包;
 - `mygo.json` 只含公钥(`grep -c PRIVATE mygo.json` 为 0),git 历史无任何私钥文件;私钥在仓库外的 keygen 默认目录;
 - 测试覆盖:插件挂载冒烟、应用菜单结构(含更新项占位与 Click 透传)、主窗口 Tester 照常构建、开发构建下版本号为空。
+- 「自动检查更新」开关与蓝点:设置弹窗里的开关默认勾上、点击后经假钩子写入且界面跟着变(浅色/深色各一遍);蓝点的像素级测试(出现、消失、不改变按钮矩形、点在蓝点上仍触发按钮、浅色/深色);`internal/selfupdate` 的探测逻辑(去重、失败不动状态、一次只跑一个查询)、四个转发函数在插件未挂载时都 panic(另起子进程验证)、开发构建下查询失败; 见 `internal/ui/settings_autocheck_test.go`、`internal/ui/update_dot_test.go`、`internal/selfupdate/watch_test.go`。
+- 真实窗口:用 `tools/capture-window.ps1`（需要时可以加 `-LargestWindow`，它按面积挑进程可见顶层窗口里最大的那个，避开插件弹的更新窗口）启动真机窗口:设置弹窗里能看到「自动检查更新」且默认勾上，无障碍树里那个开关的 `ToggleState` 是 `On`;点一下开关，插件的 `updater.json` 里出现 `{"automaticChecks":false}`;把 `mygo.json` 版本降到 0.1.7 打包后真机启动（隔离的 `HOME`/`USERPROFILE`/`APPDATA`/`LOCALAPPDATA`/`TEMP`），启动约 10 秒后插件自动检查发现线上 0.1.8，主窗口左栏更新按钮右上角真的出现蓝点（截图的像素是调色板里的 `#5aa9f0`）。截图是本任务的一次性证据，未入库。
 - 自更新端到端:一份已安装副本从 0.1.0 升到 0.1.1(GitHub latest 清单 → 下载 → Ed25519 验签 → 替换 → 重启),2026-10-13 实测;
 - `mygo build -upload` 真实上传草稿 Release:v0.1.0 起的每次发布都由 CI 的发布工作流完成(draft-release → 各平台 build → publish),v0.1.5 为最近一次。
 
 **未验证**:
 
 - delta 增量更新是否真的被采用(资产已产出,本机无法确认更新走 delta 还是整包);
+- 「自动检查更新」开关与蓝点的真实联网链路只验到两层:开发构建下 `mygo.Updater.Check` 返回 `ErrUpdatesDisabled`(查询失败、不动状态),以及把 `mygo.json` 版本降到 0.1.7 打包后插件真的查到线上 0.1.8、蓝点亮起。用真实公钥验签、下载与替换没有重跑(同上文的自更新端到端);
+- 蓝点只在 Windows 真机上看过;macOS / Linux 未验。
 - macOS 签名 / 公证与 dmg(需 macOS 环境),macOS / Linux 副本的自更新也未实测。

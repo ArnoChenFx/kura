@@ -71,6 +71,17 @@ type App struct {
 	// NewApp 不填——测试直接建 App，绝不能真的触发更新检查；只有
 	// main.go 里 SetWindow 之后才接线。nil 时按钮点下只在状态行报告。
 	checkUpdates func()
+	// autoCheck 是「自动检查更新」的当前值（默认 true，与更新器插件的
+	// 默认一致），updateFound 是后台查到有新版本。
+	// autoCheckGet / autoCheckSet 是它的读写钩子，生产实现是
+	// selfupdate.AutomaticChecks / SetAutomaticChecks（存在插件的
+	// updater.json，不是 config.json）；与 checkUpdates 一样只在 main.go
+	// 里接线，测试注入假实现，未接线时 nil。
+	autoCheck    bool
+	updateFound  bool
+	autoCheckGet func() bool
+	autoCheckSet func(bool)
+	autoCheckSeq atomic.Int64 // 开关切换的序号：后台任务只执行最新一次
 
 	skills  []*store.Skill  // 当前目录的全部技能（启用 + 停用 + 回收站）
 	query   string          // 搜索词
@@ -163,7 +174,7 @@ type App struct {
 // 目录列表损坏不致命：只显示默认目录，并在界面上报告错误。
 func NewApp(cfg *store.Config) *App {
 	a := &App{selIdx: -1, syncIdx: -1, busy: map[string]bool{}, rootCounts: map[string]int{}, updates: map[string]bool{},
-		rootsW: rootsWidth, detailW: detailWidth}
+		rootsW: rootsWidth, detailW: detailWidth, autoCheck: true}
 	lib, err := store.LoadLibrary(cfg)
 	if err != nil {
 		a.libErr = err.Error()
@@ -256,6 +267,27 @@ func (a *App) publish(fn func()) {
 // 生产路径接线；NewApp 与测试都不填，钩子保持 nil，按钮点下只在状态行
 // 报告「更新功能未就绪」，绝不触发真实的更新检查。
 func (a *App) SetCheckUpdates(fn func()) { a.checkUpdates = fn }
+
+// SetAutoChecks 注入「自动检查更新」偏好的生产实现（main.go 在窗口就绪后
+// 调用：app.SetAutoChecks(selfupdate.AutomaticChecks,
+// selfupdate.SetAutomaticChecks)）。注入时用 get() 初始化当前值——唯一真值
+// 在插件的 updater.json，界面不自己存一份。与 SetCheckUpdates 一样只允许
+// 生产路径接线；NewApp 与测试都不填，钩子保持 nil，开关点下只在状态行报告，
+// 绝不触发真实的插件调用（未挂载插件时调 updater.* 会 panic）。
+func (a *App) SetAutoChecks(get func() bool, set func(bool)) {
+	a.autoCheckGet, a.autoCheckSet = get, set
+	if get != nil {
+		a.autoCheck = get()
+	}
+}
+
+// SetUpdateFound 记下后台有没有查到新版本（左栏「检查更新」按钮上的小蓝点）。
+// 由 selfupdate.WatchUpdateFound 的回调在后台 goroutine 里调用，所以经
+// a.publish 回主线程再改状态（同 CheckAppUpdateAsync 的范式）。没有接线
+// （钩子为 nil）的 App 也允许调用：它只改一个布尔值，不碰插件。
+func (a *App) SetUpdateFound(available bool) {
+	a.publish(func() { a.updateFound = available })
+}
 
 // SetLockPath 指定导入元数据时读取的 .skill-lock.json 路径；
 // 为空时由 store 使用默认的 ~/.agents/.skill-lock.json。
@@ -693,11 +725,22 @@ func localeFor(pref, sysLocale string) string {
 	return string(i18n.Resolve(i18n.LangSystem, sysLocale))
 }
 
-// CheckAppUpdateAsync 响应「检查更新」按钮：立刻在状态行给一句反馈
-// （更新检查与窗口都由 MyGo 更新插件异步完成，点击后界面不能毫无反应），
-// 然后经 checkUpdates 钩子打开原生更新窗口。钩子在后台调用（它立即
-// 返回、不阻塞，但走后台与其它慢调用一致）；测试注入假实现计数调用。
+// CheckAppUpdateAsync 响应「检查更新」按钮：立刻清掉小蓝点（用户已经在看更新
+// 窗口了），在状态行给一句反馈（更新检查与窗口都由 MyGo 更新插件异步完成，
+// 点击后界面不能毫无反应），然后经 checkUpdates 钩子打开原生更新窗口。钩子在
+// 后台调用（它立即返回、不阻塞，但走后台与其它慢调用一致）；测试注入假实现
+// 计数调用。
 func (a *App) CheckAppUpdateAsync() {
+	// 点按钮就是「用户知道了」：蓝点立刻消失，不必等这次检查回来，也不管钩子有
+	// 没有接线——用户就在更新窗口里看结果。放在最前面，重复点击也照样清；
+	// 顺手请求一次重绘（点击本身也会产生一帧，这一行是防止将来改动后漏掉）。
+	a.updateFound = false
+	a.mu.Lock()
+	win := a.win
+	a.mu.Unlock()
+	if win != nil {
+		win.Invalidate()
+	}
 	if a.checkingUpdate {
 		return
 	}
@@ -710,6 +753,31 @@ func (a *App) CheckAppUpdateAsync() {
 	a.spawn(func() {
 		a.checkUpdates()
 		a.publish(func() { a.checkingUpdate = false })
+	})
+}
+
+// SetAutoCheckAsync 切换「自动检查更新」为 on。界面立刻改本地值（下一帧
+// 开关就是新状态），写盘在后台做：生产实现是 updater.SetAutomaticChecks，
+// 落到插件的 updater.json。写盘没有错误返回值（SetAutomaticChecks 自己把失败
+// 吞掉，本地偏好丢了不算错），所以这里不回滚也不报错；与 SetThemeAsync /
+// SetViewAsync 一样：相同的值直接返回（幂等，重复构建不会重复写盘），连续
+// 切换只有最新一次会执行。钩子未接线时（测试与未接线的 App）只在状态行
+// 报告，不 panic。
+func (a *App) SetAutoCheckAsync(on bool) {
+	if a.autoCheckSet == nil {
+		a.status, a.statusErr = locales.UiStatusAppUpdateNotReady(), true
+		return
+	}
+	if on == a.autoCheck {
+		return
+	}
+	a.autoCheck = on
+	seq := a.autoCheckSeq.Add(1)
+	a.spawn(func() {
+		if a.autoCheckSeq.Load() != seq {
+			return
+		}
+		a.autoCheckSet(on)
 	})
 }
 

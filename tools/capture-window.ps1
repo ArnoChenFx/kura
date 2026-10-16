@@ -5,17 +5,25 @@
 # 焦点——用全屏 CopyFromScreen 时别的窗口（浏览器等）一抢前台就会截到它。
 # 窗口按 RECT 抓，右侧/下侧会带进一点 desktop 阴影，脚本把四条边各内缩 8px
 # 去掉它。
+#
+# -LargestWindow 改成「按面积挑本进程所有可见顶层窗口中最大的那个」：应用的
+# 某个功能弹出自己的窗口时（如 kura 更新插件那个「不抢焦点」的更新窗口），
+# Windows 会把 MainWindowHandle 换到新窗口上，默认做法就会截到它而不是主窗口。
+# 默认（不加这个开关）行为不变，仍用 MainWindowHandle。
 param(
   [Parameter(Mandatory=$true)][string]$Exe,
   [Parameter(Mandatory=$true)][string]$Out,
   [string]$TitleLike = "kura",
   [int]$WaitMs = 9000,
-  [int]$Inset = 8
+  [int]$Inset = 8,
+  [switch]$LargestWindow,
+  [int]$MinArea = 1200000
 )
 
 Add-Type -AssemblyName System.Drawing
 Add-Type @"
 using System;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
 public class Win {
   [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
@@ -25,21 +33,64 @@ public class Win {
   [DllImport("user32.dll")] public static extern bool PrintWindow(IntPtr h, IntPtr hdc, uint flags);
   [DllImport("user32.dll")] public static extern bool SetProcessDpiAwarenessContext(IntPtr ctx);
   [DllImport("shcore.dll")] public static extern int SetProcessDpiAwareness(int v);
+  public delegate bool EnumProc(IntPtr h, IntPtr l);
+  [DllImport("user32.dll")] public static extern bool EnumWindows(EnumProc fn, IntPtr l);
+  [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
   [StructLayout(LayoutKind.Sequential)] public struct RECT { public int Left, Top, Right, Bottom; }
+  // visibleWindowsOf 列出该进程的全部可见顶层窗口。
+  public static List<IntPtr> visibleWindowsOf(uint pid) {
+    var list = new List<IntPtr>();
+    EnumWindows((h, l) => {
+      uint p; GetWindowThreadProcessId(h, out p);
+      if (p == pid && IsWindowVisible(h)) list.Add(h);
+      return true;
+    }, IntPtr.Zero);
+    return list;
+  }
 }
 "@
 
 try { [Win]::SetProcessDpiAwareness(2) | Out-Null } catch {}
 
+# largestVisible 返回本进程可见顶层窗口里面积最大的那个的句柄与面积；
+# 没有达到 minArea 的窗口就返回空（等下一轮），免得挑到刚弹出的小窗。
+function Get-LargestVisible($proc, [int]$minArea) {
+  $best = [IntPtr]::Zero; $bestArea = 0
+  foreach ($p in (Get-Process -Name $proc.ProcessName -ErrorAction SilentlyContinue)) {
+    foreach ($hh in [Win]::visibleWindowsOf([uint32]$p.Id)) {
+      $rr = New-Object Win+RECT
+      [Win]::GetWindowRect($hh, [ref]$rr) | Out-Null
+      $area = ($rr.Right - $rr.Left) * ($rr.Bottom - $rr.Top)
+      if ($area -gt $bestArea) { $bestArea = $area; $best = $hh }
+    }
+  }
+  if ($bestArea -ge $minArea) { return @{ handle = $best; area = $bestArea } }
+  return $null
+}
+
 $proc = Start-Process -FilePath $Exe -PassThru
 Start-Sleep -Milliseconds $WaitMs
 
-$h = $proc.MainWindowHandle
-$deadline = (Get-Date).AddSeconds(20)
-while (($h -eq 0 -or -not [Win]::IsWindowVisible($h)) -and (Get-Date) -lt $deadline) {
-  Start-Sleep -Milliseconds 500
-  $proc.Refresh()
+$h = [IntPtr]::Zero
+if ($LargestWindow) {
+  $found = Get-LargestVisible $proc $MinArea
+  if ($null -ne $found) { $h = $found.handle; Write-Output "LARGEST area=$($found.area)" }
+} else {
   $h = $proc.MainWindowHandle
+}
+$deadline = (Get-Date).AddSeconds(20)
+if ($LargestWindow) {
+  while ($h -eq [IntPtr]::Zero -and (Get-Date) -lt $deadline) {
+    Start-Sleep -Milliseconds 500
+    $found = Get-LargestVisible $proc $MinArea
+    if ($null -ne $found) { $h = $found.handle }
+  }
+} else {
+  while (($h -eq 0 -or -not [Win]::IsWindowVisible($h)) -and (Get-Date) -lt $deadline) {
+    Start-Sleep -Milliseconds 500
+    $proc.Refresh()
+    $h = $proc.MainWindowHandle
+  }
 }
 
 if ($h -eq 0) {

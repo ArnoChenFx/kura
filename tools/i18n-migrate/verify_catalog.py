@@ -36,7 +36,17 @@ DELETED = {
 
 # ADDED 是迁移之后新增的 key（迁移时不存在，所以 keys.json 里没有它们）。
 # 校验时从「新 catalogs 多出的 key」里排除，避免把新功能误报成 EXTRA。
-ADDED = set()
+ADDED = {
+    # 后台自动检查发现新版本时，左栏「检查更新」按钮的悬停提示。
+    "uiRailUpdateAvailableTip",
+    # 设置弹窗里的「自动检查更新」开关（偏好存在更新器插件的 updater.json）。
+    "uiSettingsAutoCheckUpdate",
+    # 设置弹窗里「更新」这一组的分组标题。
+    "uiSettingsUpdateHeading",
+    # 设置弹窗「自动检查更新」开关的无障碍名（标签文字与开关同名，测试与
+    # 无障碍查找要一个独立的名字）。
+    "uiSettingsAutoCheckA11y",
+}
 
 
 def camel(old):

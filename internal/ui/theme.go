@@ -23,6 +23,9 @@ type palette struct {
 	sel     myui.Color // 左栏选中项的底色
 	textMid myui.Color // 左栏未选中项的文字（介于正文与弱化色之间）
 	toggle  myui.Color // 开关「开」的颜色
+	// notify 是「有新版本」的小圆点的颜色：一个真正的蓝（色相近 210°），
+	// 与低饱和的雾蓝紫强调色 accent 明显不同，但不刺眼。
+	notify myui.Color
 	// 卡片的三种交互态：悬停时底色与描边都亮（深色）/暗（浅色）一点，
 	// 选中时描边是强调色、底色带一丝强调色。
 	cardHover, lineHover, cardSel myui.Color
@@ -68,7 +71,9 @@ func (s *scheme) apply(c *myui.Context, mode string) *skin {
 type tone struct {
 	accent, accentHover, accentPressed, accentText string
 	toggle                                         string
-	success, warning, danger                       string
+	// notify 是「有新版本」圆点的颜色（见 palette.notify）。
+	notify                   string
+	success, warning, danger string
 	// bg 是弹窗等「浮起」的面板色，和卡片同档。
 	bg, surface, surfaceHover, surfacePressed string
 	border, text, muted, textMid              string
@@ -101,7 +106,7 @@ func newSkin(dark bool, k tone) *skin {
 	pal := palette{
 		sidebar: hx(k.sidebar), canvas: hx(k.canvas), card: hx(k.card), line: hx(k.line),
 		shadow: k.shadow, sel: hx(k.sel), textMid: hx(k.textMid), toggle: hx(k.toggle),
-		avatars: avatars,
+		notify: hx(k.notify), avatars: avatars,
 	}
 	// 向正文色混一点：深色里变亮、浅色里变暗，两个皮肤用同一条规则。
 	pal.cardHover = pal.card.Mix(t.Text, 0.035)
@@ -125,6 +130,7 @@ var kuraScheme = &scheme{
 	light: newSkin(false, tone{
 		accent: "#5b668f", accentHover: "#4f5a82", accentPressed: "#455074", accentText: "#ffffff",
 		toggle:  "#36a874",
+		notify:  "#2f7dd1",
 		success: "#2f9e6a", warning: "#b7791f", danger: "#d64550",
 		bg: "#ffffff", surface: "#f0f0f4", surfaceHover: "#e7e7ed", surfacePressed: "#dddde5",
 		border: "#dedee4", text: "#1a1a1e", muted: "#6b6b75", textMid: "#45454d",
@@ -135,6 +141,7 @@ var kuraScheme = &scheme{
 	dark: newSkin(true, tone{
 		accent: "#818bbf", accentHover: "#939cca", accentPressed: "#727bae", accentText: "#1a1a1e",
 		toggle:  "#62bf89",
+		notify:  "#5aa9f0",
 		success: "#6fd99b", warning: "#e5b567", danger: "#e5707a",
 		bg: "#232327", surface: "#232327", surfaceHover: "#2a2a2f", surfacePressed: "#303036",
 		border: "#333339", text: "#ededf1", muted: "#8b8b94", textMid: "#b9b9c1",

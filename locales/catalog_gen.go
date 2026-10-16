@@ -4404,6 +4404,20 @@ func (msgs Messages) UiRailSettingsTip() string {
 	return Catalog.Format(msgs.locale, "uiRailSettingsTip", nil)
 }
 
+// UiRailUpdateAvailableTip says "A new version of kura is available"
+// in the language the app shows.
+//
+// 左栏按钮提示：检查到了新版本。
+func UiRailUpdateAvailableTip() string { return In(i18n.Locale()).UiRailUpdateAvailableTip() }
+
+// UiRailUpdateAvailableTip says "A new version of kura is available"
+// in the language of msgs.
+//
+// 左栏按钮提示：检查到了新版本。
+func (msgs Messages) UiRailUpdateAvailableTip() string {
+	return Catalog.Format(msgs.locale, "uiRailUpdateAvailableTip", nil)
+}
+
 // UiReviewApply says "Apply update"
 // in the language the app shows.
 //
@@ -4774,6 +4788,34 @@ func (msgs Messages) UiSettingsApiKey() string {
 	return Catalog.Format(msgs.locale, "uiSettingsApiKey", nil)
 }
 
+// UiSettingsAutoCheckUpdate says "Check for updates automatically"
+// in the language the app shows.
+//
+// 设置弹窗开关：自动检查更新。
+func UiSettingsAutoCheckUpdate() string { return In(i18n.Locale()).UiSettingsAutoCheckUpdate() }
+
+// UiSettingsAutoCheckUpdate says "Check for updates automatically"
+// in the language of msgs.
+//
+// 设置弹窗开关：自动检查更新。
+func (msgs Messages) UiSettingsAutoCheckUpdate() string {
+	return Catalog.Format(msgs.locale, "uiSettingsAutoCheckUpdate", nil)
+}
+
+// UiSettingsAutoCheckA11y says "Automatic update checks switch"
+// in the language the app shows.
+//
+// 设置弹窗「自动检查更新」开关的无障碍名。
+func UiSettingsAutoCheckA11y() string { return In(i18n.Locale()).UiSettingsAutoCheckA11y() }
+
+// UiSettingsAutoCheckA11y says "Automatic update checks switch"
+// in the language of msgs.
+//
+// 设置弹窗「自动检查更新」开关的无障碍名。
+func (msgs Messages) UiSettingsAutoCheckA11y() string {
+	return Catalog.Format(msgs.locale, "uiSettingsAutoCheckA11y", nil)
+}
+
 // UiSettingsBaseURL says "API URL"
 // in the language the app shows.
 //
@@ -4944,6 +4986,20 @@ func UiSettingsUnknownTargetLang(fallback string) string {
 // 设置弹窗提示：保存的目标语言无法识别，已重置。
 func (msgs Messages) UiSettingsUnknownTargetLang(fallback string) string {
 	return Catalog.Format(msgs.locale, "uiSettingsUnknownTargetLang", map[string]any{"fallback": fallback})
+}
+
+// UiSettingsUpdateHeading says "Updates"
+// in the language the app shows.
+//
+// 设置弹窗分组标题：更新。
+func UiSettingsUpdateHeading() string { return In(i18n.Locale()).UiSettingsUpdateHeading() }
+
+// UiSettingsUpdateHeading says "Updates"
+// in the language of msgs.
+//
+// 设置弹窗分组标题：更新。
+func (msgs Messages) UiSettingsUpdateHeading() string {
+	return Catalog.Format(msgs.locale, "uiSettingsUpdateHeading", nil)
 }
 
 // UiSourceLocal says "Local"

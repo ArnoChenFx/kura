@@ -65,6 +65,14 @@ func main() {
 		// 它依赖已挂载的更新插件（上面 selfupdate.Install()），测试里的
 		// App 保持 nil，绝不触发真实更新检查。
 		app.SetCheckUpdates(selfupdate.CheckForUpdates)
+		// 「自动检查更新」偏好的读写：真值在插件的 updater.json（默认开），
+		// 界面只经这两个钩子读写，自己不存一份。同样只在生产路径接线。
+		app.SetAutoChecks(selfupdate.AutomaticChecks, selfupdate.SetAutomaticChecks)
+		// 插件每次完成一次自动检查后，kura 自己再查一次，得出「是不是真有新
+		// 版本」并交给界面点亮左栏的小蓝点（SetUpdateFound 能从后台 goroutine
+		// 调用）。插件本身没有这个回调，所以只能这样问一次，见
+		// selfupdate.WatchUpdateFound 的注释。
+		selfupdate.WatchUpdateFound(app.SetUpdateFound)
 		// 应用菜单：关于 kura / 检查更新…（MyGo 更新窗口）/ 退出。
 		// 必须在应用就绪后调用（updater.MenuItem 要读 App.Locale）。
 		selfupdate.AppMenu()

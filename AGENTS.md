@@ -77,7 +77,7 @@ kura 自己的目录：
   - 错误用 `internal/i18n` 的 `NewError` / `Errorf` / `Wrapf` / `WithSentinel`：文字在 `Error()` 时按当前语言现取（后台任务里产生、切语言后才显示的错误也要是新语言的句子），身份由 key 决定（`errors.Is` 跨语言成立）。渲染闭包由调用点传（`i18n.NewError("storeErrSkillExists", func() string { return locales.StoreErrSkillExists(name) })`），参数个数错误在编译期暴露。
   - **不翻译**：用户数据（技能名、描述、路径、URL、`owner/repo`）、语言的自称（`简体中文`、`日本語`…）、markdown 语法字符（`•`/`◦`/表格分隔/标点集合）。
   - 语言：窗口应用由 `mygo.App.Locale()` / `SetLocale()` 决定（`main.go` 启动时 `app.SyncLang()`，用户切换走 `SetLangAsync`；菜单这类「设一次」的文字接 `mygo.App.OnLocaleChanged` 重设）。CLI 没有 MyGo 应用，用 `i18n.Set` 换掉官方 locale func。`~/.kura/config.json` 的 `lang`（`system`|`zh`|`en`）继续有效，经 `store.NormalizeLang` / `i18n.Normalize` 映射成 BCP 47（`zh-Hans`/`en`），其中 `system` 由 kura 自己按系统 locale 解（`internal/ui/app.go` 的 `localeForPref`，判据与 CLI 一致：`zh*` 算中文，其余算英文）——不要把它直接交给 MyGo 的 `SetLocale("")`，繁体系统（`zh-TW`/`zh-Hant`/`zh-HK`）匹配不上 `zh-Hans` 会落到英文。
-  - 守卫：`internal/i18n` 的 `TestNoHardcodedCJK` 拦住非测试 Go 文件里的中文字面量（另有 `internal/ui` 的 `TestUISourceHasNoHardcodedCJK`）；key 完整性、占位符类型与译文由 `go tool mygo i18n check` 保证。改 catalogs 后跑 `go tool mygo generate` 重新生成 `locales/catalog_gen.go`，并跑 `python tools/i18n-migrate/verify_catalog.py` 确认中文/英文措辞没被改（有意删除的 key 在它的 `DELETED` 里登记）。
+  - 守卫：`internal/i18n` 的 `TestNoHardcodedCJK` 拦住非测试 Go 文件里的中文字面量（另有 `internal/ui` 的 `TestUISourceHasNoHardcodedCJK`）；key 完整性、占位符类型与译文由 `go tool mygo i18n check` 保证。改 catalogs 后跑 `go tool mygo generate` 重新生成 `locales/catalog_gen.go`，并跑 `python tools/i18n-migrate/verify_catalog.py` 确认中文/英文措辞没被改（有意删除的 key 在它的 `DELETED` 里登记，新增的 key 在 `ADDED` 里登记）。
 - 错误信息统一以 `store: ` 开头（英文用 `store: `），例如 `store: 未找到该技能` / `store: skill not found`。
 - **错误要能用 `errors.Is` / `errors.As` 判断**；已知可判定的情况导出哨兵错误（如 `ErrUnknownSkill`），不要只返回裸字符串。
 - 路径拼接一律 `filepath.Join`；不用字符串拼。
@@ -104,6 +104,7 @@ kura 自己的目录：
 - **要能选中拷贝的文字放进 `Selectable()` 容器；容器内的控件必须 `Unselectable()`**，否则控件交互与选择打架（见 `detailGroup` 的 `selectable` 参数）。
 - **详情页的「概览 / 全文」tab 用 `myui.Tabs`**，tab 状态 `detailTab` 配 `detailSel`：换技能时重置回概览，避免看到上一个技能的全文。全文页在后台读 `SKILL.md`（`startFullTextLoad`，`spawn` 进 goroutine，按技能名缓存进 `skillDocs`），扫描后缓存整体失效并用 `docGen` 作废在途结果；渲染用 mygo 官方的 `github.com/egoist/mygo/ui/markdown`：`App.md`（`markdown.Options`）跨帧稳定、主题每帧从窗口主题重建，kura 自己只保留 `internal/ui/fulltext.go` 里的两件事（剥掉开头的 YAML frontmatter `stripFrontmatter`、超大源码截断 `capSource`）。
 - **翻译开关只切显示**：`App.trans.on` 为真时，内存里的译文缓存（`translateState.items`，键形如 `card:<技能名>:description`）有值就显示译文、没有就回退原文，**界面永不留白**；发起请求只在 `ensureTranslations` / `TranslateAsync`（后台 + 超时），渲染路径只读缓存。翻译配置变更时 `translateState.epoch` 递增，在途结果作废。
+- **应用自更新的两个界面入口**：设置弹窗里的「自动检查更新」开关的偏好存在**更新器插件的 `updater.json`**（不是 `config.json`），读写只经 `internal/selfupdate` 的 `AutomaticChecks` / `SetAutomaticChecks` 转发、由 `main.go` 经 `app.SetAutoChecks` 注入钩子；左栏「检查更新」按钮右上角的新版本小蓝点由 `selfupdate.WatchUpdateFound`（监听插件 `OnChange` → kura 自己再查一次 `mygo.Updater.Check` → `app.SetUpdateFound` 回主线程）驱动，蓝点用 `Absolute().Top().Right()` + `PassThrough()` 画成按钮的绝对定位子元素，**不改变按钮尺寸、不吃点击**。**测试里绝不直接调 `updater.*` / `mygo.Updater.Check`**：插件未挂载时它们会 panic，一律注入假钩子。
 - 详见 `.agents/skills/mygo-maintenance/SKILL.md`；MyGo 的 API 以**固定版本源码**为准（`go list -m -f '{{.Dir}}' github.com/egoist/mygo`），不要凭记忆猜。
 
 ### CLI 退出码（已固定，不要改）
@@ -127,7 +128,7 @@ kura 自己的目录：
 gofmt -l .                      # 必须为空
 go vet ./...                    # 必须干净
 go tool mygo vet .              # 必须干净
-go tool mygo i18n check         # catalogs 必须无错（421 条消息）
+go tool mygo i18n check         # catalogs 必须无错（425 条消息）
 go test ./...                   # 全包通过
 CGO_ENABLED=0 go test ./...     # 全包通过
 CGO_ENABLED=0 go build ./...    # 成功

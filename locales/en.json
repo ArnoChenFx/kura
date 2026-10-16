@@ -1879,6 +1879,10 @@
   "@uiRailSettingsTip": {
     "description": "左栏按钮提示：翻译 API 与目标语言。"
   },
+  "uiRailUpdateAvailableTip": "A new version of kura is available",
+  "@uiRailUpdateAvailableTip": {
+    "description": "左栏按钮提示：检查到了新版本。"
+  },
   "uiReviewApply": "Apply update",
   "@uiReviewApply": {
     "description": "更新评审面板按钮：应用更新。"
@@ -2041,6 +2045,14 @@
   "@uiSettingsApiKey": {
     "description": "设置弹窗字段名：API 密钥。"
   },
+  "uiSettingsAutoCheckUpdate": "Check for updates automatically",
+  "@uiSettingsAutoCheckUpdate": {
+    "description": "设置弹窗开关：自动检查更新。"
+  },
+  "uiSettingsAutoCheckA11y": "Automatic update checks switch",
+  "@uiSettingsAutoCheckA11y": {
+    "description": "设置弹窗「自动检查更新」开关的无障碍名。"
+  },
   "uiSettingsBaseURL": "API URL",
   "@uiSettingsBaseURL": {
     "description": "设置弹窗字段名：API 地址。"
@@ -2098,6 +2110,10 @@
         "type": "String"
       }
     }
+  },
+  "uiSettingsUpdateHeading": "Updates",
+  "@uiSettingsUpdateHeading": {
+    "description": "设置弹窗分组标题：更新。"
   },
   "uiSourceLocal": "Local",
   "@uiSourceLocal": {

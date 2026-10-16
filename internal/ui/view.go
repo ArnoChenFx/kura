@@ -313,33 +313,83 @@ func themeIndex(mode string) int {
 // 按钮靠右。「检查更新」检查的是 kura 应用自身（区别于技能级的「检查更新」）：点击后
 // 立刻在状态行给一句反馈，更新窗口由 MyGo 插件弹出；经 checkUpdates 钩子走
 // selfupdate.CheckForUpdates，测试里注入假实现，绝不触发真实检查。
+//
+// 后台查到新版本时（a.updateFound，由 selfupdate.WatchUpdateFound 经
+// SetUpdateFound 发布），「检查更新」按钮右上角出现一个小蓝点；悬停提示也换成
+// 一句「有新版本可用」。
 func (a *App) viewRootsFooter(c *myui.Context) {
 	t := c.Theme()
 	myui.Row(c).FillWidth().AlignItems(myui.Center).Gap(t.Space(1)).Children(func() {
 		a.viewThemeSwitch(c)
 		myui.Spacer(c)
-		railButton(c, iconUpdate, locales.UiActionCheckUpdate(), locales.UiRailCheckUpdateTip(), a.checkingUpdate, a.CheckAppUpdateAsync)
-		railButton(c, iconSettings, locales.UiSettingsTitle(), locales.UiRailSettingsTip(), false, a.OpenSettings)
+		tip := railUpdateTip(a.updateFound)
+		// 「检查更新」按钮在后台查到新版本时右上角带一颗小蓝点（a.pal.notify，
+		// Transparent 表示不带）。
+		dot := myui.Transparent
+		if a.updateFound {
+			dot = a.pal.notify
+		}
+		a.railButton(c, iconUpdate, locales.UiActionCheckUpdate(), tip, a.checkingUpdate, dot, a.CheckAppUpdateAsync)
+		a.railButton(c, iconSettings, locales.UiSettingsTitle(), locales.UiRailSettingsTip(), false, myui.Transparent, a.OpenSettings)
 	})
+}
+
+// railUpdateTip 是左栏「检查更新」按钮的悬停提示：平时说明它是检查 kura 应用
+// 自身的更新，后台查到新版本时换成「有新版本可用」。
+func railUpdateTip(found bool) string {
+	if found {
+		return locales.UiRailUpdateAvailableTip()
+	}
+	return locales.UiRailCheckUpdateTip()
 }
 
 // railButton 是左栏底部的图标按钮：无底色，悬停时才出现浅色底，与 ghostButton
 // 同一套样式。label 是按钮的名字（无障碍与测试查找用），tip 是悬停提示，可以
-// 比名字更具体。
-func railButton(c *myui.Context, icon *myui.SVG, label, tip string, disabled bool, onClick func()) {
+// 比名字更具体。dot 不是透明色时在按钮右上角画一颗这种颜色的小圆点（见
+// notifyDot）：它是绝对定位的子元素，不改变按钮的位置与尺寸，也不吃点击。
+//
+// 是 App 的方法而不是自由函数：小圆点的描边要用左栏底色（a.pal.sidebar）
+// 盖住下面的图标。
+func (a *App) railButton(c *myui.Context, icon *myui.SVG, label, tip string, disabled bool, dot myui.Color, onClick func()) {
 	t := c.Theme()
 	b := myui.ButtonBase(c).Label(label).Tooltip(tip).Disabled(disabled).
 		Padding(t.Space(1.75)).Radius(t.Radius).TextColor(t.TextMuted)
-	if b.Hovered() && !disabled {
+	hover := b.Hovered() && !disabled
+	if hover {
 		b.Background(t.SurfaceHover).TextColor(t.Text)
 	}
 	if disabled {
 		b.Opacity(0.45)
 	}
-	b.Children(func() { myui.Icon(c, icon).FontSize(t.FontSize + 2) })
+	b.Children(func() {
+		if dot.A != 0 {
+			// 描边与按钮此刻的底色同色（悬停时是悬停底），否则会露出一圈不对色的边。
+			ring := a.pal.sidebar
+			if hover {
+				ring = t.SurfaceHover
+			}
+			notifyDot(c, dot, ring)
+		}
+		myui.Icon(c, icon).FontSize(t.FontSize + 2)
+	})
 	if b.Clicked() {
 		onClick()
 	}
+}
+
+// notifyDot 是「有新版本」的小蓝点：画在所在按钮的右上角。它摆在按钮的
+// **内边距盒**的右上角（Absolute 的 Top/Right 就相对该盒，按钮没有边框，
+// 所以就是按钮自己的右上角），整个圆点都在按钮里，描边与悬停底因此自洽。
+//
+// 它是绝对定位的子元素，因此不参与父元素的尺寸计算——加上它前后，按钮的矩形
+// 逐像素一致（update_dot_test.go 守着这一点）。PassThrough 让它不吃点击（用户的
+// 点击必须落到按钮上），描一圈与按钮底色同色（ring）的细边把它与下面的图标分开。
+func notifyDot(c *myui.Context, col, ring myui.Color) {
+	// 圆点直径取 2 个间距单位（默认 8px），放在按钮右上角那块空出来的角上：
+	// 图标居中、只占中间的 16px，所以小圆点盖不到它。
+	d := c.Theme().Space(2)
+	myui.Box(c).Key("update-dot").Size(d, d).Radius(d/2).Background(col).
+		Border(1, ring).Absolute().Top(0).Right(0).PassThrough()
 }
 
 // viewThemeSwitch 是左栏底部的外观开关：三个图标分段（跟随系统 / 浅色 / 深色），

@@ -133,6 +133,12 @@ func langCodeFor(label string) string {
 // 清掉旧的错误提示。已存的目标语言认不得时落到默认语言并在弹窗里提示。
 func (a *App) OpenSettings() {
 	s := &a.settingsUI
+	// 「自动检查更新」的真值在插件的 updater.json（用户也能在插件自己的更新
+	// 窗口里、或手改文件改它），所以每次打开弹窗都按钩子现读一次，不拿一个
+	// 可能过时的内存副本。读到什么就是什么，读不到（钩子未接线）就保留原值。
+	if a.autoCheckGet != nil {
+		a.autoCheck = a.autoCheckGet()
+	}
 	*s = settingsState{
 		open:    true,
 		baseURL: a.settings.BaseURL,
@@ -290,6 +296,8 @@ func (a *App) viewSettingsModal(c *myui.Context) {
 			myui.Text(c, locales.UiSettingsSecretNote()).
 				FontSize(t.FontSize - 1).TextColor(t.TextMuted)
 			// 没填全不阻止保存（可能只想先选语言），只提醒翻译暂时用不了。
+			// 它与下面的 s.note / s.err 都是**翻译那一组**的消息，所以要排在
+			// 「更新」分隔线之前：落在分隔线之后就会读成在说自动检查更新。
 			draft := s.settingsDraft()
 			if !draft.Ready() {
 				myui.Text(c, locales.UiSettingsIncomplete()).
@@ -304,6 +312,23 @@ func (a *App) viewSettingsModal(c *myui.Context) {
 					myui.Text(c, s.err).TextColor(t.Danger)
 				})
 			}
+			// 「更新」是另一类偏好（应用自更新，不是翻译），用一条分隔线独立成组：
+			// 组内只有一项——「自动检查更新」。
+			myui.Divider(c).Margin(t.Space(1), 0)
+			myui.Column(c).Gap(t.Space(1.5)).Children(func() {
+				myui.Text(c, locales.UiSettingsUpdateHeading()).FontSize(t.FontSize - 1).TextColor(t.TextMuted)
+				myui.Row(c).FillWidth().AlignItems(myui.Center).Children(func() {
+					myui.Text(c, locales.UiSettingsAutoCheckUpdate()).Grow(1).MinWidth(0)
+					// 「自动检查更新」是即时生效的偏好（同界面语言）：切了就静默写盘，
+					// 不经过「保存」，值存在更新器插件的 updater.json（默认开）。
+					// Changed 返回 true 的那次构建里 on 已是新值（同 viewCard 的
+					// 开关），不要写成构建中途直接比较局部变量。
+					on := a.autoCheck
+					if kuraSwitch(c, &on, a.pal.toggle).Label(locales.UiSettingsAutoCheckA11y()).Changed() {
+						a.SetAutoCheckAsync(on)
+					}
+				})
+			})
 			myui.Row(c).FillWidth().Gap(t.Space(2)).AlignItems(myui.Center).Children(func() {
 				myui.Spacer(c)
 				if myui.Button(c, locales.UiCommonCancel()).Disabled(s.busy).Clicked() {
