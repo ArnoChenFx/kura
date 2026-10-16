@@ -1,7 +1,7 @@
 {
   "name": "kura",
   "identifier": "com.example.kura",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "out": "build",
   "updates": {
     "publicKey": "WK6lXiBuZNwyviV0UUdvekyDCR+BPbLdq3RbbB5vrWY=",
