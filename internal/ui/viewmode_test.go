@@ -280,8 +280,8 @@ func TestListModeStartsFromSavedPreference(t *testing.T) {
 	}
 }
 
-// TestListRowSelectionAndMenu 验证列表行：左键点击选中、右键先选中再弹与卡片
-// 相同的菜单；切换排列模式不丢选中。
+// TestListRowSelectionAndMenu 验证列表行：左键点击选中、右键只弹与卡片相同的
+// 菜单（不改选中）；切换排列模式不丢选中。
 func TestListRowSelectionAndMenu(t *testing.T) {
 	a, _, tt := seedViewApp(t)
 	click(t, a, tt, "列表")
@@ -296,10 +296,15 @@ func TestListRowSelectionAndMenu(t *testing.T) {
 		t.Errorf("点描述应选中 beta，得到 %q", a.selName)
 	}
 
-	// 右键 alpha：先选中，再弹出与卡片相同的菜单。
+	// 右键 alpha：弹出与卡片相同的菜单，选中不动（先回到 beta 再右键，看出
+	// 右键确实没改选中）。
+	click(t, a, tt, "beta")
+	if a.selName != "beta" {
+		t.Fatalf("点 beta 后 selName = %q，想要 beta", a.selName)
+	}
 	items := openMenu(t, a, tt, "alpha")
-	if a.selName != "alpha" {
-		t.Errorf("右键应先选中 alpha，得到 %q", a.selName)
+	if a.selName != "beta" {
+		t.Errorf("右键不该改选中，selName = %q，想要 beta", a.selName)
 	}
 	for _, want := range []string{"打开文件夹", "在文件夹中显示", "打开 SKILL.md", "复制路径", "停用", "移入回收站…"} {
 		found := false
@@ -319,10 +324,10 @@ func TestListRowSelectionAndMenu(t *testing.T) {
 		t.Errorf("右键停用后行上应有「已停用」标签，文本 %v", tt.Texts())
 	}
 
-	// 切回网格：选中不丢，右栏还是 alpha。
+	// 切回网格：选中不丢（仍是左键选的 beta），右栏照旧。
 	click(t, a, tt, "卡片网格")
-	if a.selName != "alpha" || !tt.HasText("关闭详情") {
-		t.Errorf("换排列不应清掉选中：selName=%q", a.selName)
+	if a.selName != "beta" || !tt.HasText("关闭详情") {
+		t.Errorf("换排列不应清掉选中：selName=%q，想要 beta", a.selName)
 	}
 }
 

@@ -34,6 +34,10 @@ DELETED = {
     "ui.markdown.moreLines",
 }
 
+# ADDED 是迁移之后新增的 key（迁移时不存在，所以 keys.json 里没有它们）。
+# 校验时从「新 catalogs 多出的 key」里排除，避免把新功能误报成 EXTRA。
+ADDED = set()
+
 
 def camel(old):
     """旧的点分 key → 新的扁平 camelCase key（与生成物里的函数名同形）。"""
@@ -77,8 +81,8 @@ def main():
             if back != orig:
                 print("DIFF %s %s\n  旧 %r\n  新 %r" % (lang, nk, orig, back))
                 bad += 1
-    # 反向：新 catalogs 里没有多余的 key
-    old_new = {camel(k) for k in keys}
+    # 反向：新 catalogs 里没有多余的 key（迁移后有意新增的见 ADDED）
+    old_new = {camel(k) for k in keys} | ADDED
     for lang, table in (("zh", zh), ("en", en)):
         extra = set(table) - old_new - {"@@locale"}
         for k in sorted(extra):
@@ -86,8 +90,8 @@ def main():
                 continue
             print("EXTRA %s %s" % (lang, k))
             bad += 1
-    print("bad = %d / %d keys（有意删除的 %d 个见 DELETED）"
-          % (bad, len(keys), len(DELETED)))
+    print("bad = %d / %d keys（有意删除 %d 个见 DELETED，新增 %d 个见 ADDED）"
+          % (bad, len(keys), len(DELETED), len(ADDED)))
     return 1 if bad else 0
 
 

@@ -599,7 +599,7 @@ func (a *App) viewList(c *myui.Context, rows []*store.Skill) {
 //	[头像] 名字 · 来源 …… [标签] [开关 / 恢复 / 转圈]
 //	       描述（单行，超出省略）
 //
-// 行为与卡片一致：点击选中、右键先选中再弹同一份菜单；停用与回收站的名字
+// 行为与卡片一致：左键点击选中、右键只弹同一份菜单（不改选中）；停用与回收站的名字
 // 变淡，回收站加删除线并把开关换成「恢复」。行自己画选中与悬停（同一圈边框）。
 func (a *App) viewRow(c *myui.Context, s *store.Skill, selected bool) {
 	t := c.Theme()
@@ -615,15 +615,9 @@ func (a *App) viewRow(c *myui.Context, s *store.Skill, selected bool) {
 		bg, border = a.pal.cardHover, a.pal.lineHover
 	}
 	row.Background(bg).Border(1, border)
-	// 右键先选中这一行：菜单作用的就是右栏正显示的技能（同卡片，放在菜单的
-	// 构建函数里）。
-	row.ContextMenu(func(m *myui.Menu) {
-		if a.selName != s.Name {
-			a.selName = s.Name
-			c.Invalidate()
-		}
-		a.cardMenu(c, m, s)
-	})
+	// 只有左键会选中这一行。右键只弹菜单（同卡片，见 viewCard）：菜单动作以
+	// s 为准，不改选中。
+	row.ContextMenu(func(m *myui.Menu) { a.cardMenu(c, m, s) })
 	row.Children(func() {
 		myui.Column(c).Grow(1).MinWidth(0).Gap(t.Space(1.5)).Children(func() {
 			// 第 1 行：头像、名字、来源、标签 + 右侧控件。
@@ -769,16 +763,10 @@ func (a *App) viewCard(c *myui.Context, s *store.Skill, selected bool) {
 		bg, border = a.pal.cardHover, a.pal.lineHover
 	}
 	card.Background(bg).Border(1, border)
-	// 右键先选中这张卡片：菜单作用的就是右栏正显示的技能。选中放在菜单的构建
-	// 函数里（它只在菜单打开时与选了菜单项后各跑一次），不用 RightClicked：
-	// 那会让卡片变成可点击元素，吞掉网格单元格要收的左键点击。
-	card.ContextMenu(func(m *myui.Menu) {
-		if a.selName != s.Name {
-			a.selName = s.Name
-			c.Invalidate()
-		}
-		a.cardMenu(c, m, s)
-	})
+	// 只有左键会选中这张卡片（走网格单元格的点击，见 viewGrid）。右键只弹这
+	// 张卡片自己的菜单：菜单里的动作都以 s 为准，与右栏在看哪个技能无关，所
+	// 以右键不改选中，右栏保持原样。
+	card.ContextMenu(func(m *myui.Menu) { a.cardMenu(c, m, s) })
 	card.Children(func() {
 		myui.Row(c).FillWidth().Gap(t.Space(3)).AlignItems(myui.Center).Children(func() {
 			avatar(c, a.pal, s.Name, t.Space(9), dim)

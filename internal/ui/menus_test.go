@@ -281,9 +281,11 @@ func TestCardMenuBusyDisablesChanges(t *testing.T) {
 	}
 }
 
-// TestRightClickSelectsCard 验证右键点卡片会先选中它：右栏换成这张卡片的详情，
-// 菜单作用的就是右栏正显示的技能；右键不影响之后的左键点击选择。
-func TestRightClickSelectsCard(t *testing.T) {
+// TestRightClickKeepsSelection 验证右键点卡片只弹这张卡片的菜单：不改选中、
+// 右栏仍是原来那个技能的详情。菜单里的动作都以被右键的技能为准，与右栏在
+// 看哪个技能无关，所以右键换不换选中都不影响菜单的正确性；而「右键顺手换 了
+// 右栏」是意料之外的副作用（用户只是想要菜单），所以不做。
+func TestRightClickKeepsSelection(t *testing.T) {
 	a, cfg := newTestApp(t)
 	seedDescribed(t, cfg, "alpha", "第一个技能的描述", nil)
 	seedDescribed(t, cfg, "beta", "第二个技能的描述", nil)
@@ -293,23 +295,41 @@ func TestRightClickSelectsCard(t *testing.T) {
 	if a.selName != "alpha" {
 		t.Fatalf("selName = %q，想要 alpha", a.selName)
 	}
-	openMenu(t, a, tt, "beta")
-	if a.selName != "beta" {
-		t.Errorf("右键 beta 后 selName = %q，想要 beta", a.selName)
+
+	// 右键 beta：菜单弹出来，但选中与右栏都不动。
+	items := openMenu(t, a, tt, "beta")
+	if a.selName != "alpha" {
+		t.Errorf("右键 beta 后选中不该变，selName = %q，想要 alpha", a.selName)
 	}
-	if got := countText(tt, "第二个技能的描述"); got != 2 {
-		t.Errorf("右栏应换成 beta 的详情，其描述应出现 2 份，得到 %d；文本 %v", got, tt.Texts())
+	for _, want := range []string{"打开文件夹", "复制路径"} {
+		found := false
+		for _, it := range items {
+			if it == want {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("右键 beta 的菜单缺少 %q，菜单 %v", want, items)
+		}
 	}
 	tt.CloseMenu()
 	refresh(a, tt)
-	if a.selName != "beta" {
-		t.Errorf("关掉菜单后选中应保持，selName = %q", a.selName)
+	if a.selName != "alpha" {
+		t.Errorf("关掉菜单后选中仍是 alpha，得到 %q", a.selName)
+	}
+	// beta 的描述只该出现在卡片上（右栏换过去的话会多一份）。
+	if got := countText(tt, "第二个技能的描述"); got != 1 {
+		t.Errorf("右栏不该换成 beta 的详情：其描述出现 %d 次，想要 1（只有卡片）；文本 %v", got, tt.Texts())
+	}
+	// 右栏还是 alpha：位置一行指向 alpha 目录。
+	if !detHasText(tt, filepath.Join(cfg.Root, "alpha")) {
+		t.Errorf("右栏应还是 alpha 的详情；文本 %v", tt.Texts())
 	}
 
-	// 右键之后左键照常选择。
-	click(t, a, tt, "alpha")
-	if a.selName != "alpha" {
-		t.Errorf("右键之后左键点 alpha，selName = %q，想要 alpha", a.selName)
+	// 左键照常选择。
+	click(t, a, tt, "beta")
+	if a.selName != "beta" {
+		t.Errorf("左键点 beta 后 selName = %q，想要 beta", a.selName)
 	}
 }
 
