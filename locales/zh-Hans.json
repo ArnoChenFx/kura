@@ -89,6 +89,44 @@
   "selfupdateAboutVersion": "\n版本 {version}",
   "selfupdateMenuAbout": "关于 kura",
   "selfupdateMenuQuit": "退出 kura",
+  "marketErrBadPage": "market: 页码不能为负数",
+  "@marketErrBadPage": {
+    "description": "错误：请求的榜单页码为负。"
+  },
+  "marketErrDecode": "market: skills.sh 返回的数据格式不对",
+  "@marketErrDecode": {
+    "description": "错误：榜单响应不是预期的 JSON 结构。"
+  },
+  "marketErrRequest": "market: 无法连接 skills.sh",
+  "@marketErrRequest": {
+    "description": "错误：请求榜单失败（网络、超时或读取中断），后面接上具体原因。"
+  },
+  "marketErrStatus": "market: skills.sh 返回 HTTP {status}",
+  "@marketErrStatus": {
+    "description": "错误：榜单接口返回了非 2xx 的状态码。",
+    "placeholders": {
+      "status": {
+        "type": "int",
+        "example": "404"
+      }
+    }
+  },
+  "marketErrTooLarge": "market: skills.sh 返回的数据过大",
+  "@marketErrTooLarge": {
+    "description": "错误：榜单响应超过大小上限（4 MB）。"
+  },
+  "marketErrUnknownView": "market: 未知的榜单",
+  "@marketErrUnknownView": {
+    "description": "错误：请求了不认识的榜单（排序方式）。"
+  },
+  "marketErrBadSource": "market: 来源不是 owner/repo 格式",
+  "@marketErrBadSource": {
+    "description": "错误：技能来源不是 owner/repo 格式，无法读取它的详情。"
+  },
+  "marketErrNoSlug": "market: 这个技能名无法生成链接",
+  "@marketErrNoSlug": {
+    "description": "错误：技能名换不出链接用的 slug（比如全是非英文字符），不发请求。"
+  },
   "storeErrAddOptionsNil": "store: AddOptions 不能为空",
   "storeErrAddSource": "store: LocalPath 与 Repo 必须且只能提供一个",
   "storeErrBadRepo": "store: Repo 格式应为 owner/repo",
@@ -135,6 +173,22 @@
   "storeErrNoDefaultBranch": "store: 远端 {remote} 没有默认分支",
   "storeErrNoDirInRepo": "store: 仓库内不存在目录 {path}",
   "storeErrNoSettings": "store: 尚未保存任何设置",
+  "storeErrNoSkillInRepo": "store: 仓库里没有这个技能",
+  "@storeErrNoSkillInRepo": {
+    "description": "错误（哨兵）：仓库里没有要找的技能。报错处会补上仓库与名字。"
+  },
+  "storeErrNoSkillNamedInRepo": "store: 仓库 {repo} 里没有名为 {name} 的技能",
+  "@storeErrNoSkillNamedInRepo": {
+    "description": "错误：仓库里没有该名字的技能。",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "repo": {
+        "type": "String"
+      }
+    }
+  },
   "storeErrNoSnapshotPath": "store: 找不到可用的快照位置 ({name}/{stamp})，未删除",
   "storeErrNoSubdir": "store: 目录下没有子目录",
   "storeErrNoSuchRef": "store: 远端 {remote} 不存在分支或标签 {ref}",
@@ -211,6 +265,10 @@
   "uiActionCloseDetail": "关闭详情",
   "uiActionImportMeta": "导入元数据",
   "uiActionInstall": "安装技能",
+  "uiActionMarket": "技能市场",
+  "@uiActionMarket": {
+    "description": "按钮（工具栏图标的悬停提示）与市场弹窗的标题：打开技能市场。"
+  },
   "uiActionMoveTrash": "移入回收站",
   "uiActionPurge": "永久删除",
   "uiActionPurgeTooltip": "永久删除回收站里的技能",
@@ -288,6 +346,135 @@
   "uiInstallSubtitle": "安装到 {root}",
   "uiInstallTotal": "共 {count, number, ::group-off} 个技能",
   "uiMarkdownTruncated": "（内容过长，已截断）",
+  "uiMarketBackToBoard": "返回榜单",
+  "@uiMarketBackToBoard": {
+    "description": "技能详情页：返回榜单列表。"
+  },
+  "uiMarketBackToSkills": "返回技能目录",
+  "@uiMarketBackToSkills": {
+    "description": "技能市场页面：返回三栏的本地技能目录。"
+  },
+  "uiMarketDocEmpty": "这个技能没有 SKILL.md。",
+  "@uiMarketDocEmpty": {
+    "description": "技能详情页：快照里没有 SKILL.md。"
+  },
+  "uiMarketDocFailed": "无法读取 SKILL.md：{reason}",
+  "@uiMarketDocFailed": {
+    "description": "技能详情页：读取 SKILL.md 失败，后面接上原因。",
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "uiMarketDocLoading": "正在读取 SKILL.md…",
+  "@uiMarketDocLoading": {
+    "description": "技能详情页：正在读取 SKILL.md。"
+  },
+  "uiMarketEmpty": "这个榜单暂时没有技能。",
+  "@uiMarketEmpty": {
+    "description": "技能市场弹窗：榜单读取成功但没有条目。"
+  },
+  "uiMarketFiles": "{count, number} 个文件",
+  "@uiMarketFiles": {
+    "description": "技能详情页：快照里的文件数量。",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "12"
+      }
+    }
+  },
+  "uiMarketInstall": "安装",
+  "@uiMarketInstall": {
+    "description": "技能市场弹窗：列表行上的安装按钮。"
+  },
+  "uiMarketInstalled": "已安装",
+  "@uiMarketInstalled": {
+    "description": "技能市场弹窗：当前目录里已有同名启用中的技能，列表行上的标记（按钮不可点）。"
+  },
+  "uiMarketInstalling": "正在安装 {name}…",
+  "@uiMarketInstalling": {
+    "description": "状态行：正在从技能市场安装某个技能。",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "uiMarketInstalls": "{count, number} 次安装",
+  "@uiMarketInstalls": {
+    "description": "技能市场弹窗：列表行上的安装次数。",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "1234"
+      }
+    }
+  },
+  "uiMarketLoadFailed": "无法加载榜单：{reason}",
+  "@uiMarketLoadFailed": {
+    "description": "技能市场弹窗：榜单读取失败，后面接上原因。",
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "uiMarketLoadMore": "加载更多",
+  "@uiMarketLoadMore": {
+    "description": "技能市场弹窗：读取榜单的下一页。"
+  },
+  "uiMarketLoading": "加载中…",
+  "@uiMarketLoading": {
+    "description": "技能市场弹窗：正在读取榜单。"
+  },
+  "uiMarketNote": "榜单来自 skills.sh；安装时从技能所在的 GitHub 仓库下载。",
+  "@uiMarketNote": {
+    "description": "技能市场弹窗底部的来源说明。"
+  },
+  "uiMarketOpenFailed": "无法打开链接：{reason}",
+  "@uiMarketOpenFailed": {
+    "description": "技能市场：打开外部链接失败，后面接上原因。",
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "uiMarketRetry": "重试",
+  "@uiMarketRetry": {
+    "description": "技能市场弹窗：榜单读取失败后的重试按钮。"
+  },
+  "uiMarketSubtitle": "安装到 {root}",
+  "@uiMarketSubtitle": {
+    "description": "技能市场弹窗副标题：安装的目标技能目录。",
+    "placeholders": {
+      "root": {
+        "type": "String"
+      }
+    }
+  },
+  "uiMarketViewAllTime": "总榜",
+  "@uiMarketViewAllTime": {
+    "description": "技能市场弹窗的分段：总榜（按累计安装量）。"
+  },
+  "uiMarketViewGitHub": "在 GitHub 上查看",
+  "@uiMarketViewGitHub": {
+    "description": "技能详情页：打开来源仓库的 GitHub 页面。"
+  },
+  "uiMarketViewHot": "热度",
+  "@uiMarketViewHot": {
+    "description": "技能市场弹窗的分段：热度榜。"
+  },
+  "uiMarketViewSkillsSh": "在 skills.sh 上查看",
+  "@uiMarketViewSkillsSh": {
+    "description": "技能详情页：打开 skills.sh 上该技能的页面。"
+  },
+  "uiMarketViewTrending": "趋势",
+  "@uiMarketViewTrending": {
+    "description": "技能市场弹窗的分段：趋势榜。"
+  },
   "uiMenuCopyPath": "复制路径",
   "uiMenuDisable": "停用",
   "uiMenuEnable": "启用",

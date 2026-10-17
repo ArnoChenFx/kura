@@ -18,6 +18,7 @@ import (
 	"sync/atomic"
 
 	"github.com/ArnoChenFx/kura/internal/i18n"
+	"github.com/ArnoChenFx/kura/internal/market"
 	"github.com/ArnoChenFx/kura/internal/store"
 	"github.com/ArnoChenFx/kura/locales"
 	"github.com/egoist/mygo"
@@ -137,6 +138,15 @@ type App struct {
 	setLocale func(pref string)
 	review    reviewState // 更新评审面板（Modal）
 
+	// 技能市场（skills.sh 的榜单，见 market.go）：页面状态，以及读取榜单与快照的函数。
+	// marketFetch 生产环境是 market.Client.List；测试注入假实现，绝不联网。
+	market         marketState
+	marketFetch    func(ctx context.Context, v market.View, page int) (market.Page, error)
+	marketDocFetch func(ctx context.Context, source, name string) (market.Document, error)
+	// openURL 用系统浏览器打开外部链接（技能详情页的两个链接），同样只在后台调用；
+	// 测试里换成记录用的假实现。
+	openURL func(url string) error
+
 	// 翻译设置与译文（翻译只用于界面显示，绝不写技能目录，见 translate.go）。
 	// settings 是 ~/.kura/settings.json 的内存副本：只在 UI 线程写，写时持
 	// settingsMu。翻译任务在 UI 线程发起时拷走一份传给 translate，后台
@@ -203,6 +213,10 @@ func NewApp(cfg *store.Config) *App {
 	a.translate = func(ctx context.Context, s store.Settings, text string) (string, error) {
 		return s.Translate(ctx, text)
 	}
+	marketClient := market.New(market.DefaultBaseURL)
+	a.marketFetch = marketClient.List
+	a.marketDocFetch = marketClient.Document
+	a.openURL = mygo.Shell.OpenExternal
 	a.grid.Selected = &a.selIdx
 	a.grid.Key = func(i int) any {
 		if i < len(a.shown) {

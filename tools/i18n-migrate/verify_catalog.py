@@ -46,6 +46,44 @@ ADDED = {
     # 设置弹窗「自动检查更新」开关的无障碍名（标签文字与开关同名，测试与
     # 无障碍查找要一个独立的名字）。
     "uiSettingsAutoCheckA11y",
+    # 技能市场（skills.sh 榜单）：读取失败、请求、解析与参数错误的文字（internal/market）。
+    "marketErrBadPage",
+    "marketErrDecode",
+    "marketErrRequest",
+    "marketErrStatus",
+    "marketErrTooLarge",
+    "marketErrUnknownView",
+    # 技能市场安装：仓库里没有该名字的技能（哨兵与带仓库、名字的整句）。
+    "storeErrNoSkillInRepo",
+    "storeErrNoSkillNamedInRepo",
+    # 技能市场弹窗与工具栏入口的界面文案。
+    "uiActionMarket",
+    "uiMarketEmpty",
+    "uiMarketInstall",
+    "uiMarketInstalled",
+    "uiMarketInstalling",
+    "uiMarketInstalls",
+    "uiMarketLoadFailed",
+    "uiMarketLoadMore",
+    "uiMarketLoading",
+    "uiMarketNote",
+    "uiMarketRetry",
+    "uiMarketSubtitle",
+    "uiMarketViewAllTime",
+    "uiMarketViewHot",
+    "uiMarketViewTrending",
+    # 技能市场详情页：快照读取、链接与返回按钮的文字，以及快照与链接的错误。
+    "marketErrBadSource",
+    "marketErrNoSlug",
+    "uiMarketBackToBoard",
+    "uiMarketBackToSkills",
+    "uiMarketDocEmpty",
+    "uiMarketDocFailed",
+    "uiMarketDocLoading",
+    "uiMarketFiles",
+    "uiMarketOpenFailed",
+    "uiMarketViewGitHub",
+    "uiMarketViewSkillsSh",
 }
 
 

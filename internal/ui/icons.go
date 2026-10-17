@@ -43,6 +43,12 @@ var (
 	// iconInbox（lucide inbox）：未选中技能时的空态插图。
 	iconInbox = myui.MustParseSVG(svgIcon(
 		`<polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>`))
+	// iconArrowLeft（lucide arrow-left）：技能市场页面的「返回」按钮。
+	iconArrowLeft = myui.MustParseSVG(svgIcon(
+		`<path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>`))
+	// iconGlobe（lucide globe）：工具栏的「技能市场」图标按钮（skills.sh 榜单）。
+	iconGlobe = myui.MustParseSVG(svgIcon(
+		`<circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/>`))
 	// iconFolder（lucide folder）：技能根目录路径旁的位置图标。
 	iconFolder = myui.MustParseSVG(svgIcon(
 		`<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>`))
