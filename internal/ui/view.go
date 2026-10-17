@@ -81,7 +81,7 @@ func (a *App) View(c *myui.Context) {
 	sel := a.selected()
 	// 译文模式下为选中的技能发起描述翻译（受缓存占位保护，同一原文只发一次；
 	// 请求在后台，这里只读状态，见 translate.go）。
-	a.ensureTranslations(sel)
+	a.ensureCurrentTranslations()
 
 	a.viewTitlebar(c)
 	// 三栏占满标题栏以下的剩余高度；标题栏自身不参与收缩（见 viewTitlebar）。
@@ -92,22 +92,27 @@ func (a *App) View(c *myui.Context) {
 	a.bodyW, _ = c.Size()
 	a.rootsEff, a.detailEff = fitWidths(a.bodyW, a.rootsW, a.detailW, sel != nil)
 	rootsHi, detailHi := a.widthLimits(sel != nil)
-	body := myui.Row(c).Key("body").Grow(1).MinHeight(0).AlignItems(myui.Stretch)
-	body.Children(func() {
-		a.viewRoots(c)
-		a.viewGrip(c, &a.rootsW, a.rootsEff, 1, rootsMinW, rootsHi)
-		myui.Column(c).Grow(1).MinWidth(0).FillHeight().Background(a.pal.canvas).Children(func() {
-			a.viewMainHeader(c)
-			a.viewFilterBar(c)
-			a.viewErrorBanner(c)
-			a.viewSkills(c, rows)
-			a.viewStatusBar(c)
+	if a.market.screen != marketNone {
+		// 技能市场页面替换三栏的内容区（标题栏仍在，见 market.go）。
+		a.viewMarketPage(c)
+	} else {
+		body := myui.Row(c).Key("body").Grow(1).MinHeight(0).AlignItems(myui.Stretch)
+		body.Children(func() {
+			a.viewRoots(c)
+			a.viewGrip(c, &a.rootsW, a.rootsEff, 1, rootsMinW, rootsHi)
+			myui.Column(c).Grow(1).MinWidth(0).FillHeight().Background(a.pal.canvas).Children(func() {
+				a.viewMainHeader(c)
+				a.viewFilterBar(c)
+				a.viewErrorBanner(c)
+				a.viewSkills(c, rows)
+				a.viewStatusBar(c)
+			})
+			if sel != nil {
+				a.viewGrip(c, &a.detailW, a.detailEff, -1, detailMinW, detailHi)
+				a.viewDetail(c, sel)
+			}
 		})
-		if sel != nil {
-			a.viewGrip(c, &a.detailW, a.detailEff, -1, detailMinW, detailHi)
-			a.viewDetail(c, sel)
-		}
-	})
+	}
 
 	// 「移入回收站」与「永久删除」共用一个确认框；最后一个按钮是默认按钮（回车触发），
 	// Escape 或点按钮后 *open 置 false。
@@ -523,6 +528,8 @@ func (a *App) viewMainHeader(c *myui.Context) {
 		} else {
 			ghostButton(c, iconUnlink, locales.UiActionRemoveRoot(), false, func() { a.RemoveRootAsync(a.cfg.Root) })
 		}
+		// 技能市场（skills.sh 的榜单）：打开后替换三栏的内容区，见 market.go。
+		ghostButton(c, iconGlobe, locales.UiActionMarket(), false, a.OpenMarket)
 		myui.Box(c).Width(t.Space(2))
 		ib := myui.PrimaryButton(c, "").Label(locales.UiActionInstall())
 		ib.Children(func() {

@@ -1320,6 +1320,122 @@ func (msgs Messages) SelfupdateMenuQuit() string {
 	return Catalog.Format(msgs.locale, "selfupdateMenuQuit", nil)
 }
 
+// MarketErrBadPage says "market: page must not be negative"
+// in the language the app shows.
+//
+// 错误：请求的榜单页码为负。
+func MarketErrBadPage() string { return In(i18n.Locale()).MarketErrBadPage() }
+
+// MarketErrBadPage says "market: page must not be negative"
+// in the language of msgs.
+//
+// 错误：请求的榜单页码为负。
+func (msgs Messages) MarketErrBadPage() string {
+	return Catalog.Format(msgs.locale, "marketErrBadPage", nil)
+}
+
+// MarketErrDecode says "market: unexpected data from skills.sh"
+// in the language the app shows.
+//
+// 错误：榜单响应不是预期的 JSON 结构。
+func MarketErrDecode() string { return In(i18n.Locale()).MarketErrDecode() }
+
+// MarketErrDecode says "market: unexpected data from skills.sh"
+// in the language of msgs.
+//
+// 错误：榜单响应不是预期的 JSON 结构。
+func (msgs Messages) MarketErrDecode() string {
+	return Catalog.Format(msgs.locale, "marketErrDecode", nil)
+}
+
+// MarketErrRequest says "market: could not reach skills.sh"
+// in the language the app shows.
+//
+// 错误：请求榜单失败（网络、超时或读取中断），后面接上具体原因。
+func MarketErrRequest() string { return In(i18n.Locale()).MarketErrRequest() }
+
+// MarketErrRequest says "market: could not reach skills.sh"
+// in the language of msgs.
+//
+// 错误：请求榜单失败（网络、超时或读取中断），后面接上具体原因。
+func (msgs Messages) MarketErrRequest() string {
+	return Catalog.Format(msgs.locale, "marketErrRequest", nil)
+}
+
+// MarketErrStatus says "market: skills.sh responded with HTTP {status}"
+// in the language the app shows.
+//
+// 错误：榜单接口返回了非 2xx 的状态码。
+func MarketErrStatus(status int) string { return In(i18n.Locale()).MarketErrStatus(status) }
+
+// MarketErrStatus says "market: skills.sh responded with HTTP {status}"
+// in the language of msgs.
+//
+// 错误：榜单接口返回了非 2xx 的状态码。
+func (msgs Messages) MarketErrStatus(status int) string {
+	return Catalog.Format(msgs.locale, "marketErrStatus", map[string]any{"status": status})
+}
+
+// MarketErrTooLarge says "market: the response from skills.sh is too large"
+// in the language the app shows.
+//
+// 错误：榜单响应超过大小上限（4 MB）。
+func MarketErrTooLarge() string { return In(i18n.Locale()).MarketErrTooLarge() }
+
+// MarketErrTooLarge says "market: the response from skills.sh is too large"
+// in the language of msgs.
+//
+// 错误：榜单响应超过大小上限（4 MB）。
+func (msgs Messages) MarketErrTooLarge() string {
+	return Catalog.Format(msgs.locale, "marketErrTooLarge", nil)
+}
+
+// MarketErrUnknownView says "market: unknown board"
+// in the language the app shows.
+//
+// 错误：请求了不认识的榜单（排序方式）。
+func MarketErrUnknownView() string { return In(i18n.Locale()).MarketErrUnknownView() }
+
+// MarketErrUnknownView says "market: unknown board"
+// in the language of msgs.
+//
+// 错误：请求了不认识的榜单（排序方式）。
+func (msgs Messages) MarketErrUnknownView() string {
+	return Catalog.Format(msgs.locale, "marketErrUnknownView", nil)
+}
+
+// MarketErrBadSource says "market: not an owner/repo source"
+// in the language the app shows.
+//
+// 错误：技能来源不是 owner/repo
+// 格式，无法读取它的详情。
+func MarketErrBadSource() string { return In(i18n.Locale()).MarketErrBadSource() }
+
+// MarketErrBadSource says "market: not an owner/repo source"
+// in the language of msgs.
+//
+// 错误：技能来源不是 owner/repo
+// 格式，无法读取它的详情。
+func (msgs Messages) MarketErrBadSource() string {
+	return Catalog.Format(msgs.locale, "marketErrBadSource", nil)
+}
+
+// MarketErrNoSlug says "market: this skill name has no usable link"
+// in the language the app shows.
+//
+// 错误：技能名换不出链接用的
+// slug（比如全是非英文字符），不发请求。
+func MarketErrNoSlug() string { return In(i18n.Locale()).MarketErrNoSlug() }
+
+// MarketErrNoSlug says "market: this skill name has no usable link"
+// in the language of msgs.
+//
+// 错误：技能名换不出链接用的
+// slug（比如全是非英文字符），不发请求。
+func (msgs Messages) MarketErrNoSlug() string {
+	return Catalog.Format(msgs.locale, "marketErrNoSlug", nil)
+}
+
 // StoreErrAddOptionsNil says "store: AddOptions must not be nil"
 // in the language the app shows.
 //
@@ -1994,6 +2110,36 @@ func StoreErrNoSettings() string { return In(i18n.Locale()).StoreErrNoSettings()
 // 错误：尚未保存任何设置。
 func (msgs Messages) StoreErrNoSettings() string {
 	return Catalog.Format(msgs.locale, "storeErrNoSettings", nil)
+}
+
+// StoreErrNoSkillInRepo says "store: the repository has no such skill"
+// in the language the app shows.
+//
+// 错误（哨兵）：仓库里没有要找的技能。报错处会补上仓库与名字。
+func StoreErrNoSkillInRepo() string { return In(i18n.Locale()).StoreErrNoSkillInRepo() }
+
+// StoreErrNoSkillInRepo says "store: the repository has no such skill"
+// in the language of msgs.
+//
+// 错误（哨兵）：仓库里没有要找的技能。报错处会补上仓库与名字。
+func (msgs Messages) StoreErrNoSkillInRepo() string {
+	return Catalog.Format(msgs.locale, "storeErrNoSkillInRepo", nil)
+}
+
+// StoreErrNoSkillNamedInRepo says "store: no skill named {name} in {repo}"
+// in the language the app shows.
+//
+// 错误：仓库里没有该名字的技能。
+func StoreErrNoSkillNamedInRepo(name string, repo string) string {
+	return In(i18n.Locale()).StoreErrNoSkillNamedInRepo(name, repo)
+}
+
+// StoreErrNoSkillNamedInRepo says "store: no skill named {name} in {repo}"
+// in the language of msgs.
+//
+// 错误：仓库里没有该名字的技能。
+func (msgs Messages) StoreErrNoSkillNamedInRepo(name string, repo string) string {
+	return Catalog.Format(msgs.locale, "storeErrNoSkillNamedInRepo", map[string]any{"name": name, "repo": repo})
 }
 
 // StoreErrNoSnapshotPath says "store: no free snapshot path ({name}/{stamp}), nothing deleted"
@@ -3096,6 +3242,20 @@ func (msgs Messages) UiActionInstall() string {
 	return Catalog.Format(msgs.locale, "uiActionInstall", nil)
 }
 
+// UiActionMarket says "Skill market"
+// in the language the app shows.
+//
+// 按钮（工具栏图标的悬停提示）与市场弹窗的标题：打开技能市场。
+func UiActionMarket() string { return In(i18n.Locale()).UiActionMarket() }
+
+// UiActionMarket says "Skill market"
+// in the language of msgs.
+//
+// 按钮（工具栏图标的悬停提示）与市场弹窗的标题：打开技能市场。
+func (msgs Messages) UiActionMarket() string {
+	return Catalog.Format(msgs.locale, "uiActionMarket", nil)
+}
+
 // UiActionMoveTrash says "Move to trash"
 // in the language the app shows.
 //
@@ -4178,6 +4338,328 @@ func UiMarkdownTruncated() string { return In(i18n.Locale()).UiMarkdownTruncated
 // 全文页提示：内容过长已截断。
 func (msgs Messages) UiMarkdownTruncated() string {
 	return Catalog.Format(msgs.locale, "uiMarkdownTruncated", nil)
+}
+
+// UiMarketBackToBoard says "Back to rankings"
+// in the language the app shows.
+//
+// 技能详情页：返回榜单列表。
+func UiMarketBackToBoard() string { return In(i18n.Locale()).UiMarketBackToBoard() }
+
+// UiMarketBackToBoard says "Back to rankings"
+// in the language of msgs.
+//
+// 技能详情页：返回榜单列表。
+func (msgs Messages) UiMarketBackToBoard() string {
+	return Catalog.Format(msgs.locale, "uiMarketBackToBoard", nil)
+}
+
+// UiMarketBackToSkills says "Back to skills"
+// in the language the app shows.
+//
+// 技能市场页面：返回三栏的本地技能目录。
+func UiMarketBackToSkills() string { return In(i18n.Locale()).UiMarketBackToSkills() }
+
+// UiMarketBackToSkills says "Back to skills"
+// in the language of msgs.
+//
+// 技能市场页面：返回三栏的本地技能目录。
+func (msgs Messages) UiMarketBackToSkills() string {
+	return Catalog.Format(msgs.locale, "uiMarketBackToSkills", nil)
+}
+
+// UiMarketDocEmpty says "This skill has no SKILL.md."
+// in the language the app shows.
+//
+// 技能详情页：快照里没有 SKILL.md。
+func UiMarketDocEmpty() string { return In(i18n.Locale()).UiMarketDocEmpty() }
+
+// UiMarketDocEmpty says "This skill has no SKILL.md."
+// in the language of msgs.
+//
+// 技能详情页：快照里没有 SKILL.md。
+func (msgs Messages) UiMarketDocEmpty() string {
+	return Catalog.Format(msgs.locale, "uiMarketDocEmpty", nil)
+}
+
+// UiMarketDocFailed says "Could not load SKILL.md: {reason}"
+// in the language the app shows.
+//
+// 技能详情页：读取 SKILL.md 失败，后面接上原因。
+func UiMarketDocFailed(reason string) string { return In(i18n.Locale()).UiMarketDocFailed(reason) }
+
+// UiMarketDocFailed says "Could not load SKILL.md: {reason}"
+// in the language of msgs.
+//
+// 技能详情页：读取 SKILL.md 失败，后面接上原因。
+func (msgs Messages) UiMarketDocFailed(reason string) string {
+	return Catalog.Format(msgs.locale, "uiMarketDocFailed", map[string]any{"reason": reason})
+}
+
+// UiMarketDocLoading says "Loading SKILL.md…"
+// in the language the app shows.
+//
+// 技能详情页：正在读取 SKILL.md。
+func UiMarketDocLoading() string { return In(i18n.Locale()).UiMarketDocLoading() }
+
+// UiMarketDocLoading says "Loading SKILL.md…"
+// in the language of msgs.
+//
+// 技能详情页：正在读取 SKILL.md。
+func (msgs Messages) UiMarketDocLoading() string {
+	return Catalog.Format(msgs.locale, "uiMarketDocLoading", nil)
+}
+
+// UiMarketEmpty says "No skills on this board yet."
+// in the language the app shows.
+//
+// 技能市场弹窗：榜单读取成功但没有条目。
+func UiMarketEmpty() string { return In(i18n.Locale()).UiMarketEmpty() }
+
+// UiMarketEmpty says "No skills on this board yet."
+// in the language of msgs.
+//
+// 技能市场弹窗：榜单读取成功但没有条目。
+func (msgs Messages) UiMarketEmpty() string {
+	return Catalog.Format(msgs.locale, "uiMarketEmpty", nil)
+}
+
+// UiMarketFiles says "{count, number} files"
+// in the language the app shows.
+//
+// 技能详情页：快照里的文件数量。
+func UiMarketFiles(count int) string { return In(i18n.Locale()).UiMarketFiles(count) }
+
+// UiMarketFiles says "{count, number} files"
+// in the language of msgs.
+//
+// 技能详情页：快照里的文件数量。
+func (msgs Messages) UiMarketFiles(count int) string {
+	return Catalog.Format(msgs.locale, "uiMarketFiles", map[string]any{"count": count})
+}
+
+// UiMarketInstall says "Install"
+// in the language the app shows.
+//
+// 技能市场弹窗：列表行上的安装按钮。
+func UiMarketInstall() string { return In(i18n.Locale()).UiMarketInstall() }
+
+// UiMarketInstall says "Install"
+// in the language of msgs.
+//
+// 技能市场弹窗：列表行上的安装按钮。
+func (msgs Messages) UiMarketInstall() string {
+	return Catalog.Format(msgs.locale, "uiMarketInstall", nil)
+}
+
+// UiMarketInstalled says "Installed"
+// in the language the app shows.
+//
+// 技能市场弹窗：当前目录里已有同名启用中的技能，列表行上的标记（按钮不可点）。
+func UiMarketInstalled() string { return In(i18n.Locale()).UiMarketInstalled() }
+
+// UiMarketInstalled says "Installed"
+// in the language of msgs.
+//
+// 技能市场弹窗：当前目录里已有同名启用中的技能，列表行上的标记（按钮不可点）。
+func (msgs Messages) UiMarketInstalled() string {
+	return Catalog.Format(msgs.locale, "uiMarketInstalled", nil)
+}
+
+// UiMarketInstalling says "Installing {name}…"
+// in the language the app shows.
+//
+// 状态行：正在从技能市场安装某个技能。
+func UiMarketInstalling(name string) string { return In(i18n.Locale()).UiMarketInstalling(name) }
+
+// UiMarketInstalling says "Installing {name}…"
+// in the language of msgs.
+//
+// 状态行：正在从技能市场安装某个技能。
+func (msgs Messages) UiMarketInstalling(name string) string {
+	return Catalog.Format(msgs.locale, "uiMarketInstalling", map[string]any{"name": name})
+}
+
+// UiMarketInstalls says "{count, number} installs"
+// in the language the app shows.
+//
+// 技能市场弹窗：列表行上的安装次数。
+func UiMarketInstalls(count int) string { return In(i18n.Locale()).UiMarketInstalls(count) }
+
+// UiMarketInstalls says "{count, number} installs"
+// in the language of msgs.
+//
+// 技能市场弹窗：列表行上的安装次数。
+func (msgs Messages) UiMarketInstalls(count int) string {
+	return Catalog.Format(msgs.locale, "uiMarketInstalls", map[string]any{"count": count})
+}
+
+// UiMarketLoadFailed says "Could not load the board: {reason}"
+// in the language the app shows.
+//
+// 技能市场弹窗：榜单读取失败，后面接上原因。
+func UiMarketLoadFailed(reason string) string { return In(i18n.Locale()).UiMarketLoadFailed(reason) }
+
+// UiMarketLoadFailed says "Could not load the board: {reason}"
+// in the language of msgs.
+//
+// 技能市场弹窗：榜单读取失败，后面接上原因。
+func (msgs Messages) UiMarketLoadFailed(reason string) string {
+	return Catalog.Format(msgs.locale, "uiMarketLoadFailed", map[string]any{"reason": reason})
+}
+
+// UiMarketLoadMore says "Load more"
+// in the language the app shows.
+//
+// 技能市场弹窗：读取榜单的下一页。
+func UiMarketLoadMore() string { return In(i18n.Locale()).UiMarketLoadMore() }
+
+// UiMarketLoadMore says "Load more"
+// in the language of msgs.
+//
+// 技能市场弹窗：读取榜单的下一页。
+func (msgs Messages) UiMarketLoadMore() string {
+	return Catalog.Format(msgs.locale, "uiMarketLoadMore", nil)
+}
+
+// UiMarketLoading says "Loading…"
+// in the language the app shows.
+//
+// 技能市场弹窗：正在读取榜单。
+func UiMarketLoading() string { return In(i18n.Locale()).UiMarketLoading() }
+
+// UiMarketLoading says "Loading…"
+// in the language of msgs.
+//
+// 技能市场弹窗：正在读取榜单。
+func (msgs Messages) UiMarketLoading() string {
+	return Catalog.Format(msgs.locale, "uiMarketLoading", nil)
+}
+
+// UiMarketNote says "Rankings come from skills.sh. Installing downloads the skill from its GitHub repository."
+// in the language the app shows.
+//
+// 技能市场弹窗底部的来源说明。
+func UiMarketNote() string { return In(i18n.Locale()).UiMarketNote() }
+
+// UiMarketNote says "Rankings come from skills.sh. Installing downloads the skill from its GitHub repository."
+// in the language of msgs.
+//
+// 技能市场弹窗底部的来源说明。
+func (msgs Messages) UiMarketNote() string {
+	return Catalog.Format(msgs.locale, "uiMarketNote", nil)
+}
+
+// UiMarketOpenFailed says "Could not open the link: {reason}"
+// in the language the app shows.
+//
+// 技能市场：打开外部链接失败，后面接上原因。
+func UiMarketOpenFailed(reason string) string { return In(i18n.Locale()).UiMarketOpenFailed(reason) }
+
+// UiMarketOpenFailed says "Could not open the link: {reason}"
+// in the language of msgs.
+//
+// 技能市场：打开外部链接失败，后面接上原因。
+func (msgs Messages) UiMarketOpenFailed(reason string) string {
+	return Catalog.Format(msgs.locale, "uiMarketOpenFailed", map[string]any{"reason": reason})
+}
+
+// UiMarketRetry says "Retry"
+// in the language the app shows.
+//
+// 技能市场弹窗：榜单读取失败后的重试按钮。
+func UiMarketRetry() string { return In(i18n.Locale()).UiMarketRetry() }
+
+// UiMarketRetry says "Retry"
+// in the language of msgs.
+//
+// 技能市场弹窗：榜单读取失败后的重试按钮。
+func (msgs Messages) UiMarketRetry() string {
+	return Catalog.Format(msgs.locale, "uiMarketRetry", nil)
+}
+
+// UiMarketSubtitle says "Install into {root}"
+// in the language the app shows.
+//
+// 技能市场弹窗副标题：安装的目标技能目录。
+func UiMarketSubtitle(root string) string { return In(i18n.Locale()).UiMarketSubtitle(root) }
+
+// UiMarketSubtitle says "Install into {root}"
+// in the language of msgs.
+//
+// 技能市场弹窗副标题：安装的目标技能目录。
+func (msgs Messages) UiMarketSubtitle(root string) string {
+	return Catalog.Format(msgs.locale, "uiMarketSubtitle", map[string]any{"root": root})
+}
+
+// UiMarketViewAllTime says "All time"
+// in the language the app shows.
+//
+// 技能市场弹窗的分段：总榜（按累计安装量）。
+func UiMarketViewAllTime() string { return In(i18n.Locale()).UiMarketViewAllTime() }
+
+// UiMarketViewAllTime says "All time"
+// in the language of msgs.
+//
+// 技能市场弹窗的分段：总榜（按累计安装量）。
+func (msgs Messages) UiMarketViewAllTime() string {
+	return Catalog.Format(msgs.locale, "uiMarketViewAllTime", nil)
+}
+
+// UiMarketViewGitHub says "View on GitHub"
+// in the language the app shows.
+//
+// 技能详情页：打开来源仓库的 GitHub 页面。
+func UiMarketViewGitHub() string { return In(i18n.Locale()).UiMarketViewGitHub() }
+
+// UiMarketViewGitHub says "View on GitHub"
+// in the language of msgs.
+//
+// 技能详情页：打开来源仓库的 GitHub 页面。
+func (msgs Messages) UiMarketViewGitHub() string {
+	return Catalog.Format(msgs.locale, "uiMarketViewGitHub", nil)
+}
+
+// UiMarketViewHot says "Hot"
+// in the language the app shows.
+//
+// 技能市场弹窗的分段：热度榜。
+func UiMarketViewHot() string { return In(i18n.Locale()).UiMarketViewHot() }
+
+// UiMarketViewHot says "Hot"
+// in the language of msgs.
+//
+// 技能市场弹窗的分段：热度榜。
+func (msgs Messages) UiMarketViewHot() string {
+	return Catalog.Format(msgs.locale, "uiMarketViewHot", nil)
+}
+
+// UiMarketViewSkillsSh says "View on skills.sh"
+// in the language the app shows.
+//
+// 技能详情页：打开 skills.sh 上该技能的页面。
+func UiMarketViewSkillsSh() string { return In(i18n.Locale()).UiMarketViewSkillsSh() }
+
+// UiMarketViewSkillsSh says "View on skills.sh"
+// in the language of msgs.
+//
+// 技能详情页：打开 skills.sh 上该技能的页面。
+func (msgs Messages) UiMarketViewSkillsSh() string {
+	return Catalog.Format(msgs.locale, "uiMarketViewSkillsSh", nil)
+}
+
+// UiMarketViewTrending says "Trending"
+// in the language the app shows.
+//
+// 技能市场弹窗的分段：趋势榜。
+func UiMarketViewTrending() string { return In(i18n.Locale()).UiMarketViewTrending() }
+
+// UiMarketViewTrending says "Trending"
+// in the language of msgs.
+//
+// 技能市场弹窗的分段：趋势榜。
+func (msgs Messages) UiMarketViewTrending() string {
+	return Catalog.Format(msgs.locale, "uiMarketViewTrending", nil)
 }
 
 // UiMenuCopyPath says "Copy path"

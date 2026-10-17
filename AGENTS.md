@@ -22,7 +22,8 @@ kura 是一个**桌面技能管理器**，用 [MyGo](https://github.com/egoist/m
 | --- | --- | --- |
 | `internal/store` | 核心领域逻辑：扫描、元数据、哈希、启用/停用/移除/恢复/添加/更新/预览更新、多根目录（`Library`） | **不依赖 UI，不依赖 CLI** |
 | `internal/cli` | 无界面命令行入口（`cmd/kura`） | 不依赖 UI；`Run()` 返回退出码，绝不 `os.Exit` |
-| `internal/ui` | MyGo 原生窗口：三栏（技能目录 / 卡片网格 / 详情）、搜索与筛选、开关、安装弹窗、更新预览弹窗 | 不直接做磁盘 I/O，一律经 `internal/store` |
+| `internal/market` | 读 skills.sh 的榜单与技能快照（公开 JSON 接口，只读、不要密钥） | **不碰磁盘、不依赖 UI**；解析从宽（坏记录跳过、整页结构不对才报错） |
+| `internal/ui` | MyGo 原生窗口：三栏（技能目录 / 卡片网格 / 详情）、技能市场页面、搜索与筛选、开关、安装弹窗、更新预览弹窗 | 不直接做磁盘 I/O，一律经 `internal/store` |
 | `internal/selfupdate` | 挂载 MyGo 原生更新器插件、应用菜单 | 只做装配，不重写下载/替换逻辑 |
 | `main.go` | MyGo 窗口应用的装配（App / Window / 菜单） | 只做装配 |
 | `cmd/kura/main.go` | CLI 二进制入口，零逻辑 | 只把 `os.Args` 交给 `cli.Run` |
@@ -128,7 +129,7 @@ kura 自己的目录：
 gofmt -l .                      # 必须为空
 go vet ./...                    # 必须干净
 go tool mygo vet .              # 必须干净
-go tool mygo i18n check         # catalogs 必须无错（425 条消息）
+go tool mygo i18n check         # catalogs 必须无错（459 条消息）
 go test ./...                   # 全包通过
 CGO_ENABLED=0 go test ./...     # 全包通过
 CGO_ENABLED=0 go build ./...    # 成功

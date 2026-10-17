@@ -592,6 +592,44 @@
   "@selfupdateMenuQuit": {
     "description": "应用菜单项：退出 kura。"
   },
+  "marketErrBadPage": "market: page must not be negative",
+  "@marketErrBadPage": {
+    "description": "错误：请求的榜单页码为负。"
+  },
+  "marketErrDecode": "market: unexpected data from skills.sh",
+  "@marketErrDecode": {
+    "description": "错误：榜单响应不是预期的 JSON 结构。"
+  },
+  "marketErrRequest": "market: could not reach skills.sh",
+  "@marketErrRequest": {
+    "description": "错误：请求榜单失败（网络、超时或读取中断），后面接上具体原因。"
+  },
+  "marketErrStatus": "market: skills.sh responded with HTTP {status}",
+  "@marketErrStatus": {
+    "description": "错误：榜单接口返回了非 2xx 的状态码。",
+    "placeholders": {
+      "status": {
+        "type": "int",
+        "example": "404"
+      }
+    }
+  },
+  "marketErrTooLarge": "market: the response from skills.sh is too large",
+  "@marketErrTooLarge": {
+    "description": "错误：榜单响应超过大小上限（4 MB）。"
+  },
+  "marketErrUnknownView": "market: unknown board",
+  "@marketErrUnknownView": {
+    "description": "错误：请求了不认识的榜单（排序方式）。"
+  },
+  "marketErrBadSource": "market: not an owner/repo source",
+  "@marketErrBadSource": {
+    "description": "错误：技能来源不是 owner/repo 格式，无法读取它的详情。"
+  },
+  "marketErrNoSlug": "market: this skill name has no usable link",
+  "@marketErrNoSlug": {
+    "description": "错误：技能名换不出链接用的 slug（比如全是非英文字符），不发请求。"
+  },
   "storeErrAddOptionsNil": "store: AddOptions must not be nil",
   "@storeErrAddOptionsNil": {
     "description": "错误：AddOptions 不能为空。"
@@ -920,6 +958,22 @@
   "storeErrNoSettings": "store: no settings have been saved yet",
   "@storeErrNoSettings": {
     "description": "错误：尚未保存任何设置。"
+  },
+  "storeErrNoSkillInRepo": "store: the repository has no such skill",
+  "@storeErrNoSkillInRepo": {
+    "description": "错误（哨兵）：仓库里没有要找的技能。报错处会补上仓库与名字。"
+  },
+  "storeErrNoSkillNamedInRepo": "store: no skill named {name} in {repo}",
+  "@storeErrNoSkillNamedInRepo": {
+    "description": "错误：仓库里没有该名字的技能。",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "repo": {
+        "type": "String"
+      }
+    }
   },
   "storeErrNoSnapshotPath": "store: no free snapshot path ({name}/{stamp}), nothing deleted",
   "@storeErrNoSnapshotPath": {
@@ -1418,6 +1472,10 @@
   "@uiActionInstall": {
     "description": "按钮：安装技能。"
   },
+  "uiActionMarket": "Skill market",
+  "@uiActionMarket": {
+    "description": "按钮（工具栏图标的悬停提示）与市场弹窗的标题：打开技能市场。"
+  },
   "uiActionMoveTrash": "Move to trash",
   "@uiActionMoveTrash": {
     "description": "按钮：移入回收站。"
@@ -1809,6 +1867,135 @@
   "uiMarkdownTruncated": "(content too long; truncated)",
   "@uiMarkdownTruncated": {
     "description": "全文页提示：内容过长已截断。"
+  },
+  "uiMarketBackToBoard": "Back to rankings",
+  "@uiMarketBackToBoard": {
+    "description": "技能详情页：返回榜单列表。"
+  },
+  "uiMarketBackToSkills": "Back to skills",
+  "@uiMarketBackToSkills": {
+    "description": "技能市场页面：返回三栏的本地技能目录。"
+  },
+  "uiMarketDocEmpty": "This skill has no SKILL.md.",
+  "@uiMarketDocEmpty": {
+    "description": "技能详情页：快照里没有 SKILL.md。"
+  },
+  "uiMarketDocFailed": "Could not load SKILL.md: {reason}",
+  "@uiMarketDocFailed": {
+    "description": "技能详情页：读取 SKILL.md 失败，后面接上原因。",
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "uiMarketDocLoading": "Loading SKILL.md…",
+  "@uiMarketDocLoading": {
+    "description": "技能详情页：正在读取 SKILL.md。"
+  },
+  "uiMarketEmpty": "No skills on this board yet.",
+  "@uiMarketEmpty": {
+    "description": "技能市场弹窗：榜单读取成功但没有条目。"
+  },
+  "uiMarketFiles": "{count, number} files",
+  "@uiMarketFiles": {
+    "description": "技能详情页：快照里的文件数量。",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "12"
+      }
+    }
+  },
+  "uiMarketInstall": "Install",
+  "@uiMarketInstall": {
+    "description": "技能市场弹窗：列表行上的安装按钮。"
+  },
+  "uiMarketInstalled": "Installed",
+  "@uiMarketInstalled": {
+    "description": "技能市场弹窗：当前目录里已有同名启用中的技能，列表行上的标记（按钮不可点）。"
+  },
+  "uiMarketInstalling": "Installing {name}…",
+  "@uiMarketInstalling": {
+    "description": "状态行：正在从技能市场安装某个技能。",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "uiMarketInstalls": "{count, number} installs",
+  "@uiMarketInstalls": {
+    "description": "技能市场弹窗：列表行上的安装次数。",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "1234"
+      }
+    }
+  },
+  "uiMarketLoadFailed": "Could not load the board: {reason}",
+  "@uiMarketLoadFailed": {
+    "description": "技能市场弹窗：榜单读取失败，后面接上原因。",
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "uiMarketLoadMore": "Load more",
+  "@uiMarketLoadMore": {
+    "description": "技能市场弹窗：读取榜单的下一页。"
+  },
+  "uiMarketLoading": "Loading…",
+  "@uiMarketLoading": {
+    "description": "技能市场弹窗：正在读取榜单。"
+  },
+  "uiMarketNote": "Rankings come from skills.sh. Installing downloads the skill from its GitHub repository.",
+  "@uiMarketNote": {
+    "description": "技能市场弹窗底部的来源说明。"
+  },
+  "uiMarketOpenFailed": "Could not open the link: {reason}",
+  "@uiMarketOpenFailed": {
+    "description": "技能市场：打开外部链接失败，后面接上原因。",
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "uiMarketRetry": "Retry",
+  "@uiMarketRetry": {
+    "description": "技能市场弹窗：榜单读取失败后的重试按钮。"
+  },
+  "uiMarketSubtitle": "Install into {root}",
+  "@uiMarketSubtitle": {
+    "description": "技能市场弹窗副标题：安装的目标技能目录。",
+    "placeholders": {
+      "root": {
+        "type": "String"
+      }
+    }
+  },
+  "uiMarketViewAllTime": "All time",
+  "@uiMarketViewAllTime": {
+    "description": "技能市场弹窗的分段：总榜（按累计安装量）。"
+  },
+  "uiMarketViewGitHub": "View on GitHub",
+  "@uiMarketViewGitHub": {
+    "description": "技能详情页：打开来源仓库的 GitHub 页面。"
+  },
+  "uiMarketViewHot": "Hot",
+  "@uiMarketViewHot": {
+    "description": "技能市场弹窗的分段：热度榜。"
+  },
+  "uiMarketViewSkillsSh": "View on skills.sh",
+  "@uiMarketViewSkillsSh": {
+    "description": "技能详情页：打开 skills.sh 上该技能的页面。"
+  },
+  "uiMarketViewTrending": "Trending",
+  "@uiMarketViewTrending": {
+    "description": "技能市场弹窗的分段：趋势榜。"
   },
   "uiMenuCopyPath": "Copy path",
   "@uiMenuCopyPath": {

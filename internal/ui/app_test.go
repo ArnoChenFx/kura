@@ -1,7 +1,9 @@
 package ui
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -9,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/ArnoChenFx/kura/internal/i18n"
+	"github.com/ArnoChenFx/kura/internal/market"
 	"github.com/ArnoChenFx/kura/internal/store"
 	myui "github.com/egoist/mygo/ui"
 )
@@ -48,6 +51,19 @@ func newAppFor(cfg *store.Config) *App {
 	a.setLocale = func(pref string) {
 		i18n.Set(i18n.Resolve(store.LangPref(pref), i18n.SystemLocale()))
 	}
+	// 技能市场的榜单读取：测试里绝不联网，默认报错；需要榜单内容的测试自己替换。
+	a.marketFetch = func(context.Context, market.View, int) (market.Page, error) {
+		return market.Page{}, errors.New("no network in tests")
+	}
+	a.marketDocFetch = func(context.Context, string, string) (market.Document, error) {
+		return market.Document{}, errors.New("no network in tests")
+	}
+	// 翻译：测试里默认报错，绝不打到真实接口（需要译文的测试换成 fakeTranslator）。
+	a.translate = func(context.Context, store.Settings, string) (string, error) {
+		return "", errors.New("no network in tests")
+	}
+	// 外部链接：测试里不打开浏览器（需要检查调用的测试换成记录用的假实现）。
+	a.openURL = func(string) error { return nil }
 	return a
 }
 
