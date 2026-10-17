@@ -20,6 +20,17 @@ import (
 	myui "github.com/egoist/mygo/ui"
 )
 
+// 市场页面的左右留白分两层：外层 gutterX 把滚动条从窗口边缘往里让一点（滚动条画在
+// 滚动区最右侧 12 DIP 内），内层 padX 给内容留出可读的行宽。两层之和比本地三栏的
+// Space(5) 宽，滚动条也就落在留白槽里，不会压在正文上。
+const gutterX, padX = 2, 10
+
+// marketGutter 返回外层的左右留白（DIP）。
+func marketGutter(t *myui.Theme) float32 { return t.Space(gutterX) }
+
+// marketPad 返回内容的左右留白（DIP）。
+func marketPad(t *myui.Theme) float32 { return t.Space(padX) }
+
 // marketViews 是分段的顺序（下标即 marketState.view）。总榜排第一并默认选中：它是
 // 三个榜单里唯一按已知接口形状核对过的，见 docs/note/skills-market.md。
 var marketViews = []market.View{market.ViewAllTime, market.ViewHot, market.ViewTrending}
@@ -304,9 +315,12 @@ func (a *App) viewMarketPage(c *myui.Context) {
 func (a *App) viewMarketList(c *myui.Context) {
 	m := &a.market
 	t := c.Theme()
+	// 左右留白给到滚动区里的内容（见 viewMarketDetail 里的说明）：滚动条画在滚动区
+	// 最右侧 12 DIP 内，内容铺满就会压到它。表格以外的段落各自带上同一份留白。
+	pad := marketPad(t)
 	myui.Column(c).Grow(1).MinWidth(0).MinHeight(0).FillWidth().Background(a.pal.canvas).
-		Padding(t.Space(4), t.Space(5), t.Space(3), t.Space(5)).Gap(t.Space(3)).Children(func() {
-		myui.Row(c).FillWidth().Gap(t.Space(2)).AlignItems(myui.Center).Children(func() {
+		Padding(t.Space(4), marketGutter(t), t.Space(3)).Gap(t.Space(3)).Children(func() {
+		myui.Row(c).FillWidth().Padding(0, pad).Gap(t.Space(2)).AlignItems(myui.Center).Children(func() {
 			marketBackButton(c, locales.UiMarketBackToSkills(), a.CloseMarket)
 			myui.Column(c).Grow(1).MinWidth(0).Gap(t.Space(1)).Children(func() {
 				myui.Text(c, locales.UiActionMarket()).Bold().FontSize(t.FontSize + 6).SingleLine()
@@ -315,7 +329,7 @@ func (a *App) viewMarketList(c *myui.Context) {
 		})
 		// 分段的点击在构建结束时才写进绑定的变量，所以用局部 sel 接选择，Changed 为真的
 		// 那次构建里 sel 已是新值（同 viewModeSwitch）。排列开关与技能区共用一个偏好。
-		myui.Row(c).FillWidth().AlignItems(myui.Center).Gap(t.Space(2)).Children(func() {
+		myui.Row(c).FillWidth().Padding(0, pad).AlignItems(myui.Center).Gap(t.Space(2)).Children(func() {
 			sel := m.view
 			if myui.Segmented(c, &sel, marketViewLabels()...).Label(locales.UiActionMarket()).Changed() {
 				m.view = sel
@@ -327,11 +341,15 @@ func (a *App) viewMarketList(c *myui.Context) {
 		v := m.current()
 		b := m.boardOr(v)
 		a.viewMarketBoard(c, v, b)
-		myui.Text(c, locales.UiMarketNote()).FontSize(t.FontSize - 1).TextColor(t.TextMuted)
+		myui.Box(c).FillWidth().Padding(0, pad).Children(func() {
+			myui.Text(c, locales.UiMarketNote()).FontSize(t.FontSize - 1).TextColor(t.TextMuted)
+		})
 		if m.err != "" {
-			a.viewMarketError(c, m.err, nil)
+			myui.Box(c).FillWidth().Padding(0, pad).Children(func() {
+				a.viewMarketError(c, m.err, nil)
+			})
 		}
-		myui.Row(c).FillWidth().Gap(t.Space(2)).AlignItems(myui.Center).Children(func() {
+		myui.Row(c).FillWidth().Padding(0, pad).Gap(t.Space(2)).AlignItems(myui.Center).Children(func() {
 			a.viewMarketStatus(c)
 			if b.loading && b.loaded {
 				myui.Spinner(c)
@@ -413,13 +431,16 @@ func (a *App) viewMarketDetail(c *myui.Context) {
 	t := c.Theme()
 	sk := m.detail
 	d := m.docOr(marketKey(sk))
+	// 左右留白加在滚动区里面（同本地详情页 viewDetail），不夹在滚动区外面：
+	// 滚动条画在滚动区最右侧 12 DIP 内，内容铺满就会压到它。
+	pad := marketPad(t)
 	myui.Column(c).Grow(1).MinWidth(0).MinHeight(0).FillWidth().Background(a.pal.canvas).
-		Padding(t.Space(4), t.Space(5), t.Space(3), t.Space(5)).Gap(t.Space(3)).Children(func() {
-		myui.Row(c).FillWidth().AlignItems(myui.Center).Children(func() {
+		Padding(t.Space(4), marketGutter(t), t.Space(3)).Gap(t.Space(3)).Children(func() {
+		myui.Row(c).FillWidth().Padding(0, pad).AlignItems(myui.Center).Children(func() {
 			marketBackButton(c, locales.UiMarketBackToBoard(), a.CloseMarketDetail)
 		})
 		myui.Scroll(c).Grow(1).MinHeight(0).FillWidth().Children(func() {
-			myui.Column(c).FillWidth().Gap(t.Space(3)).Children(func() {
+			myui.Column(c).FillWidth().Padding(0, pad).Gap(t.Space(3)).Children(func() {
 				a.viewMarketDetailHead(c, sk)
 				a.viewTranslateBar(c)
 				if d.loaded && d.doc.Description != "" {
@@ -444,7 +465,7 @@ func (a *App) viewMarketDetail(c *myui.Context) {
 				a.viewMarketDoc(c, sk, d)
 			})
 		})
-		myui.Row(c).FillWidth().AlignItems(myui.Center).Children(func() {
+		myui.Row(c).FillWidth().Padding(0, pad).AlignItems(myui.Center).Children(func() {
 			a.viewMarketStatus(c)
 		})
 	})
@@ -559,8 +580,11 @@ func (a *App) viewMarketItems(c *myui.Context, b *marketBoard) {
 		return
 	}
 	installed := a.installedNames()
+	pad := marketPad(c.Theme())
 	myui.List(c, &a.market.list, len(b.skills), func(i int) {
-		a.viewMarketRow(c, b.skills[i], installed)
+		myui.Box(c).FillWidth().Padding(0, pad).Children(func() {
+			a.viewMarketRow(c, b.skills[i], installed)
+		})
 	}).Grow(1).MinHeight(0)
 }
 
@@ -570,18 +594,21 @@ func (a *App) viewMarketGrid(c *myui.Context, b *marketBoard) {
 	t := c.Theme()
 	w, _ := c.Size()
 	gap := t.Space(3)
-	cols := marketGridCols(w-2*t.Space(5), gap)
+	cols := marketGridCols(w-2*(marketGutter(t)+marketPad(t)), gap)
 	rows := (len(b.skills) + cols - 1) / cols
 	installed := a.installedNames()
+	pad := marketPad(t)
 	myui.List(c, &a.market.grid, rows, func(r int) {
-		myui.Row(c).FillWidth().Gap(gap).AlignItems(myui.Stretch).Children(func() {
-			for k := 0; k < cols; k++ {
-				if i := r*cols + k; i < len(b.skills) {
-					a.viewMarketCard(c, b.skills[i], installed)
-				} else {
-					myui.Box(c).Grow(1).MinWidth(0)
+		myui.Box(c).FillWidth().Padding(0, pad).Children(func() {
+			myui.Row(c).FillWidth().Gap(gap).AlignItems(myui.Stretch).Children(func() {
+				for k := 0; k < cols; k++ {
+					if i := r*cols + k; i < len(b.skills) {
+						a.viewMarketCard(c, b.skills[i], installed)
+					} else {
+						myui.Box(c).Grow(1).MinWidth(0)
+					}
 				}
-			}
+			})
 		})
 	}).Grow(1).MinHeight(0)
 }

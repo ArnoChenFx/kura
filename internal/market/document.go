@@ -120,7 +120,8 @@ func toSkillSlug(name string) string {
 }
 
 // frontmatterDescription 取 SKILL.md 开头 frontmatter 里顶层的 description。支持单行
-// （可带引号）与 > / | 块（续行合并成一行，供详情页概括用）；其余写法返回空串。
+// （可带引号）与 > / | 块（含 >- / |- / + 等 chomping 指示符，续行合并成一行，供详情页
+// 概括用）；其余写法返回空串。
 func frontmatterDescription(md string) string {
 	md = strings.TrimPrefix(md, "\ufeff")
 	lines := strings.Split(strings.ReplaceAll(md, "\r\n", "\n"), "\n")
@@ -136,7 +137,8 @@ func frontmatterDescription(md string) string {
 			continue
 		}
 		value := strings.TrimSpace(strings.TrimPrefix(line, "description:"))
-		if value == "" || value == ">" || value == "|" {
+		// YAML 的块指示符后面可以带 chomping（>-、|-、|+），一律当块头。
+		if value == "" || strings.HasPrefix(value, ">") || strings.HasPrefix(value, "|") {
 			var parts []string
 			for _, next := range lines[i+1:] {
 				if strings.TrimSpace(next) == "---" || (next != "" && !strings.HasPrefix(next, " ") && !strings.HasPrefix(next, "\t")) {

@@ -129,6 +129,9 @@ func TestFrontmatterDescription(t *testing.T) {
 		{"plain", "---\nname: x\ndescription: Plain text\n---\n# x", "Plain text"},
 		{"quoted", "---\ndescription: 'Single quoted'\n---", "Single quoted"},
 		{"folded", "---\nname: x\ndescription: >\n  first part\n  second part\nlicense: MIT\n---\n# x", "first part second part"},
+		// 真实数据里最常见的两种带 chomping 的块头（google-labs-code/stitch-skills 用的就是 >-）。
+		{"folded strip", "---\nname: x\ndescription: >-\n  first part\n  second part\nallowed-tools:\n  - Bash\n---\n# x", "first part second part"},
+		{"literal strip", "---\ndescription: |-\n  line one\n  line two\n---\n", "line one line two"},
 		{"no frontmatter", "# x\ndescription: not frontmatter", ""},
 		{"no description", "---\nname: x\n---\n", ""},
 		{"crlf", "---\r\ndescription: CRLF\r\n---\r\n", "CRLF"},
