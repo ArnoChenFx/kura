@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/ArnoChenFx/kura/internal/market"
+	"github.com/ArnoChenFx/kura/internal/store"
 	"github.com/ArnoChenFx/kura/locales"
 	myui "github.com/egoist/mygo/ui"
 )
@@ -512,8 +513,33 @@ func TestMarketLinksEscapePathSegments(t *testing.T) {
 	}
 }
 
-// TestRenderMarketShot 真实渲染技能市场的列表页与详情页并存成 PNG（照 install_discover_test.go
-// 的模式）：设 KURA_UI_SHOTS=<绝对目录> 时才跑，CI 跳过。数据是假的，不联网。
+// shotSkillMD 是截图用的 SKILL.md 样例（frontmatter 保持原样，正文逐行可译）。
+const shotSkillMD = "---\nname: vercel-react-best-practices\ndescription: React and Next.js performance guidance from Vercel engineering.\n---\n\n# React Best Practices\n\nFollow these rules when writing React components.\n\n## Avoid waterfalls\n\n- Start independent requests in parallel.\n- Prefer server components for data.\n\n```tsx\nconst [user, posts] = await Promise.all([getUser(), getPosts()])\n```\n"
+
+// shotZH 是截图里译文用的词条（按整行查，没有词条的行原样保留）。
+var shotZH = map[string]string{
+	"React and Next.js performance guidance from Vercel engineering.": "来自 Vercel 工程团队的 React 与 Next.js 性能指引。",
+	"# React Best Practices":                            "# React 最佳实践",
+	"Follow these rules when writing React components.": "编写 React 组件时遵循这些规则。",
+	"## Avoid waterfalls":                               "## 避免请求瀑布",
+	"- Start independent requests in parallel.":         "- 并行发起彼此独立的请求。",
+	"- Prefer server components for data.":              "- 数据获取优先使用服务端组件。",
+}
+
+// shotTranslate 按行查表翻译，模拟一个真实的译文（截图用，不联网）。
+func shotTranslate(_ context.Context, _ store.Settings, text string) (string, error) {
+	lines := strings.Split(text, "\n")
+	for i, l := range lines {
+		if zh, ok := shotZH[l]; ok {
+			lines[i] = zh
+		}
+	}
+	return strings.Join(lines, "\n"), nil
+}
+
+// TestRenderMarketShot 真实渲染技能市场的几个画面并存成 PNG（照 install_discover_test.go 的模式）：
+// 设 KURA_UI_SHOTS=<绝对目录> 时才跑，CI 跳过。数据是假的，不联网。产物：market-grid.png（卡片网格）、
+// market-list.png（列表）、market-detail.png（详情，原文）、market-detail-translated.png（详情，译文）。
 func TestRenderMarketShot(t *testing.T) {
 	out := os.Getenv("KURA_UI_SHOTS")
 	if out == "" {
@@ -530,20 +556,27 @@ func TestRenderMarketShot(t *testing.T) {
 		skills = append(skills, mkSkill(n, int64(90000-i*9000)))
 	}
 	f.set(market.ViewAllTime, 0, okPage(true, skills...))
-	f.setDoc("owner/vercel-react-best-practices", "vercel-react-best-practices", docResp{doc: market.Document{
+	const sample = "vercel-react-best-practices"
+	f.setDoc("owner/"+sample, sample, docResp{doc: market.Document{
 		Description: "React and Next.js performance guidance from Vercel engineering.",
-		SkillMD: "---\nname: vercel-react-best-practices\n---\n\n# React Best Practices\n\n" +
-			"Follow these rules when writing React components.\n\n## Avoid waterfalls\n\n" +
-			"- Start independent requests in parallel.\n- Prefer server components for data.\n\n" +
-			"```tsx\nconst [user, posts] = await Promise.all([getUser(), getPosts()])\n```\n",
-		Files: []string{"SKILL.md", "rules/async-parallel.md", "rules/bundle-size.md", "rules/server.md"},
+		SkillMD:     shotSkillMD,
+		Files:       []string{"SKILL.md", "rules/async-parallel.md", "rules/bundle-size.md", "rules/server.md"},
 	}})
+	a.translate = shotTranslate
+	a.settings = trReadySettings()
 	tt := showApp(a, 1140, 760)
 	click(t, a, tt, locales.UiActionMarket())
-	saveFrame(t, tt, filepath.Join(out, "market-list.png"))
+	saveFrame(t, tt, filepath.Join(out, "market-grid.png"))
 
-	click(t, a, tt, "vercel-react-best-practices")
+	click(t, a, tt, locales.UiViewList())
+	saveFrame(t, tt, filepath.Join(out, "market-list.png"))
+	click(t, a, tt, locales.UiViewGrid())
+
+	click(t, a, tt, sample)
 	saveFrame(t, tt, filepath.Join(out, "market-detail.png"))
+
+	click(t, a, tt, locales.UiTranslateTranslated())
+	saveFrame(t, tt, filepath.Join(out, "market-detail-translated.png"))
 }
 
 // saveFrame 把 tt 的当前帧存成 PNG。
@@ -556,5 +589,179 @@ func saveFrame(t *testing.T, tt *myui.Tester, path string) {
 	defer fh.Close()
 	if err := png.Encode(fh, tt.Image()); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// TestMarketGridColsFitsWidth 验证卡片列数随宽度变：放得下几张就排几列，至少一列，宽到
+// 放不下就不超过上限之外多排。
+func TestMarketGridColsFitsWidth(t *testing.T) {
+	cases := []struct {
+		width float32
+		want  int
+	}{
+		{0, 1}, {200, 1}, {500, 2}, {1100, 4}, {2000, 8},
+	}
+	for _, tc := range cases {
+		if got := marketGridCols(tc.width, 12); got != tc.want {
+			t.Errorf("marketGridCols(%v) = %d，想要 %d", tc.width, got, tc.want)
+		}
+	}
+}
+
+// TestMarketTranslationKeysStayApart 验证市场的译文 key 与本地技能的 key 互不相同：同名技能
+// （来自别的仓库）不能共用一份译文。
+func TestMarketTranslationKeysStayApart(t *testing.T) {
+	sk := market.Skill{Source: "owner/tdd", Name: "tdd"}
+	other := market.Skill{Source: "someone/else", Name: "tdd"}
+	keys := []string{marketDescKey(sk), marketDocKey(sk), marketDescKey(other)}
+	for _, local := range []string{cardDescKey("tdd"), detailDescKey("tdd"), docTransKey("tdd")} {
+		for _, k := range keys {
+			if k == local {
+				t.Errorf("市场译文 key %q 与本地 key 相同", k)
+			}
+		}
+	}
+	if keys[0] == keys[2] {
+		t.Error("同名但来源不同的技能不应共用译文 key")
+	}
+}
+
+// TestMarketListModeKeepsRows 验证排列偏好切到列表后，条目仍是两行的列表，名字与安装按钮都在。
+func TestMarketListModeKeepsRows(t *testing.T) {
+	a, f, _ := installMarketApp(t)
+	a.viewMode = store.ViewList
+	f.set(market.ViewAllTime, 0, okPage(false, mkSkill("tdd", 9), mkSkill("pdf", 5)))
+	tt := showApp(a, 1280, 800)
+	click(t, a, tt, locales.UiActionMarket())
+	for _, want := range []string{"owner/tdd", "owner/pdf"} {
+		if !tt.HasText(want) {
+			t.Errorf("列表模式应显示 %q，文本 %v", want, tt.Texts())
+		}
+	}
+}
+
+// TestMarketViewSwitchPersistsPreference 点市场页面里的排列开关：偏好立刻换，并写进 config.json
+// 的 view（与技能区共用同一个偏好）。
+func TestMarketViewSwitchPersistsPreference(t *testing.T) {
+	a, f, _ := installMarketApp(t)
+	f.set(market.ViewAllTime, 0, okPage(false, mkSkill("tdd", 9)))
+	tt := showApp(a, 1280, 800)
+	click(t, a, tt, locales.UiActionMarket())
+
+	click(t, a, tt, locales.UiViewList())
+	if a.viewMode != store.ViewList {
+		t.Fatalf("点列表后排列应为列表，viewMode=%q", a.viewMode)
+	}
+	lib, err := store.LoadLibrary(a.cfg)
+	if err != nil || lib.View != store.ViewList {
+		t.Errorf("偏好应写进 config.json：view=%q err=%v", lib.View, err)
+	}
+}
+
+// marketTranslateApp 造一个市场详情页已读到快照的应用：描述与 SKILL.md 都有内容，翻译
+// 设置按 ready 填好或留空，翻译换成 fakeTranslator（绝不联网）。
+func marketTranslateApp(t *testing.T, ready bool) (*App, market.Skill, *fakeTranslator) {
+	t.Helper()
+	a, f, _ := installMarketApp(t)
+	tr := &fakeTranslator{}
+	a.translate = tr.translate
+	if ready {
+		a.settings = trReadySettings()
+	}
+	sk := mkSkill("tdd", 9)
+	f.setDoc(sk.Source, sk.Name, docResp{doc: market.Document{
+		Description: "Write tests first", SkillMD: "# TDD\n\nRed, green, refactor.", Files: []string{"SKILL.md"},
+	}})
+	a.OpenMarketDetail(sk)
+	a.flush()
+	return a, sk, tr
+}
+
+// TestMarketTranslationTranslatesDescriptionAndSkillMD 译文模式开着、翻译已配好：描述与 SKILL.md
+// 都进译文缓存（键与本地技能分开），显示时读译文。
+func TestMarketTranslationTranslatesDescriptionAndSkillMD(t *testing.T) {
+	a, sk, tr := marketTranslateApp(t, true)
+	a.SetTranslateOn(true)
+	a.flush()
+
+	if got := a.trans.text(marketDescKey(sk), "Write tests first"); got != "[译]Write tests first" {
+		t.Errorf("描述译文 = %q", got)
+	}
+	e, ok := a.trans.get(marketDocKey(sk), "# TDD\n\nRed, green, refactor.")
+	if !ok || e.err != "" || !strings.HasPrefix(e.dst, "[译]") {
+		t.Errorf("SKILL.md 译文缺失或失败：ok=%v entry=%+v", ok, e)
+	}
+	if tr.calls < 2 {
+		t.Errorf("应至少发起描述与全文两次翻译，实际 %d 次", tr.calls)
+	}
+}
+
+// TestMarketTranslationNeedsSettings 翻译 API 没配好时，打开译文模式不发任何请求；界面给引导。
+func TestMarketTranslationNeedsSettings(t *testing.T) {
+	a, _, tr := marketTranslateApp(t, false)
+	a.SetTranslateOn(true)
+	a.flush()
+	if tr.calls != 0 {
+		t.Errorf("未配置时不应发请求，实际 %d 次", tr.calls)
+	}
+}
+
+// TestMarketTranslationRetriesAfterFailure 失败不会每帧重试；切到原文再切回译文才重试。
+func TestMarketTranslationRetriesAfterFailure(t *testing.T) {
+	a, sk, tr := marketTranslateApp(t, true)
+	tr.err = errors.New("boom")
+	a.SetTranslateOn(true)
+	a.flush()
+	if e, _ := a.trans.get(marketDescKey(sk), "Write tests first"); e.err == "" {
+		t.Fatalf("失败应被记下：%+v", e)
+	}
+	calls := tr.calls
+	a.flush()
+	if tr.calls != calls {
+		t.Errorf("失败后不应自动重试，调用次数从 %d 变成 %d", calls, tr.calls)
+	}
+
+	tr.err = nil
+	a.SetTranslateOn(false)
+	a.SetTranslateOn(true)
+	a.flush()
+	if got := a.trans.text(marketDescKey(sk), "Write tests first"); got != "[译]Write tests first" {
+		t.Errorf("切回译文后应重试成功，得到 %q", got)
+	}
+}
+
+// TestMarketTranslationDropsStaleResult 翻译途中配置变了（epoch 递增）：迟到的结果不写进缓存。
+func TestMarketTranslationDropsStaleResult(t *testing.T) {
+	a, sk, _ := marketTranslateApp(t, true)
+	var pending []func()
+	a.spawn = func(fn func()) { pending = append(pending, fn) }
+	a.SetTranslateOn(true)
+	a.trans.reset() // 等同于设置变了：清缓存、换 epoch
+	for _, fn := range pending {
+		fn()
+	}
+	a.flush()
+	if _, ok := a.trans.get(marketDescKey(sk), "Write tests first"); ok {
+		t.Error("配置变了以后，旧的译文结果不应写进缓存")
+	}
+}
+
+// TestMarketDetailTranslateSwitchFrame 真实点击详情页里的「译文」：描述显示译文，且译文说明出现。
+func TestMarketDetailTranslateSwitchFrame(t *testing.T) {
+	a, f, _ := installMarketApp(t)
+	tr := &fakeTranslator{}
+	a.translate = tr.translate
+	a.settings = trReadySettings()
+	f.set(market.ViewAllTime, 0, okPage(false, mkSkill("tdd", 1234)))
+	f.setDoc("owner/tdd", "tdd", docResp{doc: market.Document{
+		Description: "Write tests first", SkillMD: "# Test Driven Skill",
+	}})
+	tt := showApp(a, 1280, 800)
+	click(t, a, tt, locales.UiActionMarket())
+	click(t, a, tt, "tdd")
+
+	click(t, a, tt, locales.UiTranslateTranslated())
+	if !tt.HasText("[译]Write tests first") {
+		t.Errorf("点「译文」后描述应显示译文，文本 %v", tt.Texts())
 	}
 }

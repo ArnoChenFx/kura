@@ -81,7 +81,7 @@ func (a *App) View(c *myui.Context) {
 	sel := a.selected()
 	// 译文模式下为选中的技能发起描述翻译（受缓存占位保护，同一原文只发一次；
 	// 请求在后台，这里只读状态，见 translate.go）。
-	a.ensureTranslations(sel)
+	a.ensureCurrentTranslations()
 
 	a.viewTitlebar(c)
 	// 三栏占满标题栏以下的剩余高度；标题栏自身不参与收缩（见 viewTitlebar）。

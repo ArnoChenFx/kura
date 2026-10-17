@@ -9,7 +9,7 @@ package ui
 //   - 目标语言是全局一个（设置里选），不是每个技能单独选。
 //   - 渲染路径只读缓存；网络请求只经 TranslateAsync 进后台 goroutine。
 //
-// 翻译策略（取舍）：只翻译「当前选中的技能」——描述在右栏详情与中栏它自己的
+// 翻译策略（取舍）：只翻译「当前选中的技能」（市场详情页里打开的技能同理，见 market.go）——描述在右栏详情与中栏它自己的
 // 那张卡片（或列表行）里各出现一次，共用同一次请求；「全文」页在选中后逐段翻译
 // 整份 SKILL.md（见 TranslateDocAsync）。其余卡片在译文模式下继续显示原文，不为
 // 整页几十张卡片一次性打爆翻译 API；切换选中后新选中的技能才发起翻译，已翻过的
@@ -189,7 +189,7 @@ func (a *App) SetTranslateOn(on bool) {
 	a.trans.on = on
 	if on {
 		a.trans.clearErrors()
-		a.ensureTranslations(a.selected())
+		a.ensureCurrentTranslations()
 	}
 }
 

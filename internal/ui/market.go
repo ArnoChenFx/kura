@@ -60,6 +60,7 @@ type marketState struct {
 	view   int                          // 分段下标，指向 marketViews
 	boards map[market.View]*marketBoard // 每个榜单各自读到的内容
 	list   myui.ListState               // 列表页虚拟列表的位置（只在 UI 线程读写）
+	grid   myui.ListState               // 卡片网格的虚拟行位置（与列表分开记）
 	// installing 是正在安装的技能（marketKey），空为无；同一时间只装一个。
 	installing string
 	err        string // 最近一次安装失败的原因（列表页底部）
@@ -313,12 +314,16 @@ func (a *App) viewMarketList(c *myui.Context) {
 			})
 		})
 		// 分段的点击在构建结束时才写进绑定的变量，所以用局部 sel 接选择，Changed 为真的
-		// 那次构建里 sel 已是新值（同 viewModeSwitch）。
-		sel := m.view
-		if myui.Segmented(c, &sel, marketViewLabels()...).Label(locales.UiActionMarket()).Changed() {
-			m.view = sel
-			a.ensureMarketBoard()
-		}
+		// 那次构建里 sel 已是新值（同 viewModeSwitch）。排列开关与技能区共用一个偏好。
+		myui.Row(c).FillWidth().AlignItems(myui.Center).Gap(t.Space(2)).Children(func() {
+			sel := m.view
+			if myui.Segmented(c, &sel, marketViewLabels()...).Label(locales.UiActionMarket()).Changed() {
+				m.view = sel
+				a.ensureMarketBoard()
+			}
+			myui.Spacer(c)
+			a.viewModeSwitch(c)
+		})
 		v := m.current()
 		b := m.boardOr(v)
 		a.viewMarketBoard(c, v, b)
@@ -346,10 +351,7 @@ func (a *App) viewMarketBoard(c *myui.Context, v market.View, b *marketBoard) {
 	t := c.Theme()
 	switch {
 	case len(b.skills) > 0:
-		installed := a.installedNames()
-		myui.List(c, &a.market.list, len(b.skills), func(i int) {
-			a.viewMarketRow(c, b.skills[i], installed)
-		}).Grow(1).MinHeight(0)
+		a.viewMarketItems(c, b)
 	case b.loaded:
 		myui.Column(c).Grow(1).FillWidth().AlignItems(myui.Center).Justify(myui.Center).Children(func() {
 			myui.Text(c, locales.UiMarketEmpty()).TextColor(t.TextMuted)
@@ -419,8 +421,10 @@ func (a *App) viewMarketDetail(c *myui.Context) {
 		myui.Scroll(c).Grow(1).MinHeight(0).FillWidth().Children(func() {
 			myui.Column(c).FillWidth().Gap(t.Space(3)).Children(func() {
 				a.viewMarketDetailHead(c, sk)
+				a.viewTranslateBar(c)
 				if d.loaded && d.doc.Description != "" {
-					myui.Text(c, d.doc.Description).FontSize(t.FontSize).TextColor(t.TextMuted)
+					myui.Text(c, a.marketDescText(sk, d.doc.Description)).FontSize(t.FontSize).TextColor(t.TextMuted)
+					a.viewMarketTranslateNote(c, sk, d.doc.Description)
 				}
 				myui.Row(c).FillWidth().Wrap().Gap(t.Space(2)).Children(func() {
 					if myui.Button(c, locales.UiMarketViewSkillsSh()).Clicked() {
@@ -478,7 +482,7 @@ func (a *App) viewMarketDoc(c *myui.Context, sk market.Skill, d *marketDoc) {
 	t := c.Theme()
 	switch {
 	case d.loaded && d.doc.SkillMD != "":
-		a.viewMarkdown(c, d.doc.SkillMD)
+		a.viewMarketSkillMD(c, sk, d.doc.SkillMD)
 	case d.loaded:
 		myui.Text(c, locales.UiMarketDocEmpty()).TextColor(t.TextMuted)
 	case d.err != "":
@@ -536,4 +540,182 @@ func (a *App) viewMarketError(c *myui.Context, text string, retry func()) {
 			}
 		})
 	})
+}
+
+// marketCardMinW 是卡片网格里一张卡片的最小宽度（DIP）：窗口更宽就多排一列，卡片不会被
+// 拉得过宽。
+const marketCardMinW = 230
+
+// marketGridCols 按可用宽度算每行能放几张卡片，至少一张。
+func marketGridCols(width, gap float32) int {
+	return max(int((width+gap)/(marketCardMinW+gap)), 1)
+}
+
+// viewMarketItems 是榜单的条目区，按排列偏好（store.ViewGrid 卡片网格 / 其余为列表）渲染。
+// 两种排列都是虚拟的，只构建看得见的行；各自的滚动位置分别记在 marketState.grid 与 list 里。
+func (a *App) viewMarketItems(c *myui.Context, b *marketBoard) {
+	if a.viewMode == store.ViewGrid {
+		a.viewMarketGrid(c, b)
+		return
+	}
+	installed := a.installedNames()
+	myui.List(c, &a.market.list, len(b.skills), func(i int) {
+		a.viewMarketRow(c, b.skills[i], installed)
+	}).Grow(1).MinHeight(0)
+}
+
+// viewMarketGrid 是卡片网格：每个虚拟行放 cols 张卡片，cols 随窗口宽度变。最后一行不满的
+// 地方用空框占位，卡片宽度保持一致。
+func (a *App) viewMarketGrid(c *myui.Context, b *marketBoard) {
+	t := c.Theme()
+	w, _ := c.Size()
+	gap := t.Space(3)
+	cols := marketGridCols(w-2*t.Space(5), gap)
+	rows := (len(b.skills) + cols - 1) / cols
+	installed := a.installedNames()
+	myui.List(c, &a.market.grid, rows, func(r int) {
+		myui.Row(c).FillWidth().Gap(gap).AlignItems(myui.Stretch).Children(func() {
+			for k := 0; k < cols; k++ {
+				if i := r*cols + k; i < len(b.skills) {
+					a.viewMarketCard(c, b.skills[i], installed)
+				} else {
+					myui.Box(c).Grow(1).MinWidth(0)
+				}
+			}
+		})
+	}).Grow(1).MinHeight(0)
+}
+
+// viewMarketCard 是网格里的一张卡片：头像、名字与来源（点它进详情页）；底部是安装次数与安装
+// 按钮（已装过显示「已安装」，正在装的转圈）。卡片不放描述：榜单接口不给描述，描述只在详情页
+// 读快照之后才有。
+func (a *App) viewMarketCard(c *myui.Context, sk market.Skill, installed map[string]bool) {
+	t := c.Theme()
+	m := &a.market
+	myui.Box(c).Grow(1).MinWidth(0).Padding(t.Space(3)).Radius(t.Radius+2).
+		Background(a.pal.card).Border(1, a.pal.line).Children(func() {
+		myui.Column(c).FillWidth().Gap(t.Space(2.5)).Children(func() {
+			info := myui.ButtonBase(c).FillWidth().Justify(myui.Start)
+			info.Children(func() {
+				myui.Row(c).FillWidth().Gap(t.Space(2.5)).AlignItems(myui.Center).Children(func() {
+					avatar(c, a.pal, sk.Name, t.Space(7), false)
+					myui.Column(c).Grow(1).MinWidth(0).Gap(t.Space(0.5)).Children(func() {
+						myui.Text(c, sk.Name).SingleLine().FontWeight(600).MinWidth(0)
+						myui.Text(c, sk.Source).SingleLine().MinWidth(0).FontSize(t.FontSize - 2).TextColor(t.TextMuted)
+					})
+				})
+			})
+			if info.Clicked() {
+				a.OpenMarketDetail(sk)
+			}
+			myui.Row(c).FillWidth().Gap(t.Space(2)).AlignItems(myui.Center).Children(func() {
+				myui.Text(c, locales.UiMarketInstalls(int(sk.Installs))).SingleLine().Grow(1).MinWidth(0).
+					FontSize(t.FontSize - 2).TextColor(t.TextMuted)
+				switch {
+				case installed[strings.ToLower(sk.Name)]:
+					pill(c, locales.UiMarketInstalled(), t.Accent)
+				case m.installing == marketKey(sk):
+					myui.Spinner(c)
+				default:
+					if myui.Button(c, locales.UiMarketInstall()).Disabled(m.installing != "").Clicked() {
+						a.InstallMarketSkillAsync(sk)
+					}
+				}
+			})
+		})
+	})
+}
+
+// marketDescKey 是市场技能描述的译文 key。带 market: 前缀：同名的本地技能（来自别的仓库）
+// 不会共用一份译文。
+func marketDescKey(sk market.Skill) string {
+	return "market:" + sk.Source + "/" + sk.Name + translateDescSuffix
+}
+
+// marketDocKey 是市场技能 SKILL.md 全文译文的 key（同样避开本地技能的 doc: 键）。
+func marketDocKey(sk market.Skill) string {
+	return "mdoc:" + sk.Source + "/" + sk.Name + translateDocSuffix
+}
+
+// marketDescText 返回市场详情里描述该显示的文本：译文模式下用缓存的译文，拿不到退回原文。
+// 只读缓存，绝不发请求（同 App.descText）。
+func (a *App) marketDescText(sk market.Skill, desc string) string {
+	if !a.trans.on || strings.TrimSpace(desc) == "" {
+		return desc
+	}
+	return a.trans.text(marketDescKey(sk), desc)
+}
+
+// viewMarketTranslateNote 是市场描述下方的一行小字，同 viewTranslateNote：翻译中 / 失败原因
+// / 当前译文的语言。翻译 API 未配置时不说话（引导在开关条里）。
+func (a *App) viewMarketTranslateNote(c *myui.Context, sk market.Skill, desc string) {
+	if !a.trans.on || !a.settings.Ready() || strings.TrimSpace(desc) == "" {
+		return
+	}
+	t := c.Theme()
+	e, ok := a.trans.get(marketDescKey(sk), desc)
+	switch {
+	case !ok || e.pending:
+		myui.Row(c).Gap(t.Space(1.5)).AlignItems(myui.Center).Children(func() {
+			myui.Spinner(c)
+			myui.Text(c, locales.UiTranslateInProgress()).FontSize(t.FontSize - 1).TextColor(t.TextMuted)
+		})
+	case e.err != "":
+		myui.Text(c, locales.UiTranslateFailed(e.err)).MaxLines(4).FontSize(t.FontSize - 1).TextColor(t.Danger)
+	default:
+		myui.Text(c, locales.UiTranslateNote(a.settings.LangLabel())).FontSize(t.FontSize - 2).TextColor(t.TextMuted)
+	}
+}
+
+// viewMarketSkillMD 渲染市场技能的 SKILL.md 全文。译文模式下的做法同 viewFullTextBody：译文还在
+// 路上先显示原文，顶上一行「翻译全文中…」；失败说明原因，仍显示原文；译文到了替换成译文。
+func (a *App) viewMarketSkillMD(c *myui.Context, sk market.Skill, src string) {
+	t := c.Theme()
+	if !a.trans.on || !a.settings.Ready() || strings.TrimSpace(src) == "" {
+		a.viewMarkdown(c, src)
+		return
+	}
+	e, ok := a.trans.get(marketDocKey(sk), src)
+	switch {
+	case !ok || e.pending:
+		myui.Row(c).Gap(t.Space(1.5)).AlignItems(myui.Center).Children(func() {
+			myui.Spinner(c)
+			myui.Text(c, locales.UiTranslateFullInProgress()).FontSize(t.FontSize - 1).TextColor(t.TextMuted)
+		})
+		a.viewMarkdown(c, src)
+	case e.err != "":
+		myui.Text(c, locales.UiTranslateFullFailed(e.err)).MaxLines(4).FontSize(t.FontSize - 1).TextColor(t.Danger)
+		a.viewMarkdown(c, src)
+	default:
+		myui.Text(c, locales.UiTranslateNote(a.settings.LangLabel())).FontSize(t.FontSize - 2).TextColor(t.TextMuted)
+		a.viewMarkdown(c, e.dst)
+	}
+}
+
+// ensureMarketTranslations 为市场详情页里的技能发起翻译（若需要）：译文模式开着、翻译 API 已就绪，
+// 且描述与 SKILL.md 还没有译文。与 ensureTranslations 一样受缓存占位保护（同一原文只发一次，失败
+// 不在每帧重试），每帧调用无妨。只在市场详情页生效。
+func (a *App) ensureMarketTranslations() {
+	if a.market.screen != marketDetail || !a.trans.on || !a.settings.Ready() {
+		return
+	}
+	sk := a.market.detail
+	d := a.market.docOr(marketKey(sk))
+	if !d.loaded {
+		return
+	}
+	if strings.TrimSpace(d.doc.Description) != "" {
+		a.TranslateAsync(marketDescKey(sk), d.doc.Description)
+	}
+	a.TranslateDocAsync(marketDocKey(sk), d.doc.SkillMD)
+}
+
+// ensureCurrentTranslations 为当前画面需要的文本发起翻译：市场详情页看市场技能，其余时候看选中的
+// 本地技能。View 每帧与切换译文模式时都调用，两条路径都受缓存占位保护。
+func (a *App) ensureCurrentTranslations() {
+	if a.market.screen != marketNone {
+		a.ensureMarketTranslations()
+		return
+	}
+	a.ensureTranslations(a.selected())
 }
