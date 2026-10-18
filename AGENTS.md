@@ -24,7 +24,7 @@ kura 是一个**桌面技能管理器**，用 [MyGo](https://github.com/egoist/m
 | `internal/cli` | 无界面命令行入口（`cmd/kura`） | 不依赖 UI；`Run()` 返回退出码，绝不 `os.Exit` |
 | `internal/market` | 读 skills.sh 的榜单与技能快照（公开 JSON 接口，只读、不要密钥） | **不碰磁盘、不依赖 UI**；解析从宽（坏记录跳过、整页结构不对才报错） |
 | `internal/ui` | MyGo 原生窗口：三栏（技能目录 / 卡片网格 / 详情）、技能市场页面、搜索与筛选、开关、安装弹窗、更新预览弹窗 | 不直接做磁盘 I/O，一律经 `internal/store` |
-| `internal/selfupdate` | 挂载 MyGo 原生更新器插件、应用菜单 | 只做装配，不重写下载/替换逻辑 |
+| `internal/selfupdate` | 挂载 MyGo 原生更新器插件、应用菜单，以及 kura 自己的后台检查节奏（`Background`，只亮蓝点、不开窗口） | 不重写下载/替换逻辑；只调 MyGo 的 `Updater.Check` 与插件的公开 API |
 | `main.go` | MyGo 窗口应用的装配（App / Window / 菜单） | 只做装配 |
 | `cmd/kura/main.go` | CLI 二进制入口，零逻辑 | 只把 `os.Args` 交给 `cli.Run` |
 
@@ -63,7 +63,7 @@ kura 自己的目录：
   trash/<skill>/                 # 已移除的技能（带时间戳）
   snapshots/<skill>/<timestamp>/ # 更新前/移除前的快照
   roots/<id>/                    # 追加根目录各自的 disabled/ trash/ snapshots/
-  config.json                    # 根目录与偏好（theme：system | light | dark；view：grid | list）
+  config.json                    # 根目录与偏好（theme：system | light | dark；view：grid | list；autoCheckUpdates：自动检查更新；updateCheckedAt：kura 上次成功检查更新的时间）
   settings.json                  # 翻译 API 与全局目标语言（密钥明文，权限 0600）
 ```
 
@@ -105,7 +105,7 @@ kura 自己的目录：
 - **要能选中拷贝的文字放进 `Selectable()` 容器；容器内的控件必须 `Unselectable()`**，否则控件交互与选择打架（见 `detailGroup` 的 `selectable` 参数）。
 - **详情页的「概览 / 全文」tab 用 `myui.Tabs`**，tab 状态 `detailTab` 配 `detailSel`：换技能时重置回概览，避免看到上一个技能的全文。全文页在后台读 `SKILL.md`（`startFullTextLoad`，`spawn` 进 goroutine，按技能名缓存进 `skillDocs`），扫描后缓存整体失效并用 `docGen` 作废在途结果；渲染用 mygo 官方的 `github.com/egoist/mygo/ui/markdown`：`App.md`（`markdown.Options`）跨帧稳定、主题每帧从窗口主题重建，kura 自己只保留 `internal/ui/fulltext.go` 里的两件事（剥掉开头的 YAML frontmatter `stripFrontmatter`、超大源码截断 `capSource`）。
 - **翻译开关只切显示**：`App.trans.on` 为真时，内存里的译文缓存（`translateState.items`，键形如 `card:<技能名>:description`）有值就显示译文、没有就回退原文，**界面永不留白**；发起请求只在 `ensureTranslations` / `TranslateAsync`（后台 + 超时），渲染路径只读缓存。翻译配置变更时 `translateState.epoch` 递增，在途结果作废。
-- **应用自更新的两个界面入口**：设置弹窗里的「自动检查更新」开关的偏好存在**更新器插件的 `updater.json`**（不是 `config.json`），读写只经 `internal/selfupdate` 的 `AutomaticChecks` / `SetAutomaticChecks` 转发、由 `main.go` 经 `app.SetAutoChecks` 注入钩子；左栏「检查更新」按钮右上角的新版本小蓝点由 `selfupdate.WatchUpdateFound`（监听插件 `OnChange` → kura 自己再查一次 `mygo.Updater.Check` → `app.SetUpdateFound` 回主线程）驱动，蓝点用 `Absolute().Top().Right()` + `PassThrough()` 画成按钮的绝对定位子元素，**不改变按钮尺寸、不吃点击**。**测试里绝不直接调 `updater.*` / `mygo.Updater.Check`**：插件未挂载时它们会 panic，一律注入假钩子。
+- **应用自更新的后台检查与界面入口**：「自动检查更新」偏好存在 kura 的 `config.json`（`autoCheckUpdates`，唯一真值），读写只经 `store.Library` 的 `AutoCheck` / `SetAutoCheck`；旧版本留在插件 `updater.json` 里的 `automaticChecks` 由 `store.ResolveAutoCheck` 迁移一次。插件挂载时已关掉自己的调度（`DisableAutomaticChecks`），后台检查由 `internal/selfupdate` 的 `Background`（`watch.go`）排定：启动约 10 秒后、之后每 24 小时调一次 `mygo.Updater.Check`，只把「有新版本」经 `app.SetUpdateFound` 回主线程，亮左栏「检查更新」按钮右上角的蓝点，**从不打开窗口**。窗口只由按钮（`CheckAppUpdateAsync`）与应用菜单（`AppMenu`）打开，两者都先经 `ClearUpdateFound` 熄灭蓝点。插件的 `automaticChecks` 只是派生的调度开关（偏好且勾了「以后自动下载并安装更新」），由 `Background` 写，界面不碰。蓝点用 `Absolute().Top().Right()` + `PassThrough()` 画成按钮的绝对定位子元素，**不改变按钮尺寸、不吃点击**。**测试里绝不直接调 `updater.*` / `mygo.Updater.Check`**：插件未挂载时它们会 panic，一律注入假 host（`selfupdate` 的 `host` 接口）或假钩子。
 - 详见 `.agents/skills/mygo-maintenance/SKILL.md`；MyGo 的 API 以**固定版本源码**为准（`go list -m -f '{{.Dir}}' github.com/egoist/mygo`），不要凭记忆猜。
 
 ### CLI 退出码（已固定，不要改）
@@ -129,7 +129,7 @@ kura 自己的目录：
 gofmt -l .                      # 必须为空
 go vet ./...                    # 必须干净
 go tool mygo vet .              # 必须干净
-go tool mygo i18n check         # catalogs 必须无错（459 条消息）
+go tool mygo i18n check         # catalogs 必须无错（460 条消息）
 go test ./...                   # 全包通过
 CGO_ENABLED=0 go test ./...     # 全包通过
 CGO_ENABLED=0 go build ./...    # 成功
