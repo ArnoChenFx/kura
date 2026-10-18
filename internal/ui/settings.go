@@ -133,12 +133,6 @@ func langCodeFor(label string) string {
 // 清掉旧的错误提示。已存的目标语言认不得时落到默认语言并在弹窗里提示。
 func (a *App) OpenSettings() {
 	s := &a.settingsUI
-	// 「自动检查更新」的真值在插件的 updater.json（用户也能在插件自己的更新
-	// 窗口里、或手改文件改它），所以每次打开弹窗都按钩子现读一次，不拿一个
-	// 可能过时的内存副本。读到什么就是什么，读不到（钩子未接线）就保留原值。
-	if a.autoCheckGet != nil {
-		a.autoCheck = a.autoCheckGet()
-	}
 	*s = settingsState{
 		open:    true,
 		baseURL: a.settings.BaseURL,
@@ -320,7 +314,7 @@ func (a *App) viewSettingsModal(c *myui.Context) {
 				myui.Row(c).FillWidth().AlignItems(myui.Center).Children(func() {
 					myui.Text(c, locales.UiSettingsAutoCheckUpdate()).Grow(1).MinWidth(0)
 					// 「自动检查更新」是即时生效的偏好（同界面语言）：切了就静默写盘，
-					// 不经过「保存」，值存在更新器插件的 updater.json（默认开）。
+					// 不经过「保存」，值存在 config.json 的 autoCheckUpdates（默认开）。
 					// Changed 返回 true 的那次构建里 on 已是新值（同 viewCard 的
 					// 开关），不要写成构建中途直接比较局部变量。
 					on := a.autoCheck

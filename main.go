@@ -12,9 +12,10 @@ import (
 )
 
 func main() {
-	// 更新插件必须在 App.Run 之前挂载：原生 UI 更新窗口（无 webview），
-	// 每天自动检查一次，语言跟随系统。下载/签名校验/替换/重启全部由
-	// MyGo 更新器完成，公钥与更新源在 mygo.json 的 updates 节。
+	// 更新插件必须在 App.Run 之前挂载：原生 UI 更新窗口（无 webview），语言跟随系统。
+	// 插件自己的后台调度已关掉：后台检查由 selfupdate.Prepare / Start 负责，查到新版本
+	// 只亮左栏的蓝点，从不弹窗。下载/签名校验/替换/重启全部由 MyGo 更新器完成，公钥与
+	// 更新源在 mygo.json 的 updates 节。
 	selfupdate.Install()
 
 	// 默认配置：根目录 ~/.agents/skills，kura 数据目录 ~/.kura。
@@ -22,6 +23,13 @@ func main() {
 	cfg, err := store.DefaultConfig()
 	if err != nil {
 		log.Fatal(err)
+	}
+	// 「自动检查更新」偏好必须在 NewApp（读 config.json）与 App.Run（插件启动）之前定下：
+	// 旧版本留在插件 updater.json 里的值在这里迁移进 config.json，并把插件的调度开关对齐。
+	// config.json 损坏不致命，偏好按缺省（开）处理。
+	background, err := selfupdate.Prepare(cfg)
+	if err != nil {
+		log.Println(err)
 	}
 	app := kuraui.NewApp(cfg)
 	// 界面语言必须在 App.Run 之前定下来，否则第一帧就已经是错的语言。语言
@@ -65,20 +73,18 @@ func main() {
 		// 它依赖已挂载的更新插件（上面 selfupdate.Install()），测试里的
 		// App 保持 nil，绝不触发真实更新检查。
 		app.SetCheckUpdates(selfupdate.CheckForUpdates)
-		// 「自动检查更新」偏好的读写：真值在插件的 updater.json（默认开），
-		// 界面只经这两个钩子读写，自己不存一份。同样只在生产路径接线。
-		app.SetAutoChecks(selfupdate.AutomaticChecks, selfupdate.SetAutomaticChecks)
-		// 插件每次完成一次自动检查后，kura 自己再查一次，得出「是不是真有新
-		// 版本」并交给界面点亮左栏的小蓝点（SetUpdateFound 能从后台 goroutine
-		// 调用）。插件本身没有这个回调，所以只能这样问一次，见
-		// selfupdate.WatchUpdateFound 的注释。
-		selfupdate.WatchUpdateFound(app.SetUpdateFound)
+		// 「自动检查更新」切换时通知后台；偏好本身的读写在 config.json，由界面经 store 完成。
+		app.SetAutoChecks(background.SetAutomaticChecks)
+		// 后台检查：启动约 10 秒后查一次，之后每天一次。查到新版本只亮左栏的蓝点
+		// （SetUpdateFound 能从后台 goroutine 调用），从不打开窗口。
+		background.Start(app.SetUpdateFound)
 		// 应用菜单：关于 kura / 检查更新…（MyGo 更新窗口）/ 退出。
 		// 必须在应用就绪后调用（updater.MenuItem 要读 App.Locale）。
-		selfupdate.AppMenu()
+		// 从菜单打开更新窗口也熄灭蓝点，与点击按钮的行为一致。
+		selfupdate.AppMenu(app.ClearUpdateFound)
 		// kura 自己的菜单项文字（「关于 kura」「退出 kura」）不是 role 标签，
 		// MyGo 不会重命名它们；语言一变就重建菜单（固定语言与跟随系统都走这里）。
-		mygo.App.OnLocaleChanged(func(string) { selfupdate.AppMenu() })
+		mygo.App.OnLocaleChanged(func(string) { selfupdate.AppMenu(app.ClearUpdateFound) })
 	})
 	if err := mygo.App.Run(); err != nil {
 		log.Fatal(err)

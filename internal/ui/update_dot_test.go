@@ -95,6 +95,34 @@ func TestUpdateDotAppearsAndClears(t *testing.T) {
 	}
 }
 
+// TestClearUpdateFoundFromMenu 验证：从应用菜单打开更新窗口同样熄灭蓝点（与点按钮一致）。
+// ClearUpdateFound 只改蓝点，不经过「检查更新」按钮的钩子：菜单项自己会打开窗口，
+// 再调一次钩子就会开两次。
+func TestClearUpdateFoundFromMenu(t *testing.T) {
+	a, _ := newTestApp(t)
+	clicks := 0
+	a.SetCheckUpdates(func() { clicks++ })
+	tt := showApp(a, 1280, 800)
+
+	a.SetUpdateFound(true)
+	refresh(a, tt)
+	if !dotIsBlue(tt, a.pal) {
+		t.Fatal("发现新版本后应有蓝点")
+	}
+
+	a.ClearUpdateFound()
+	refresh(a, tt)
+	if a.updateFound {
+		t.Error("菜单打开更新窗口后 updateFound 应为假")
+	}
+	if dotIsBlue(tt, a.pal) {
+		t.Error("菜单打开更新窗口后蓝点应消失")
+	}
+	if clicks != 0 {
+		t.Errorf("熄灭蓝点不应经过检查钩子，得到 %d 次调用", clicks)
+	}
+}
+
 // TestUpdateDotKeepsButtonLayout 验证小蓝点不改变按钮的位置与尺寸：加上蓝点
 // 前后，两个底部按钮的矩形逐像素一致；蓝点本身也不吃点击（在蓝点上按下松开
 // 仍然触发按钮）。

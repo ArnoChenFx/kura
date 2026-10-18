@@ -46,6 +46,8 @@ ADDED = {
     # 设置弹窗「自动检查更新」开关的无障碍名（标签文字与开关同名，测试与
     # 无障碍查找要一个独立的名字）。
     "uiSettingsAutoCheckA11y",
+    # 「自动检查更新」偏好写进 config.json 失败时，状态行的提示。
+    "uiStatusAutoCheckSaveFailed",
     # 技能市场（skills.sh 榜单）：读取失败、请求、解析与参数错误的文字（internal/market）。
     "marketErrBadPage",
     "marketErrDecode",
