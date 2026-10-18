@@ -319,8 +319,8 @@ func themeIndex(mode string) int {
 // 立刻在状态行给一句反馈，更新窗口由 MyGo 插件弹出；经 checkUpdates 钩子走
 // selfupdate.CheckForUpdates，测试里注入假实现，绝不触发真实检查。
 //
-// 后台查到新版本时（a.updateFound，由 selfupdate.WatchUpdateFound 经
-// SetUpdateFound 发布），「检查更新」按钮右上角出现一个小蓝点；悬停提示也换成
+// 后台查到新版本时（a.updateFound，由 selfupdate.Background 经 SetUpdateFound
+// 发布），「检查更新」按钮右上角出现一个小蓝点；悬停提示也换成
 // 一句「有新版本可用」。
 func (a *App) viewRootsFooter(c *myui.Context) {
 	t := c.Theme()

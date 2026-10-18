@@ -2338,6 +2338,15 @@
   "@uiStatusAppUpdateNotReady": {
     "description": "状态行：更新不可用（开发构建没有更新插件）。"
   },
+  "uiStatusAutoCheckSaveFailed": "Could not save the automatic update check setting: {reason}",
+  "@uiStatusAutoCheckSaveFailed": {
+    "description": "状态行：「自动检查更新」偏好保存失败。",
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
   "uiStatusCandidates": "The repository has {count, number, ::group-off} skills; select the ones to install",
   "@uiStatusCandidates": {
     "description": "状态行：仓库里有多个技能候选，请选择。",

@@ -71,13 +71,7 @@ func (l *Library) SetLang(v string) error {
 	c := &Config{Root: l.Roots[0], Home: l.Home}
 	hc, _, err := LoadHomeConfig(c)
 	if err != nil {
-		hc = &HomeConfig{Roots: append([]string(nil), l.Roots...)}
-		if l.Theme != "" && l.Theme != ThemeSystem {
-			hc.Theme = l.Theme
-		}
-		if l.View != "" && l.View != ViewGrid {
-			hc.View = l.View
-		}
+		hc = l.fallbackHome()
 	}
 	if hc.CreatedAt == "" {
 		hc.CreatedAt = time.Now().UTC().Format(time.RFC3339)

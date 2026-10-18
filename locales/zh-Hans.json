@@ -542,6 +542,7 @@
   "uiStateTrashed": "回收站",
   "uiStatusAppUpdateChecking": "正在检查 kura 更新…",
   "uiStatusAppUpdateNotReady": "更新功能未就绪（开发构建未挂载更新插件）",
+  "uiStatusAutoCheckSaveFailed": "「自动检查更新」没能保存：{reason}",
   "uiStatusCandidates": "仓库里有 {count, number, ::group-off} 个技能，请勾选要安装的",
   "uiStatusCheckFailed": "检查 {name} 失败: {reason}",
   "uiStatusCheckSummary": "{name}: 新增 {added, number, ::group-off} · 修改 {modified, number, ::group-off} · 删除 {removed, number, ::group-off}（共 {files, number, ::group-off} 个文件）",

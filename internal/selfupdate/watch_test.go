@@ -1,258 +1,657 @@
-// selfupdate 包第二批测试：转发函数在插件未挂载时的行为，以及 WatchUpdateFound
-// 的探测逻辑（去重、失败不动状态、一次只跑一个查询）。
+// selfupdate 包的后台检查测试（watch.go）。
 //
-// 边界（硬约束）：测试里绝不挂更新插件、绝不联网。updater 包的任何函数在插件
-// 未挂载时都会 panic（used()），这正是「internal/ui 里绝不直接 import 插件、
-// 一律经 main.go 注入钩子」这条约束的理由，值得把它固定成测试而不是只写在注释里。
-//
-// 为什么「未挂载」要另起一个进程：本包的 TestInstallRegistersPlugin 会真的挂一次
-// 插件（同一个测试二进制里只能挂一次），此后同进程里 updater.* 就不再 panic 了。
-// 所以用 Go 的标准做法——把测试二进制自己再跑一遍（见 TestForwardsPanic...）：
-// 子进程只跑这一个测试、不挂插件，父进程断言它「四个转发函数都 panic 了」。
+// 边界（硬约束）：这里绝不挂更新插件、绝不联网、绝不真的等待。更新源、插件的偏好与
+// 状态都由 fakeHost 提供并记录；时间由 fakeClock 推进，到期的定时器同步触发，所以
+// 每个断言都是确定的。与生产代码只差一处：host 与时钟换成了假的，检查的编排逻辑
+// （Prepare / Start / SetAutomaticChecks / fire / finish）是同一份。
 package selfupdate
 
 import (
-	"bytes"
 	"context"
 	"errors"
-	"fmt"
 	"os"
-	"os/exec"
+	"path/filepath"
+	"slices"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/ArnoChenFx/kura/internal/store"
 )
 
-// panicChildEnv 置上时，本测试作为子进程运行：逐个调用转发函数，确认它们都
-// panic；有任何一个没 panic 就以非 0 退出。
-const panicChildEnv = "KURA_SELFUPDATE_PANIC_CHILD"
+const day = 24 * time.Hour
 
-// forwards 是这几个薄转发的调用方式（与生产调用点一一对应）。
-func forwards() map[string]func() {
-	return map[string]func(){
-		"CheckForUpdates":    CheckForUpdates,
-		"AutomaticChecks":    func() { _ = AutomaticChecks() },
-		"SetAutomaticChecks": func() { SetAutomaticChecks(false) },
-		"WatchUpdateFound":   func() { _ = WatchUpdateFound(func(bool) {}) },
-	}
+// fakeClock 是假时钟：时间只在 advance 时前进，到期的假定时器按时间顺序同步触发。
+type fakeClock struct {
+	mu     sync.Mutex
+	at     time.Time
+	timers []*fakeTimer
 }
 
-// panicked 报告 fn 是否 panic（恢复后不放出去）。
-func panicked(fn func()) (yes bool) {
-	defer func() { yes = recover() != nil }()
-	fn()
-	return false
+type fakeTimer struct {
+	c      *fakeClock
+	due    time.Time
+	fn     func()
+	active bool
 }
 
-// TestForwardsPanicWithoutPlugin 验证四个转发函数在插件未挂载时都 panic：
-// 它们是「依赖插件已挂载」的薄层，界面绝不直接调，只由 main.go 在 Install
-// 之后接线。父进程跑子进程（见文件头注释）。
-func TestForwardsPanicWithoutPlugin(t *testing.T) {
-	if os.Getenv(panicChildEnv) == "1" {
-		for name, fn := range forwards() {
-			if !panicked(fn) {
-				fmt.Fprintf(os.Stderr, "%s 在插件未挂载时没有 panic\n", name)
-				os.Exit(1)
+func newFakeClock() *fakeClock {
+	return &fakeClock{at: time.Date(2026, time.October, 18, 9, 0, 0, 0, time.UTC)}
+}
+
+func (c *fakeClock) now() time.Time {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.at
+}
+
+func (c *fakeClock) after(d time.Duration, fn func()) stopper {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	t := &fakeTimer{c: c, due: c.at.Add(d), fn: fn, active: true}
+	c.timers = append(c.timers, t)
+	return t
+}
+
+func (t *fakeTimer) Stop() bool {
+	t.c.mu.Lock()
+	defer t.c.mu.Unlock()
+	was := t.active
+	t.active = false
+	return was
+}
+
+// advance 把时间推进 d，按到期时间顺序同步触发定时器。回调里新排的定时器只要在
+// 这段时间里到期，也会在这次 advance 里触发。
+func (c *fakeClock) advance(d time.Duration) {
+	c.mu.Lock()
+	end := c.at.Add(d)
+	c.mu.Unlock()
+	for {
+		c.mu.Lock()
+		var next *fakeTimer
+		for _, t := range c.timers {
+			if t.active && !t.due.After(end) && (next == nil || t.due.Before(next.due)) {
+				next = t
 			}
 		}
-		os.Exit(0)
-	}
-
-	cmd := exec.Command(os.Args[0], "-test.run=^TestForwardsPanicWithoutPlugin$", "-test.v")
-	cmd.Env = append(os.Environ(), panicChildEnv+"=1")
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		t.Errorf("子进程里四个转发函数应全部 panic（它自己会用非 0 退出报告没 panic 的那个）：%v\n%s",
-			err, stderr.String())
-	}
-}
-
-// TestCheckForUpdateNeedsARealBuild 验证 kura 自己那次查询在开发构建里是失败：
-// mygo.Updater.Check 返回 mygo.ErrUpdatesDisabled（没有打包、没有签名更新清单），
-// 于是「有没有新版本」这件事问不出来——WatchUpdateFound 据此不动蓝点（见
-// watchUpdateFound 的错误分支），不会因为开发构建把用户看到的提示抹掉。
-func TestCheckForUpdateNeedsARealBuild(t *testing.T) {
-	available, err := checkForUpdate(context.Background())
-	if err == nil {
-		t.Fatalf("开发构建（go test）里查询应失败，得到 available=%v err=nil", available)
-	}
-	if available {
-		t.Error("查询失败时不应报告有新版本")
+		if next == nil {
+			c.at = end
+			c.mu.Unlock()
+			return
+		}
+		next.active = false
+		c.at = next.due
+		c.mu.Unlock()
+		next.fn()
 	}
 }
 
-// fakeChange 模拟插件的 OnChange：watch 调用它注册回调，emit 触发一次。
-type fakeChange struct {
-	mu   sync.Mutex
-	call func()
-}
-
-func (f *fakeChange) onchange(fn func()) func() {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.call = fn
-	return func() {
-		f.mu.Lock()
-		defer f.mu.Unlock()
-		f.call = nil
+// armed 返回还在等待触发的定时器个数。
+func (c *fakeClock) armed() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	n := 0
+	for _, t := range c.timers {
+		if t.active {
+			n++
+		}
 	}
+	return n
 }
 
-func (f *fakeChange) emit() {
-	f.mu.Lock()
-	fn := f.call
-	f.mu.Unlock()
-	if fn != nil {
+// fakeHost 模拟 MyGo 更新器与它的插件：更新源返回什么、插件记着什么偏好、写过什么，
+// 都由测试设置或记录。
+type fakeHost struct {
+	mu sync.Mutex
+
+	canUpdate     bool
+	latest        string // 更新源的最新版本，空串即已是最新
+	checkErr      error
+	beforeCheck   func() // 非 nil 时每次检查都在它返回之后才有结果
+	checks        int
+	autoDownloads bool
+	skipped       string
+	pluginLast    time.Time
+	legacy        *bool
+	pluginOn      bool
+	pluginWrites  []bool
+	onChanges     []func()
+	onResumes     []func()
+}
+
+func (h *fakeHost) enabled() bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.canUpdate
+}
+
+func (h *fakeHost) check(context.Context) (string, bool, error) {
+	h.mu.Lock()
+	h.checks++
+	before := h.beforeCheck
+	h.mu.Unlock()
+	if before != nil {
+		before()
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.checkErr != nil {
+		return "", false, h.checkErr
+	}
+	if h.latest == "" {
+		return "", false, nil
+	}
+	return h.latest, true, nil
+}
+
+func (h *fakeHost) automaticDownloads() bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.autoDownloads
+}
+
+func (h *fakeHost) lastCheck() time.Time {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.pluginLast
+}
+
+func (h *fakeHost) skippedVersion() string {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.skipped
+}
+
+func (h *fakeHost) legacyAutomaticChecks() *bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.legacy
+}
+
+func (h *fakeHost) setAutomaticChecks(on bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.pluginOn = on
+	h.pluginWrites = append(h.pluginWrites, on)
+}
+
+func (h *fakeHost) onChange(fn func()) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.onChanges = append(h.onChanges, fn)
+}
+
+func (h *fakeHost) onResume(fn func()) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.onResumes = append(h.onResumes, fn)
+}
+
+// emitChange 模拟插件的 OnChange：偏好或检查时间变了，回调在主线程上被调用。
+func (h *fakeHost) emitChange() {
+	h.mu.Lock()
+	fns := slices.Clone(h.onChanges)
+	h.mu.Unlock()
+	for _, fn := range fns {
 		fn()
 	}
 }
 
-// TestWatchUpdateFoundDeduplicates 验证去重：LastCheck 没变的事件（用户动开关、
-// 回答插件的更新窗口）不触发查询；LastCheck 变了才查一次，并把结果交给 found。
-func TestWatchUpdateFoundDeduplicates(t *testing.T) {
-	ch := &fakeChange{}
-	var mu sync.Mutex
-	last := time.Unix(1000, 0)
-	var checks int
-	available := true
-	got := make(chan bool, 8)
-	watchUpdateFound(func(a bool) { got <- a },
-		ch.onchange,
-		func() time.Time { mu.Lock(); defer mu.Unlock(); return last },
-		func(context.Context) (bool, error) {
-			mu.Lock()
-			defer mu.Unlock()
-			checks++
-			return available, nil
-		})
-
-	// 第一次事件：LastCheck 是零值 → 查一次。
-	ch.emit()
-	if a := waitFound(t, got); !a {
-		t.Error("查到新版本应报 true")
-	}
-	// 同一个 LastCheck 再来两次（相当于用户动开关）：不再查。
-	ch.emit()
-	ch.emit()
-	mu.Lock()
-	if checks != 1 {
-		t.Errorf("LastCheck 没变不应重复查询，查询次数 = %d", checks)
-	}
-	mu.Unlock()
-
-	// LastCheck 前进（一次成功的检查）：再查一次，这次没有新版本。
-	mu.Lock()
-	last = last.Add(time.Hour)
-	available = false
-	mu.Unlock()
-	ch.emit()
-	if a := waitFound(t, got); a {
-		t.Error("已是最新应报 false")
-	}
-	mu.Lock()
-	if checks != 2 {
-		t.Errorf("LastCheck 变了应再查一次，查询次数 = %d", checks)
-	}
-	mu.Unlock()
+func (h *fakeHost) setLatest(v string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.latest = v
 }
 
-// TestWatchUpdateFoundKeepsStateOnError 验证查询失败时既不报告、也不把
-// 上一次的结果抹掉（不动状态），并且失败不挡住下一次查询。
-func TestWatchUpdateFoundKeepsStateOnError(t *testing.T) {
-	ch := &fakeChange{}
-	var mu sync.Mutex
-	last := time.Unix(2000, 0)
-	fail := false
-	reports := make(chan bool, 4)
-	watchUpdateFound(func(a bool) { reports <- a },
-		ch.onchange,
-		func() time.Time { mu.Lock(); defer mu.Unlock(); return last },
-		func(context.Context) (bool, error) {
-			mu.Lock()
-			defer mu.Unlock()
-			if fail {
-				return false, errors.New("network is down")
-			}
-			return true, nil
-		})
-
-	ch.emit()
-	if a := waitFound(t, reports); !a {
-		t.Fatal("第一次查询成功应报有新版本")
-	}
-
-	// 下一轮查询失败：什么都不报（状态保持不变）。
-	mu.Lock()
-	last = last.Add(time.Hour)
-	fail = true
-	mu.Unlock()
-	ch.emit()
-	select {
-	case a := <-reports:
-		t.Errorf("查询失败时不应报告，却收到 %v", a)
-	case <-time.After(200 * time.Millisecond):
-	}
-
-	// 失败后再来一次事件（LastCheck 仍相同）：因为上次没问出答案，应该重问。
-	mu.Lock()
-	fail = false
-	mu.Unlock()
-	ch.emit()
-	if a := waitFound(t, reports); !a {
-		t.Error("上一次失败后应能重问并报告结果")
-	}
+func (h *fakeHost) setCheckErr(err error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.checkErr = err
 }
 
-// TestWatchUpdateFoundOneQueryAtATime 验证一次只跑一个查询：上一次还在路上时
-// 再来事件直接跳过，不排一堆并发请求。
-func TestWatchUpdateFoundOneQueryAtATime(t *testing.T) {
-	ch := &fakeChange{}
-	var mu sync.Mutex
-	last := time.Unix(3000, 0)
-	started := make(chan struct{}, 4)
-	release := make(chan struct{})
-	var checks int
-	reports := make(chan bool, 4)
-	watchUpdateFound(func(a bool) { reports <- a },
-		ch.onchange,
-		func() time.Time { mu.Lock(); defer mu.Unlock(); return last },
-		func(context.Context) (bool, error) {
-			mu.Lock()
-			checks++
-			mu.Unlock()
-			started <- struct{}{}
-			<-release
-			return true, nil
-		})
-
-	ch.emit() // 第一个查询开始，卡在 release 上
-	<-started
-	// 路上再加两个事件：直接跳过。
-	mu.Lock()
-	last = last.Add(time.Hour)
-	mu.Unlock()
-	ch.emit()
-	ch.emit()
-	mu.Lock()
-	if checks != 1 {
-		t.Errorf("查询在路上时不应再起一个，查询次数 = %d", checks)
-	}
-	mu.Unlock()
-	close(release)
-	if a := waitFound(t, reports); !a {
-		t.Error("第一个查询完成后应报告结果")
-	}
+func (h *fakeHost) setAutoDownloads(on bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.autoDownloads = on
 }
 
-// waitFound 等一次 found 回调，超时即失败。
-func waitFound(t *testing.T, ch <-chan bool) bool {
+func (h *fakeHost) checkCount() int {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.checks
+}
+
+func (h *fakeHost) hookCount() int {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return len(h.onChanges) + len(h.onResumes)
+}
+
+// plugin 返回插件调度开关的当前值与写过的全部值。
+func (h *fakeHost) plugin() (on bool, writes []bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.pluginOn, slices.Clone(h.pluginWrites)
+}
+
+// rig 把 Background 接到假时钟、假 host 与一个临时的 config.json 上。
+type rig struct {
+	clock *fakeClock
+	host  *fakeHost
+	b     *Background
+
+	mu      sync.Mutex
+	reports []bool
+}
+
+// newRig 用 prepare（生产的 Prepare 去掉定时器与线程之后的同一条路径）建立 Background，
+// 并把时间与定时器换成假的。它不调用 Start：需要先检查 Prepare 结果的测试自己调用 start。
+func newRig(t *testing.T, h *fakeHost, cfg *store.Config) *rig {
 	t.Helper()
-	select {
-	case a := <-ch:
-		return a
-	case <-time.After(2 * time.Second):
-		t.Fatal("等待 found 回调超时")
-		return false
+	b, err := prepare(cfg, h)
+	if err != nil {
+		t.Fatalf("prepare: %v", err)
+	}
+	r := &rig{clock: newFakeClock(), host: h, b: b}
+	b.now = r.clock.now
+	b.after = r.clock.after
+	b.spawn = func(fn func()) { fn() }
+	return r
+}
+
+func (r *rig) start() {
+	r.b.Start(func(lit bool) {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		r.reports = append(r.reports, lit)
+	})
+}
+
+// reported 返回蓝点收到过的全部亮灭，按时间先后。
+func (r *rig) reported() []bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return slices.Clone(r.reports)
+}
+
+func newTestConfig(t *testing.T) *store.Config {
+	t.Helper()
+	root := t.TempDir()
+	cfg, err := store.NewConfig(filepath.Join(root, "skills"), filepath.Join(root, ".kura"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return cfg
+}
+
+// setPref 把 config.json 里的「自动检查更新」偏好写成 on（走 store 的正式写入口）。
+func setPref(t *testing.T, cfg *store.Config, on bool) {
+	t.Helper()
+	lib, err := store.LoadLibrary(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := lib.SetAutoCheck(on); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func boolPtr(v bool) *bool { return &v }
+
+// TestBackgroundFoundLightsDotWithoutWindow 验证：后台查到新版本只亮蓝点。首检在启动约
+// 10 秒后；检查模式下插件的调度开关始终关着（它一开就会自己弹窗）。
+func TestBackgroundFoundLightsDotWithoutWindow(t *testing.T) {
+	h := &fakeHost{canUpdate: true, latest: "0.2.0"}
+	r := newRig(t, h, newTestConfig(t))
+	r.start()
+	if n := r.clock.armed(); n != 1 {
+		t.Fatalf("启动后应只排定一次首检，得到 %d 个定时器", n)
+	}
+	if h.checkCount() != 0 {
+		t.Fatal("启动那一刻不应立刻检查")
+	}
+	r.clock.advance(firstCheckWait)
+	if got := r.reported(); !slices.Equal(got, []bool{true}) {
+		t.Fatalf("查到新版本应亮一次蓝点，得到 %v", got)
+	}
+	if h.checkCount() != 1 {
+		t.Fatalf("首检应只查一次，得到 %d", h.checkCount())
+	}
+	if on, writes := h.plugin(); on || len(writes) != 0 {
+		t.Errorf("检查模式下插件的调度开关必须关着（否则它会自己弹窗）：on=%v writes=%v", on, writes)
+	}
+}
+
+// TestBackgroundNoUpdateClearsDot 验证：之后的检查若没有新版本，蓝点熄灭。
+func TestBackgroundNoUpdateClearsDot(t *testing.T) {
+	h := &fakeHost{canUpdate: true, latest: "0.2.0"}
+	r := newRig(t, h, newTestConfig(t))
+	r.start()
+	r.clock.advance(firstCheckWait)
+	h.setLatest("")
+	r.clock.advance(day)
+	if got := r.reported(); !slices.Equal(got, []bool{true, false}) {
+		t.Errorf("蓝点应先亮后灭，得到 %v", got)
+	}
+}
+
+// TestBackgroundSkippedVersionDoesNotLightDot 验证：用户在更新窗口里跳过的版本不亮蓝点，
+// 比它更新的版本仍然会亮。
+func TestBackgroundSkippedVersionDoesNotLightDot(t *testing.T) {
+	h := &fakeHost{canUpdate: true, latest: "0.2.0", skipped: "0.2.0"}
+	r := newRig(t, h, newTestConfig(t))
+	r.start()
+	r.clock.advance(firstCheckWait)
+	if got := r.reported(); !slices.Equal(got, []bool{false}) {
+		t.Fatalf("跳过的版本不应亮蓝点，得到 %v", got)
+	}
+	h.setLatest("0.3.0")
+	r.clock.advance(day)
+	if got := r.reported(); !slices.Equal(got, []bool{false, true}) {
+		t.Errorf("比跳过的版本更新的版本应亮蓝点，得到 %v", got)
+	}
+}
+
+// TestBackgroundCadenceIsADayAfterTheLastSuccess 验证节奏：首检之后每 24 小时一次，
+// 间隔从上一次成功检查算起。
+func TestBackgroundCadenceIsADayAfterTheLastSuccess(t *testing.T) {
+	h := &fakeHost{canUpdate: true}
+	r := newRig(t, h, newTestConfig(t))
+	r.start()
+	r.clock.advance(firstCheckWait)
+	r.clock.advance(day - time.Second)
+	if h.checkCount() != 1 {
+		t.Fatalf("距上次检查不满一天不应再查，查询次数 %d", h.checkCount())
+	}
+	r.clock.advance(time.Second)
+	if h.checkCount() != 2 {
+		t.Errorf("满一天应再查一次，查询次数 %d", h.checkCount())
+	}
+}
+
+// TestBackgroundFailureKeepsDotAndRetriesInAnHour 验证：检查失败不动蓝点，一小时后再试。
+func TestBackgroundFailureKeepsDotAndRetriesInAnHour(t *testing.T) {
+	h := &fakeHost{canUpdate: true, latest: "0.2.0"}
+	r := newRig(t, h, newTestConfig(t))
+	r.start()
+	r.clock.advance(firstCheckWait)
+	h.setCheckErr(errors.New("network is down"))
+	r.clock.advance(day)
+	if got := r.reported(); !slices.Equal(got, []bool{true}) {
+		t.Fatalf("检查失败不应改动蓝点，得到 %v", got)
+	}
+	n := h.checkCount()
+	r.clock.advance(time.Hour - time.Second)
+	if h.checkCount() != n {
+		t.Fatal("失败之后不应在一小时之内再查")
+	}
+	r.clock.advance(time.Second)
+	if h.checkCount() != n+1 {
+		t.Errorf("失败之后一小时应再查，查询次数 %d", h.checkCount())
+	}
+}
+
+// TestBackgroundOffMeansNoChecks 验证：偏好关着时 kura 不查，插件也不调度，蓝点是熄灭的。
+func TestBackgroundOffMeansNoChecks(t *testing.T) {
+	cfg := newTestConfig(t)
+	setPref(t, cfg, false)
+	h := &fakeHost{canUpdate: true, latest: "0.2.0"}
+	r := newRig(t, h, cfg)
+	r.start()
+	if r.clock.armed() != 0 {
+		t.Errorf("偏好关着时不应排定任何检查，定时器 %d 个", r.clock.armed())
+	}
+	r.clock.advance(3 * day)
+	if h.checkCount() != 0 {
+		t.Errorf("偏好关着时不应检查，查询次数 %d", h.checkCount())
+	}
+	if on, writes := h.plugin(); on || len(writes) != 0 {
+		t.Errorf("偏好关着时插件的调度开关应保持关：on=%v writes=%v", on, writes)
+	}
+	if got := r.reported(); !slices.Equal(got, []bool{false}) {
+		t.Errorf("没有检查时蓝点应是熄灭的，得到 %v", got)
+	}
+}
+
+// TestBackgroundSwitchingOffStopsAndClearsDot 验证：亮着蓝点时关掉「自动检查更新」，
+// 蓝点熄灭，之后不再查。
+func TestBackgroundSwitchingOffStopsAndClearsDot(t *testing.T) {
+	h := &fakeHost{canUpdate: true, latest: "0.2.0"}
+	r := newRig(t, h, newTestConfig(t))
+	r.start()
+	r.clock.advance(firstCheckWait)
+	r.b.SetAutomaticChecks(false)
+	r.clock.advance(3 * day)
+	if got := r.reported(); !slices.Equal(got, []bool{true, false}) {
+		t.Errorf("关掉之后蓝点应熄灭，得到 %v", got)
+	}
+	if h.checkCount() != 1 {
+		t.Errorf("关掉之后不应再查，查询次数 %d", h.checkCount())
+	}
+}
+
+// TestBackgroundSwitchingOnChecksAgain 验证：从关打开之后，启动后很快会查一次。
+func TestBackgroundSwitchingOnChecksAgain(t *testing.T) {
+	cfg := newTestConfig(t)
+	setPref(t, cfg, false)
+	h := &fakeHost{canUpdate: true, latest: "0.2.0"}
+	r := newRig(t, h, cfg)
+	r.start()
+	r.b.SetAutomaticChecks(true)
+	r.clock.advance(firstCheckWait)
+	if got := r.reported(); !slices.Equal(got, []bool{false, true}) {
+		t.Errorf("打开之后应查到并亮蓝点，得到 %v", got)
+	}
+}
+
+// TestBackgroundAutoDownloadHandsSchedulingToThePlugin 验证静默安装那一档：勾了自动下载，
+// 插件的调度开关打开（由它静默下载安装），kura 自己不查、不亮蓝点；取消勾选后检查交还
+// 给 kura。
+func TestBackgroundAutoDownloadHandsSchedulingToThePlugin(t *testing.T) {
+	h := &fakeHost{canUpdate: true, latest: "0.2.0", autoDownloads: true}
+	r := newRig(t, h, newTestConfig(t))
+	r.start()
+	if on, writes := h.plugin(); !on || !slices.Equal(writes, []bool{true}) {
+		t.Fatalf("勾了自动下载时插件的调度开关应打开：on=%v writes=%v", on, writes)
+	}
+	r.clock.advance(3 * day)
+	if h.checkCount() != 0 {
+		t.Errorf("静默安装模式下 kura 不应自己检查，查询次数 %d", h.checkCount())
+	}
+	if got := r.reported(); slices.Contains(got, true) {
+		t.Errorf("静默安装模式下不应亮蓝点，得到 %v", got)
+	}
+
+	h.setAutoDownloads(false)
+	h.emitChange()
+	if on, _ := h.plugin(); on {
+		t.Error("取消自动下载后插件的调度开关应关上")
+	}
+	r.clock.advance(firstCheckWait)
+	if h.checkCount() != 1 {
+		t.Errorf("取消自动下载后检查交还给 kura，查询次数 %d", h.checkCount())
+	}
+	if got := r.reported(); !slices.Equal(got, []bool{false, true}) {
+		t.Errorf("交还之后查到新版本应亮蓝点，得到 %v", got)
+	}
+}
+
+// TestBackgroundDevBuildDoesNothing 验证：不能自我更新的构建（开发构建、包管理器安装）
+// 什么也不做：不注册插件回调、不排定检查、不写插件的文件、不亮蓝点。
+func TestBackgroundDevBuildDoesNothing(t *testing.T) {
+	h := &fakeHost{canUpdate: false, latest: "0.2.0", legacy: boolPtr(true)}
+	r := newRig(t, h, newTestConfig(t))
+	r.start()
+	r.clock.advance(3 * day)
+	if h.checkCount() != 0 || r.clock.armed() != 0 {
+		t.Errorf("不能更新的构建不应检查：查询 %d 次，定时器 %d 个", h.checkCount(), r.clock.armed())
+	}
+	if _, writes := h.plugin(); len(writes) != 0 {
+		t.Errorf("不能更新的构建不应写插件的调度开关，写入 %v", writes)
+	}
+	if h.hookCount() != 0 {
+		t.Errorf("不能更新的构建不应注册插件回调，注册了 %d 个", h.hookCount())
+	}
+	if got := r.reported(); len(got) != 0 {
+		t.Errorf("不能更新的构建不应报告蓝点，得到 %v", got)
+	}
+}
+
+// TestPrepareMigratesThePluginsPreference 验证旧版本的偏好迁移：config.json 还没有这一项时，
+// 用插件 updater.json 里留下的值定下偏好，并把插件的调度开关对齐（只在它要变时才写）。
+func TestPrepareMigratesThePluginsPreference(t *testing.T) {
+	cases := []struct {
+		name       string
+		legacy     *bool
+		autoDown   bool
+		wantPref   bool
+		wantWrites []bool
+	}{
+		{"从未设过：默认开，插件保持关", nil, false, true, nil},
+		{"从未设过但勾了自动下载：插件打开调度", nil, true, true, []bool{true}},
+		{"旧版本关过：迁移成关", boolPtr(false), false, false, nil},
+		{"旧版本开着：插件的自动调度要关掉，由 kura 检查", boolPtr(true), false, true, []bool{false}},
+		{"旧版本开着且勾了自动下载：插件继续负责静默安装", boolPtr(true), true, true, nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := newTestConfig(t)
+			h := &fakeHost{canUpdate: true, legacy: tc.legacy, autoDownloads: tc.autoDown}
+			b, err := prepare(cfg, h)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if b.pref != tc.wantPref {
+				t.Errorf("偏好 = %v，想要 %v", b.pref, tc.wantPref)
+			}
+			if _, writes := h.plugin(); !slices.Equal(writes, tc.wantWrites) {
+				t.Errorf("插件调度开关的写入 = %v，想要 %v", writes, tc.wantWrites)
+			}
+			lib, err := store.LoadLibrary(cfg)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if lib.AutoCheck != tc.wantPref {
+				t.Errorf("config.json 应记下迁移后的偏好 %v，得到 %v", tc.wantPref, lib.AutoCheck)
+			}
+		})
+	}
+}
+
+// TestPrepareConfigWinsOverTheLegacyValue 验证：config.json 已经有偏好时以它为准，插件里的
+// 旧值不再参与；插件的调度开关仍然被对齐到 kura 说了算的那一个值。
+func TestPrepareConfigWinsOverTheLegacyValue(t *testing.T) {
+	t.Run("config 开、插件关", func(t *testing.T) {
+		cfg := newTestConfig(t)
+		setPref(t, cfg, true)
+		h := &fakeHost{canUpdate: true, legacy: boolPtr(false)}
+		b, err := prepare(cfg, h)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !b.pref {
+			t.Error("config.json 说开，就应当是开")
+		}
+		if _, writes := h.plugin(); len(writes) != 0 {
+			t.Errorf("插件已经是关，不应再写，写入 %v", writes)
+		}
+	})
+	t.Run("config 关、插件开", func(t *testing.T) {
+		cfg := newTestConfig(t)
+		setPref(t, cfg, false)
+		h := &fakeHost{canUpdate: true, legacy: boolPtr(true)}
+		b, err := prepare(cfg, h)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if b.pref {
+			t.Error("config.json 说关，就应当是关")
+		}
+		if on, writes := h.plugin(); on || !slices.Equal(writes, []bool{false}) {
+			t.Errorf("插件的旧开关应被关掉：on=%v writes=%v", on, writes)
+		}
+	})
+}
+
+// TestPrepareDamagedConfigDefaultsOnAndKeepsTheFile 验证 config.json 损坏时：偏好按缺省（开），
+// 返回错误，文件原样保留，不覆盖用户手改的内容。
+func TestPrepareDamagedConfigDefaultsOnAndKeepsTheFile(t *testing.T) {
+	cfg := newTestConfig(t)
+	if err := os.MkdirAll(cfg.Home, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(cfg.ConfigPath(), []byte("{bad"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	b, err := prepare(cfg, &fakeHost{canUpdate: true})
+	if err == nil {
+		t.Fatal("损坏的 config.json 应返回错误")
+	}
+	if !b.pref {
+		t.Error("损坏时偏好应按缺省（开）")
+	}
+	data, readErr := os.ReadFile(cfg.ConfigPath())
+	if readErr != nil || string(data) != "{bad" {
+		t.Errorf("损坏的文件不应被覆盖，得到 %q (err=%v)", data, readErr)
+	}
+}
+
+// TestBackgroundOneCheckAtATime 验证一次只跑一个检查：上一次还在路上时，再来的触发直接跳过，
+// 不排一堆并发请求。
+func TestBackgroundOneCheckAtATime(t *testing.T) {
+	h := &fakeHost{canUpdate: true, latest: "0.2.0"}
+	entered := make(chan struct{}, 4)
+	release := make(chan struct{})
+	h.beforeCheck = func() {
+		entered <- struct{}{}
+		<-release
+	}
+	r := newRig(t, h, newTestConfig(t))
+	r.start()
+
+	done := make(chan struct{})
+	go func() {
+		r.clock.advance(firstCheckWait)
+		close(done)
+	}()
+	<-entered
+
+	r.b.mu.Lock()
+	gen := r.b.gen
+	r.b.mu.Unlock()
+	r.b.fire(gen)
+	if h.checkCount() != 1 {
+		t.Fatalf("上一次还在路上时不应再起一个检查，查询次数 %d", h.checkCount())
+	}
+
+	close(release)
+	<-done
+	if got := r.reported(); !slices.Equal(got, []bool{true}) {
+		t.Errorf("在路上的那次检查完成后应亮蓝点，得到 %v", got)
+	}
+}
+
+// TestNextCheck 验证下一次检查的时刻：距上次成功满一个间隔；失败过则不早于失败后一小时；
+// 时钟被调回过去时按现在起算。
+func TestNextCheck(t *testing.T) {
+	now := time.Date(2026, time.October, 18, 9, 0, 0, 0, time.UTC)
+	cases := []struct {
+		name         string
+		last, failed time.Time
+		want         time.Time
+	}{
+		{"从未检查：立刻到期", time.Time{}, time.Time{}, time.Time{}.Add(checkInterval)},
+		{"一小时前检查过：二十三小时后", now.Add(-time.Hour), time.Time{}, now.Add(23 * time.Hour)},
+		{"刚失败：不早于一小时后，但不早于正常的到期", now.Add(-time.Hour), now.Add(-10 * time.Minute), now.Add(23 * time.Hour)},
+		{"很久没查且刚失败：失败后一小时", now.Add(-30 * day), now.Add(-10 * time.Minute), now.Add(50 * time.Minute)},
+		{"时钟被调回过去：从现在起算一天", now.Add(time.Hour), time.Time{}, now.Add(day)},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := nextCheck(tc.last, tc.failed, now); !got.Equal(tc.want) {
+				t.Errorf("nextCheck = %v，想要 %v", got, tc.want)
+			}
+		})
 	}
 }

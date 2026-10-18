@@ -5610,6 +5610,22 @@ func (msgs Messages) UiStatusAppUpdateNotReady() string {
 	return Catalog.Format(msgs.locale, "uiStatusAppUpdateNotReady", nil)
 }
 
+// UiStatusAutoCheckSaveFailed says "Could not save the automatic update check setting: {reason}"
+// in the language the app shows.
+//
+// 状态行：「自动检查更新」偏好保存失败。
+func UiStatusAutoCheckSaveFailed(reason string) string {
+	return In(i18n.Locale()).UiStatusAutoCheckSaveFailed(reason)
+}
+
+// UiStatusAutoCheckSaveFailed says "Could not save the automatic update check setting: {reason}"
+// in the language of msgs.
+//
+// 状态行：「自动检查更新」偏好保存失败。
+func (msgs Messages) UiStatusAutoCheckSaveFailed(reason string) string {
+	return Catalog.Format(msgs.locale, "uiStatusAutoCheckSaveFailed", map[string]any{"reason": reason})
+}
+
 // UiStatusCandidates says "The repository has {count, number, ::group-off} skills; select the ones to install"
 // in the language the app shows.
 //
