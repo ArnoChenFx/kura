@@ -143,8 +143,8 @@ func SaveHomeConfig(c *Config, hc *HomeConfig) error {
 	return nil
 }
 
-// HomeConfig 是 ~/.kura/config.json 的内容：技能根目录列表、外观偏好与
-// 创建时间，字段保持小写驼峰。
+// HomeConfig 是 ~/.kura/config.json 的内容：技能根目录列表、外观与界面偏好、
+// 应用自更新的偏好与检查时间，以及创建时间，字段保持小写驼峰。
 type HomeConfig struct {
 	// Roots 是用户添加的技能根目录列表（见 Library）；默认根目录总是第一个。
 	Roots []string `json:"roots"`
@@ -156,6 +156,13 @@ type HomeConfig struct {
 	// Lang 是界面语言偏好：LangSystem（跟随系统，缺省）、LangZH 或 LangEN。
 	// 空串等同跟随系统。
 	Lang string `json:"lang,omitempty"`
+	// AutoCheck 是「自动检查更新」偏好。nil 表示还没定过，读取时按开处理；
+	// 定过之后它就是唯一真值，插件 updater.json 里的同名值只是派生的调度开关
+	// （见 ResolveAutoCheck）。
+	AutoCheck *bool `json:"autoCheckUpdates,omitempty"`
+	// UpdateCheckedAt 是 kura 自己最近一次成功检查应用更新的时间（RFC3339）。
+	// 后台检查的节奏靠它；插件的 lastCheck 只记插件自己的检查。
+	UpdateCheckedAt string `json:"updateCheckedAt,omitempty"`
 	// Discovered 记录已经考虑过的 agent 技能目录（绝对路径）。自动发现
 	// （Library.DiscoverAgentRoots）每个路径只考虑一次：用户之后从列表移除的
 	// 目录记在这里，下次启动不会被再次加回来。

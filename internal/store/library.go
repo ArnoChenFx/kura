@@ -104,6 +104,10 @@ type Library struct {
 	// LangSystem，即跟随系统）。启动时由 main.go / CLI 解析成具体语言并
 	// 交给 i18n.Set；改语言走 SetLang。
 	Lang string
+	// AutoCheck 是「自动检查更新」偏好（config.json 的 autoCheckUpdates），
+	// 读取时缺省为开；改它走 SetAutoCheck。配置损坏、需要整个覆盖 config.json
+	// 时，它是写回去的依据，所以手工构造 Library 时要显式设置（零值是关）。
+	AutoCheck bool
 }
 
 // LoadLibrary 以 base 的根目录为默认根目录、base.Home 为数据目录，读取
@@ -111,7 +115,7 @@ type Library struct {
 // 同样返回只含默认根目录的 Library，并附带错误，调用方可继续使用。
 func LoadLibrary(base *Config) (*Library, error) {
 	l := &Library{Home: base.Home, Roots: []string{filepath.Clean(base.Root)},
-		Theme: ThemeSystem, View: ViewGrid, Lang: LangSystem}
+		Theme: ThemeSystem, View: ViewGrid, Lang: LangSystem, AutoCheck: true}
 	hc, _, err := LoadHomeConfig(base)
 	if err != nil {
 		return l, err
@@ -126,8 +130,29 @@ func LoadLibrary(base *Config) (*Library, error) {
 	}
 	// 语言偏好同理：缺失或不认识都按跟随系统处理。
 	l.Lang = langFromHome(hc)
+	if hc.AutoCheck != nil {
+		l.AutoCheck = *hc.AutoCheck
+	}
 	l.Roots = mergeRoots(base.Root, hc.Roots)
 	return l, nil
+}
+
+// fallbackHome 是 config.json 损坏时整个覆盖它的内容：根目录列表与这次运行里
+// 已经定下的偏好从内存带过去，其余回到默认。自动检查偏好总是写明（即使是默认
+// 的开）：不写的话，下次启动会把插件 updater.json 里的派生值当成用户的选择。
+func (l *Library) fallbackHome() *HomeConfig {
+	auto := l.AutoCheck
+	hc := &HomeConfig{Roots: append([]string(nil), l.Roots...), AutoCheck: &auto}
+	if l.Theme != "" && l.Theme != ThemeSystem {
+		hc.Theme = l.Theme
+	}
+	if l.View != "" && l.View != ViewGrid {
+		hc.View = l.View
+	}
+	if l.Lang != "" && l.Lang != LangSystem {
+		hc.Lang = l.Lang
+	}
+	return hc
 }
 
 // mergeRoots 返回默认目录加上 saved 里的追加目录：去掉空串与重复项，默认
@@ -228,7 +253,7 @@ func (l *Library) MoveRoot(root string, to int) error {
 //
 // config.json 不存在时从默认根目录起算；损坏时以内存里的列表为基础，新列表
 // 覆盖它（与 DiscoverAgentRoots 相反：这里是用户明确要求的修改），本次运行里
-// 设过的外观与排列偏好带过去。
+// 设过的偏好带过去（见 fallbackHome）。
 func (l *Library) updateRoots(mutate func(cur []string) ([]string, error)) error {
 	configMu.Lock()
 	defer configMu.Unlock()
@@ -236,13 +261,7 @@ func (l *Library) updateRoots(mutate func(cur []string) ([]string, error)) error
 	var cur []string
 	hc, _, err := LoadHomeConfig(c)
 	if err != nil {
-		hc = &HomeConfig{}
-		if l.Theme != ThemeSystem {
-			hc.Theme = l.Theme
-		}
-		if l.View != "" && l.View != ViewGrid {
-			hc.View = l.View
-		}
+		hc = l.fallbackHome()
 		cur = append([]string(nil), l.Roots...)
 	} else {
 		cur = mergeRoots(l.Roots[0], hc.Roots)
@@ -340,7 +359,7 @@ func realPath(p string) string {
 
 // SetTheme 把外观偏好写进 config.json（其余内容原样保留）。mode 不是
 // system、light、dark 时返回 ErrUnknownTheme，不写盘。config.json 损坏时
-// 它被只含这一项偏好的新文件覆盖，与 updateRoots 对根目录列表的处理一致。
+// 它被新文件覆盖，与 updateRoots 对根目录列表的处理一致。
 func (l *Library) SetTheme(mode string) error {
 	mode, err := NormalizeTheme(mode)
 	if err != nil {
@@ -351,10 +370,7 @@ func (l *Library) SetTheme(mode string) error {
 	c := &Config{Root: l.Roots[0], Home: l.Home}
 	hc, _, err := LoadHomeConfig(c)
 	if err != nil {
-		hc = &HomeConfig{Roots: append([]string(nil), l.Roots...)}
-		if l.View != "" && l.View != ViewGrid {
-			hc.View = l.View
-		}
+		hc = l.fallbackHome()
 	}
 	if hc.CreatedAt == "" {
 		hc.CreatedAt = time.Now().UTC().Format(time.RFC3339)
@@ -369,8 +385,7 @@ func (l *Library) SetTheme(mode string) error {
 
 // SetView 把排列模式写进 config.json（其余内容原样保留）。v 不是 grid、
 // list 时返回 ErrUnknownView，不写盘。与 SetTheme 一样是持 configMu 的
-// 「读—改—写」；config.json 损坏时它被只含根目录列表、外观与这一项偏好的
-// 新文件覆盖。
+// 「读—改—写」；config.json 损坏时它被新文件覆盖（见 fallbackHome）。
 func (l *Library) SetView(v string) error {
 	v, err := NormalizeView(v)
 	if err != nil {
@@ -381,10 +396,7 @@ func (l *Library) SetView(v string) error {
 	c := &Config{Root: l.Roots[0], Home: l.Home}
 	hc, _, err := LoadHomeConfig(c)
 	if err != nil {
-		hc = &HomeConfig{Roots: append([]string(nil), l.Roots...)}
-		if l.Theme != ThemeSystem {
-			hc.Theme = l.Theme
-		}
+		hc = l.fallbackHome()
 	}
 	if hc.CreatedAt == "" {
 		hc.CreatedAt = time.Now().UTC().Format(time.RFC3339)
