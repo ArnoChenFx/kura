@@ -973,7 +973,7 @@ func (a *App) viewDetail(c *myui.Context, s *store.Skill) {
 	panel := myui.Column(c.Key("detail-pane")).Width(a.detailEff).Shrink(0).FillHeight().Background(a.pal.panel)
 	detailMotion(c, panel)
 	panel.Children(func() {
-		smoothScroll(myui.Scroll(c)).Grow(1).FillWidth().Children(func() {
+		smoothScroll(myui.Scroll(c)).Grow(1).MinHeight(0).FillWidth().Children(func() {
 			myui.Column(c).FillWidth().Padding(t.Space(5), t.Space(5)).Gap(t.Space(4)).Children(func() {
 				myui.Row(c).FillWidth().Gap(t.Space(3)).AlignItems(myui.Start).Children(func() {
 					avatar(c, a.pal, s.Name, t.Space(12), s.State != store.StateEnabled)
@@ -999,7 +999,7 @@ func (a *App) viewDetail(c *myui.Context, s *store.Skill) {
 			})
 		})
 		myui.Divider(c)
-		myui.Box(c).FillWidth().Padding(t.Space(3), t.Space(5)).Background(a.pal.card).Children(func() {
+		myui.Box(c.Key("detail-actions")).FillWidth().Shrink(0).Padding(t.Space(3), t.Space(5)).Background(a.pal.card).Children(func() {
 			a.viewDetailActions(c, s, busy)
 		})
 	})
@@ -1255,90 +1255,104 @@ func (a *App) viewDetailMeta(c *myui.Context, s *store.Skill) {
 	})
 }
 
-// viewDetailActions 是详情底部的操作行，按技能状态分组：
-// 启用 → 检查更新（主）+ 停用 + 移入回收站（图标）；
-// 停用 → 启用（主）+ 移入回收站（图标）；
-// 回收站 → 恢复到技能目录（主）。
+// viewDetailActions 是详情底部的固定操作区：主动作在前，历史与删除在后。
+// 通常两行显式对齐并保留间距；主动作与停用的完整文字放不下时，明确分成
+// 三行，不依赖按钮自然换行或省略标签。删除图标始终紧邻历史按钮。
 func (a *App) viewDetailActions(c *myui.Context, s *store.Skill, busy bool) {
 	t := c.Theme()
 	if busy {
-		myui.Row(c).Gap(t.Space(2)).AlignItems(myui.Center).Children(func() {
-			myui.Spinner(c)
-			myui.Text(c, locales.UiDetailBusy(s.Name)).SingleLine().TextColor(t.TextMuted)
+		myui.Row(c).FillWidth().Gap(t.Space(2)).AlignItems(myui.Center).Children(func() {
+			myui.Spinner(c).Shrink(0)
+			myui.Text(c, locales.UiDetailBusy(s.Name)).Grow(1).MinWidth(0).SingleLine().TextColor(t.TextMuted)
 		})
 		return
 	}
-	if s.State == store.StateEnabled || s.State == store.StateDisabled {
-		myui.Row(c).FillWidth().Children(func() {
-			if myui.Button(c, locales.UiSnapshotHistory()).Clicked() {
-				a.OpenSnapshots(s)
+	// 统一高度与紧凑内边距，最窄详情栏的英文标签也有完整的可用宽度。
+	action := func(b myui.Element) myui.Element {
+		return b.Height(t.Space(9)).Padding(t.Space(1.5), t.Space(2)).MinWidth(0)
+	}
+	// 用未换行的实际字宽判断；固定按检查标签留位置，切成较短的取消标签时
+	// 也不改变行数。额外预留按钮内边距、边框与按钮间距。
+	checkW, _ := c.MeasureText(0, myui.Span{Text: locales.UiActionCheckUpdate()})
+	disableW, _ := c.MeasureText(0, myui.Span{Text: locales.UiMenuDisable()})
+	stackMain := s.State == store.StateEnabled &&
+		checkW+disableW+t.Space(10)+2 > a.detailEff-2*t.Space(5)
+	primary := func(b myui.Element) myui.Element {
+		b = action(b)
+		if stackMain {
+			return b.FillWidth()
+		}
+		return b.Grow(1)
+	}
+	myui.Column(c).FillWidth().Gap(t.Space(2)).Children(func() {
+		main := myui.Row(c).FillWidth().Gap(t.Space(2)).AlignItems(myui.Center)
+		if stackMain {
+			main.Column()
+		}
+		main.Children(func() {
+			switch s.State {
+			case store.StateEnabled:
+				// 检查更新只打开评审面板；检查中原位显示取消，操作区高度不跳动。
+				if a.checkingAll || a.checking == s.Name {
+					if primary(myui.Button(c, locales.UiActionCancelCheck())).Clicked() {
+						a.CancelCheck()
+					}
+				} else {
+					if primary(myui.PrimaryButton(c, locales.UiActionCheckUpdate())).
+						Label(locales.UiDetailCheckLabel()).Disabled(a.hasCheckTarget()).Clicked() {
+						a.CheckAsync(s.Name)
+					}
+				}
+				disable := action(myui.Button(c, locales.UiMenuDisable()))
+				if stackMain {
+					disable.FillWidth()
+				}
+				if disable.Clicked() {
+					a.ToggleAsync(s.Name, false)
+				}
+			case store.StateDisabled:
+				if action(myui.PrimaryButton(c, locales.UiMenuEnable())).Grow(1).Clicked() {
+					a.ToggleAsync(s.Name, true)
+				}
+			case store.StateTrashed:
+				if action(myui.PrimaryButton(c, locales.UiMenuRestore())).Grow(1).Clicked() {
+					a.RestoreAsync(s.Name)
+				}
 			}
 		})
-	}
-	// trashButton 是「移入回收站」：Label 保持「详情:移入回收站」供测试与无障碍。
-	trashButton := func() {
-		myui.Spacer(c)
-		b := myui.ButtonBase(c).Label(locales.UiDetailTrashLabel()).Tooltip(locales.UiActionMoveTrash()).
-			Padding(t.Space(1.75)).Radius(t.Radius).TextColor(t.Danger)
-		if b.Hovered() {
-			b.Background(t.Danger.Alpha(0.1))
-		}
-		b.Children(func() { myui.Icon(c, iconTrash).FontSize(t.FontSize + 2) })
-		if b.Clicked() {
-			a.confirm = confirmState{open: true, name: s.Name, state: s.State}
-		}
-	}
-	myui.Row(c).FillWidth().Gap(t.Space(2)).AlignItems(myui.Center).Children(func() {
-		switch s.State {
-		case store.StateEnabled:
-			// 检查更新：预览上游差异，弹出评审面板（不直接改盘）。
-			if a.checkingAll || a.checking == s.Name {
-				if myui.Button(c, locales.UiActionCancelCheck()).Clicked() {
-					a.CancelCheck()
+		myui.Row(c).FillWidth().Gap(t.Space(2)).AlignItems(myui.Center).Children(func() {
+			if s.State == store.StateEnabled || s.State == store.StateDisabled {
+				if action(myui.Button(c, locales.UiSnapshotHistory())).Grow(1).Clicked() {
+					a.OpenSnapshots(s)
 				}
-			} else {
-				ub := myui.PrimaryButton(c, "").Label(locales.UiDetailCheckLabel()).Disabled(a.hasCheckTarget())
-				ub.Children(func() {
-					myui.Icon(c, iconUpdate)
-					myui.Text(c, locales.UiActionCheckUpdate())
+				// 删除有固定命中区和危险色；与历史按钮相邻，不用 Spacer 推远。
+				b := action(myui.ButtonBase(c)).Width(t.Space(9)).
+					Label(locales.UiDetailTrashLabel()).Tooltip(locales.UiActionMoveTrash()).
+					Radius(t.Radius).TextColor(t.Danger)
+				if b.Hovered() {
+					b.Background(t.Danger.Alpha(0.1))
+				}
+				b.Children(func() { myui.Icon(c, iconTrash).FontSize(t.FontSize + 2) })
+				if b.Clicked() {
+					a.confirm = confirmState{open: true, name: s.Name, state: s.State}
+				}
+			} else if s.State == store.StateTrashed {
+				// 永久删除独立一行，完整显示危险动作的文字，始终先走确认框。
+				pb := action(myui.ButtonBase(c)).Grow(1).Gap(t.Space(1.5)).
+					Label(locales.UiDetailPurgeLabel()).Tooltip(locales.UiActionPurgeTooltip()).
+					Radius(t.Radius).TextColor(t.Danger)
+				if pb.Hovered() {
+					pb.Background(t.Danger.Alpha(0.1))
+				}
+				pb.Children(func() {
+					myui.Icon(c, iconTrash).FontSize(t.FontSize + 1)
+					myui.Text(c, locales.UiActionPurge()).SingleLine()
 				})
-				if ub.Clicked() {
-					a.CheckAsync(s.Name)
+				if pb.Clicked() {
+					a.confirm = confirmState{open: true, name: s.Name, purge: true}
 				}
 			}
-			if myui.Button(c, locales.UiMenuDisable()).Clicked() {
-				a.ToggleAsync(s.Name, false)
-			}
-			trashButton()
-		case store.StateDisabled:
-			if myui.PrimaryButton(c, locales.UiMenuEnable()).Clicked() {
-				a.ToggleAsync(s.Name, true)
-			}
-			trashButton()
-		case store.StateTrashed:
-			rb := myui.PrimaryButton(c, "").Label(locales.UiMenuRestore())
-			rb.Children(func() {
-				myui.Icon(c, iconRestore)
-				myui.Text(c, locales.UiMenuRestore())
-			})
-			if rb.Clicked() {
-				a.RestoreAsync(s.Name)
-			}
-			// 永久删除：危险色的文字按钮，靠右放；走确认框，删除前 store 先快照。
-			myui.Spacer(c)
-			pb := myui.ButtonBase(c).Label(locales.UiDetailPurgeLabel()).Tooltip(locales.UiActionPurgeTooltip()).
-				Padding(t.Space(1.75), t.Space(2.5)).Radius(t.Radius).TextColor(t.Danger)
-			if pb.Hovered() {
-				pb.Background(t.Danger.Alpha(0.1))
-			}
-			pb.Children(func() {
-				myui.Icon(c, iconTrash).FontSize(t.FontSize + 1)
-				myui.Text(c, locales.UiActionPurge())
-			})
-			if pb.Clicked() {
-				a.confirm = confirmState{open: true, name: s.Name, purge: true}
-			}
-		}
+		})
 	})
 }
 

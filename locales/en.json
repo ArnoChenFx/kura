@@ -3016,5 +3016,13 @@
     }
   },
   "uiSnapshotDiffTruncated": "Preview truncated; restoration still uses the complete snapshot",
-  "uiSnapshotBinary": "Binary file; text preview is unavailable"
+  "uiSnapshotBinary": "Binary file; text preview is unavailable",
+  "storeErrTranslateRateLimited": "store: the translation service is rate limited; wait at least {seconds, number, ::group-off} seconds before retrying",
+  "@storeErrTranslateRateLimited": {
+    "placeholders": {
+      "seconds": {
+        "type": "int"
+      }
+    }
+  }
 }

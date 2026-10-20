@@ -7,7 +7,6 @@ package store
 import (
 	"context"
 	"encoding/json"
-	"io"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
@@ -170,24 +169,7 @@ func (s *microsoftSession) translate(ctx context.Context, lang, text string) (st
 }
 
 func microsoftRequest(client *http.Client, req *http.Request, limit int64) ([]byte, error) {
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, googlePrivateError(err, "storeErrTranslateDo", locales.StoreErrTranslateDo)
-	}
-	defer resp.Body.Close() //nolint:errcheck // 只读响应体，无可恢复的关闭错误
-	if resp.StatusCode < 200 || resp.StatusCode > 299 {
-		return nil, i18n.NewError("storeErrTranslateStatus", func() string {
-			return locales.StoreErrTranslateStatus(resp.StatusCode, http.StatusText(resp.StatusCode))
-		})
-	}
-	data, err := io.ReadAll(io.LimitReader(resp.Body, limit+1))
-	if err != nil {
-		return nil, googlePrivateError(err, "storeErrTranslateRead", locales.StoreErrTranslateRead)
-	}
-	if int64(len(data)) > limit {
-		return nil, i18n.NewError("storeErrTranslateRead", locales.StoreErrTranslateRead)
-	}
-	return data, nil
+	return freeTranslationRequest(microsoftTranslationGate, client, req, limit)
 }
 
 func microsoftSessionError() error {

@@ -20,6 +20,7 @@ func (f googleTestTransport) RoundTrip(r *http.Request) (*http.Response, error) 
 
 func withGoogleTransport(t *testing.T, f googleTestTransport) {
 	t.Helper()
+	useTranslationTestGates(t)
 	old := http.DefaultClient
 	http.DefaultClient = &http.Client{Transport: f}
 	t.Cleanup(func() { http.DefaultClient = old })

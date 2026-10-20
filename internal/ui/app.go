@@ -484,6 +484,7 @@ func (a *App) setSelection(name string, state store.State) {
 	if a.selName != name || a.selState != state {
 		a.selSeq++
 		a.selName, a.selState = name, state
+		a.pruneTranslations()
 	}
 }
 
@@ -772,6 +773,7 @@ func (a *App) SelectRoot(root string) {
 	a.gen++
 	a.skills, a.loadErr = nil, ""
 	a.restoreRootBrowser()
+	a.pruneTranslations()
 	a.visibleRows = visibleCache{}
 	a.updates = map[string]bool{}
 	a.review = reviewState{}

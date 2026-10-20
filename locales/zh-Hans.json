@@ -730,5 +730,13 @@
     }
   },
   "uiSnapshotDiffTruncated": "预览已截断；恢复仍使用完整快照",
-  "uiSnapshotBinary": "二进制文件，无法显示文本差异"
+  "uiSnapshotBinary": "二进制文件，无法显示文本差异",
+  "storeErrTranslateRateLimited": "store: 翻译服务暂时限流，请至少等待 {seconds, number, ::group-off} 秒后重试",
+  "@storeErrTranslateRateLimited": {
+    "placeholders": {
+      "seconds": {
+        "type": "int"
+      }
+    }
+  }
 }

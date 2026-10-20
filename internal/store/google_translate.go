@@ -7,7 +7,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -105,24 +104,9 @@ func googleTranslateChunk(ctx context.Context, lang, text string) (string, error
 	client := *http.DefaultClient
 	client.Jar = nil
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-	resp, err := client.Do(req)
+	data, err := freeTranslationRequest(googleTranslationGate, &client, req, googleMaxResponse)
 	if err != nil {
-		// *url.Error 会包含完整 q 参数，不能直接 Wrapf；只保留取消身份。
-		return "", googlePrivateError(err, "storeErrTranslateDo", locales.StoreErrTranslateDo)
-	}
-	defer resp.Body.Close() //nolint:errcheck // 只读响应体，无可恢复的关闭错误
-	if resp.StatusCode < 200 || resp.StatusCode > 299 {
-		// 网页响应可能回显原文，不把服务端响应体拼入错误。429 不自动重试。
-		return "", i18n.NewError("storeErrTranslateStatus", func() string {
-			return locales.StoreErrTranslateStatus(resp.StatusCode, http.StatusText(resp.StatusCode))
-		})
-	}
-	data, err := io.ReadAll(io.LimitReader(resp.Body, googleMaxResponse+1))
-	if err != nil {
-		return "", googlePrivateError(err, "storeErrTranslateRead", locales.StoreErrTranslateRead)
-	}
-	if len(data) > googleMaxResponse {
-		return "", i18n.NewError("storeErrTranslateRead", locales.StoreErrTranslateRead)
+		return "", err
 	}
 	var body struct {
 		Sentences []struct {

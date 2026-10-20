@@ -7107,3 +7107,15 @@ func UiSnapshotBinary() string { return In(i18n.Locale()).UiSnapshotBinary() }
 func (msgs Messages) UiSnapshotBinary() string {
 	return Catalog.Format(msgs.locale, "uiSnapshotBinary", nil)
 }
+
+// StoreErrTranslateRateLimited says "store: the translation service is rate limited; wait at least {seconds, number, ::group-off} seconds before retrying"
+// in the language the app shows.
+func StoreErrTranslateRateLimited(seconds int) string {
+	return In(i18n.Locale()).StoreErrTranslateRateLimited(seconds)
+}
+
+// StoreErrTranslateRateLimited says "store: the translation service is rate limited; wait at least {seconds, number, ::group-off} seconds before retrying"
+// in the language of msgs.
+func (msgs Messages) StoreErrTranslateRateLimited(seconds int) string {
+	return Catalog.Format(msgs.locale, "storeErrTranslateRateLimited", map[string]any{"seconds": seconds})
+}
