@@ -24,7 +24,8 @@ import (
 	"github.com/ArnoChenFx/kura/locales"
 )
 
-// translateTimeout 是一次翻译请求的总时限（含连接、等待模型与读响应）。
+// translateTimeout 是一次自定义翻译请求的总时限。免费服务会分批并限速，
+// 网络超时由 store 在取得发送资格之后逐次设置，不把排队时间算进整段预算。
 const translateTimeout = 30 * time.Second
 
 // 译文的 key 前缀：同一技能同一字段每次都算出同一个 key，来回切换才能命中
@@ -75,7 +76,7 @@ type translateEntry struct {
 // "card:<技能名>:description" 或 "detail:<技能名>:description"）以及
 // 全局的「显示原文/译文」开关。
 //
-// 并发：translateState 只在 UI 线程读写，不加锁——begin 在构建/动作里调用，
+// 并发：translateState 只在 UI 线程读写，不加锁——任务在构建/动作里占位，
 // finish 经 App.publish 回到 UI 线程调用，lookup / text 在构建时调用。后台
 // goroutine 绝不直接碰它（它们只拿到文本与结果，由 publish 的闭包回写）。
 type translateState struct {
@@ -209,6 +210,74 @@ func (a *App) SetTranslateOn(on bool) {
 	if on {
 		a.trans.clearErrors()
 		a.ensureCurrentTranslations()
+	} else {
+		a.pruneTranslations()
+	}
+}
+
+// pruneTranslations 只由页面协调与明确动作调用；普通后台 API 不依赖当前选择。
+// 离开页面立即取消在途与排队请求，全文保留成功段供用户回来后继续，成功缓存不动。
+func (a *App) pruneTranslations() {
+	if a.trans == nil {
+		return
+	}
+	visible := map[string]string{}
+	if a.trans.on && a.settings.Ready() {
+		switch a.market.screen {
+		case marketDetail:
+			sk := a.market.detail
+			if d := a.market.docOr(marketKey(sk)); d.loaded {
+				visible[marketDescKey(sk)] = d.doc.Description
+				visible[marketDocKey(sk)] = d.doc.SkillMD
+			}
+		case marketNone:
+			if s := a.selected(); s != nil {
+				visible[detailDescKey(s.Name)] = s.Description
+				visible[cardDescKey(s.Name)] = s.Description
+				if a.detailTab == 1 && a.detailSel == skillKey(s) {
+					if d, ok := a.skillDocs[skillKey(s)]; ok && !d.loading && !d.noMD && d.err == nil {
+						visible[docTransKey(s.Dir)] = d.src
+					}
+				}
+			}
+		}
+	}
+	// 描述的多个显示位置共用任务：只要其中一处仍需要它，就保留整份请求。
+	keep := map[uint64]bool{}
+	for key, src := range visible {
+		if e, ok := a.trans.get(key, src); ok && e.pending && !e.doc && e.ticket != 0 {
+			keep[e.ticket] = true
+		}
+	}
+	for key, e := range a.trans.items {
+		if !e.pending {
+			continue
+		}
+		if src, ok := visible[key]; ok && src == e.src {
+			continue
+		}
+		if e.doc {
+			a.StopDocTranslation(key, e.src)
+		} else if !keep[e.ticket] {
+			a.trans.cancelDescription(key, e)
+		}
+	}
+}
+
+// cancelDescription 同时移除共用这次请求的占位。后续相同原文会拿到新票号，
+// 被取消的旧回调不能结束新任务；已完成的译文不受影响。
+func (s *translateState) cancelDescription(key string, e translateEntry) {
+	if e.cancel != nil {
+		e.cancel()
+	}
+	if e.ticket == 0 {
+		delete(s.items, key)
+		return
+	}
+	for k, current := range s.items {
+		if current.pending && !current.doc && current.ticket == e.ticket {
+			delete(s.items, k)
+		}
 	}
 }
 
@@ -226,37 +295,61 @@ func (a *App) ensureTranslations(s *store.Skill) {
 // TranslateAsync 在后台翻译 text，把结果写进 key（以及 alias 里的各个 key，
 // 它们共用这一次请求）。
 //
-//   - 发起前先在 UI 线程 begin 占位 pending：同一 key 同一原文只发一次。
-//   - 请求带 translateTimeout 的超时，走注入的 a.translate（测试换成假实现，
-//     绝不联网）；goroutine 里不碰任何 UI 状态。发起时固定设置副本，请求
-//     用的就是这一份；请求的 context 派生自当前 epoch，配置变了即被取消。
+//   - 发起前先在 UI 线程占位 pending：同一 key 同一原文只发一次。
+//   - 请求走注入的 a.translate（测试换成假实现，绝不联网）；goroutine 里不碰
+//     任何 UI 状态。发起时固定设置副本，请求用的就是这一份；请求的 context
+//     派生自当前 epoch，配置变了或页面不再需要它时即被取消。
 //   - 结果经 a.publish 回到 UI 线程写缓存，下一帧读到；配置变了
 //     （epoch 不同）的旧结果直接丢弃。
 //   - 失败只把错误文本记进条目供界面显示；错误里若出现 API key，先抹掉
 //     （store 层本就不会带上它，这里再兜一层）。
 func (a *App) TranslateAsync(key, text string, alias ...string) {
-	var keys []string
-	for _, k := range append([]string{key}, alias...) {
-		if a.trans.begin(k, text) {
-			keys = append(keys, k)
+	keys := append([]string{key}, alias...)
+	var cached translateEntry
+	reuse := false
+	for _, k := range keys {
+		if e, ok := a.trans.get(k, text); ok && !e.doc {
+			cached, reuse = e, true
+			break
 		}
 	}
-	if len(keys) == 0 {
+	for _, k := range keys {
+		if old, ok := a.trans.items[k]; ok && old.pending &&
+			(old.src != text || old.doc || reuse && old.ticket != cached.ticket) {
+			if old.doc {
+				a.StopDocTranslation(k, old.src)
+			} else {
+				a.trans.cancelDescription(k, old)
+			}
+		}
+	}
+	if reuse {
+		for _, k := range keys {
+			a.trans.items[k] = cached
+		}
 		return
 	}
-	fn, epoch, cfg, live := a.translate, a.trans.epoch, a.settings, a.trans.current()
+	a.trans.ticket++
+	ticket := a.trans.ticket
+	live, cancel := context.WithCancel(a.trans.current())
+	for _, k := range keys {
+		a.trans.items[k] = translateEntry{pending: true, src: text, ticket: ticket, cancel: cancel}
+	}
+	fn, epoch, cfg := a.translate, a.trans.epoch, a.settings
 	secret := cfg.APIKey
 	a.spawn(func() {
-		ctx, cancel := context.WithTimeout(live, translateTimeout)
 		defer cancel()
+		if live.Err() != nil {
+			return
+		}
+		ctx, cancelRequest := translationRequestContext(live, cfg)
+		defer cancelRequest()
 		var (
 			dst    string
 			errMsg string
 		)
 		if fn == nil {
 			errMsg = store.ErrNotConfigured.Error()
-		} else if live.Err() != nil {
-			errMsg = locales.UiTranslateConfigChanged() // 发起后配置就变了：不再发请求，结果也会被丢弃
 		} else if out, err := fn(ctx, cfg, text); err != nil {
 			errMsg = redactSecret(err.Error(), secret)
 		} else if strings.TrimSpace(out) == "" {
@@ -268,11 +361,24 @@ func (a *App) TranslateAsync(key, text string, alias ...string) {
 			if epoch != a.trans.epoch {
 				return // 翻译配置已变，这份旧结果不要
 			}
-			for _, k := range keys {
-				a.trans.finish(k, text, dst, errMsg)
+			for k, e := range a.trans.items {
+				if !e.doc && e.pending && e.ticket == ticket {
+					a.trans.finish(k, text, dst, errMsg)
+				}
 			}
 		})
 	})
+}
+
+// translationRequestContext 保留任务取消信号；免费服务的逐次网络预算由 store
+// 管理，避免较长文本仅因逐批限速就总在同一位置超时。
+func translationRequestContext(live context.Context, cfg store.Settings) (context.Context, context.CancelFunc) {
+	switch cfg.EffectiveProvider() {
+	case store.TranslationGoogle, store.TranslationMicrosoft:
+		return context.WithCancel(live)
+	default:
+		return context.WithTimeout(live, translateTimeout)
+	}
 }
 
 // redactSecret 把 msg 里出现的 secret 换成 ***。secret 为空时原样返回。
@@ -371,7 +477,7 @@ func (a *App) startDocTranslation(key, src string) {
 			if live.Err() != nil {
 				return
 			}
-			ctx, cancelPart := context.WithTimeout(live, translateTimeout)
+			ctx, cancelPart := translationRequestContext(live, cfg)
 			out, err := fn(ctx, cfg, chunks[i])
 			cancelPart()
 			if live.Err() != nil {

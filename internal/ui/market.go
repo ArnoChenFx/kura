@@ -191,22 +191,30 @@ func marketGitHubURL(sk market.Skill) string {
 // 就读第一页。
 func (a *App) OpenMarket() {
 	a.market.screen, a.market.err = marketList, ""
+	a.pruneTranslations()
 	a.ensureMarketBoard()
 }
 
 // CloseMarket 回到三栏的本地技能目录。
-func (a *App) CloseMarket() { a.market.screen = marketNone }
+func (a *App) CloseMarket() {
+	a.market.screen = marketNone
+	a.pruneTranslations()
+}
 
 // OpenMarketDetail 打开技能的详情页，并读它的快照（没读过才读）。
 func (a *App) OpenMarketDetail(sk market.Skill) {
 	a.market.screen, a.market.detail = marketDetail, sk
+	a.pruneTranslations()
 	if d := a.market.doc(marketKey(sk)); !d.loaded && !d.loading {
 		a.loadMarketDocAsync(sk)
 	}
 }
 
 // CloseMarketDetail 从详情页回到榜单列表。
-func (a *App) CloseMarketDetail() { a.market.screen = marketList }
+func (a *App) CloseMarketDetail() {
+	a.market.screen = marketList
+	a.pruneTranslations()
+}
 
 // ensureMarketBoard 在当前榜单还没读到内容时读第一页。已读到内容或正在读的榜单不
 // 重复发起；读失败的榜单在下一次打开或切到它时再读一次，失败原因留在页面里，
@@ -849,6 +857,7 @@ func (a *App) ensureMarketTranslations() {
 // ensureCurrentTranslations 为当前画面需要的文本发起翻译：市场详情页看市场技能，其余时候看选中的
 // 本地技能。View 每帧与切换译文模式时都调用，两条路径都受缓存占位保护。
 func (a *App) ensureCurrentTranslations() {
+	a.pruneTranslations()
 	if a.market.screen != marketNone {
 		a.ensureMarketTranslations()
 		return

@@ -37,6 +37,8 @@ DELETED = {
 # ADDED 是迁移之后新增的 key（迁移时不存在，所以 keys.json 里没有它们）。
 # 校验时从「新 catalogs 多出的 key」里排除，避免把新功能误报成 EXTRA。
 ADDED = {
+    # Issue 15：免费翻译的提供方级限流冷却。
+    'storeErrTranslateRateLimited',
     'uiSnapshotDiffTruncated',
     'uiSnapshotBinary',
     # Issue 13：免费翻译、进度、批量更新和历史快照。

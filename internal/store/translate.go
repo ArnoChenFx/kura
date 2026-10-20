@@ -8,9 +8,9 @@ package store
 //
 // 实现只用标准库 net/http + context，不引第三方依赖。http.Client 用包级
 // 默认（零值复用连接池），超时**不由 Client.Timeout 兜底**而是交给调用方的
-// ctx：翻译是用户主动触发的动作，UI 会挂自己的超时与取消（文案可长可短，
-// 库层面拍死一个超时反而让长文本无法完成）。ctx 超时/取消时请求会被中断，
-// 连接由 http 层回收。
+// ctx：自定义接口由 UI 挂超时，免费接口在限速等待后为每个实际 HTTP 请求挂
+// 30 秒超时，整段只用调用方的取消信号，长文本不会仅因排队而耗尽网络预算。
+// ctx 超时/取消时请求会被中断，连接由 http 层回收。
 
 import (
 	"bytes"
@@ -77,7 +77,8 @@ const systemPrompt = "你是一名技术文档翻译引擎。把用户发来的�
 // Translate 按所选服务把 text 翻译成 s.TargetLang（空串按 DefaultTargetLang）。
 // 免费服务先保护 Markdown 与代码；已有自定义接口仍保留原来的模型请求。
 //
-//   - ctx 用来取消与超时，调用方负责挂超时；本实现不额外设 Client.Timeout。
+//   - ctx 用来取消与超时；免费服务另为每个实际 HTTP 请求设置 30 秒超时，
+//     自定义接口沿用调用方时限；不额外设 Client.Timeout。
 //   - s.Ready() 为假时**不发请求**，返回 ErrNotConfigured（errors.Is 可判断）。
 //   - text 为空串时返回 ("", nil)——空文本没有翻译价值，省一次 API 调用。
 //   - 失败返回以「store: 」开头的错误（文字随界面语言变，见 catalog）。
