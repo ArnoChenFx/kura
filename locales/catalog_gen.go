@@ -6768,11 +6768,11 @@ func (msgs Messages) UiSettingsProviderGoogle() string {
 	return Catalog.Format(msgs.locale, "uiSettingsProviderGoogle", nil)
 }
 
-// UiSettingsProviderMicrosoft says "Microsoft Translator (free)"
+// UiSettingsProviderMicrosoft says "Microsoft Translator (free, experimental)"
 // in the language the app shows.
 func UiSettingsProviderMicrosoft() string { return In(i18n.Locale()).UiSettingsProviderMicrosoft() }
 
-// UiSettingsProviderMicrosoft says "Microsoft Translator (free)"
+// UiSettingsProviderMicrosoft says "Microsoft Translator (free, experimental)"
 // in the language of msgs.
 func (msgs Messages) UiSettingsProviderMicrosoft() string {
 	return Catalog.Format(msgs.locale, "uiSettingsProviderMicrosoft", nil)

@@ -2918,7 +2918,7 @@
   "uiSettingsTranslation": "Translation",
   "uiSettingsProvider": "Translation service",
   "uiSettingsProviderGoogle": "Google Translate (free)",
-  "uiSettingsProviderMicrosoft": "Microsoft Translator (free)",
+  "uiSettingsProviderMicrosoft": "Microsoft Translator (free, experimental)",
   "uiSettingsProviderOpenAI": "Custom API (OpenAI compatible)",
   "uiSettingsFreeTranslationNote": "No API key needed. Text is sent to the selected service when translation is enabled. If unavailable, choose another service or a custom API.",
   "uiSettingsUnknownProvider": "Unsupported translation service: {provider}",

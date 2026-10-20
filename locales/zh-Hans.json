@@ -632,7 +632,7 @@
   "uiSettingsTranslation": "翻译",
   "uiSettingsProvider": "翻译服务",
   "uiSettingsProviderGoogle": "Google 翻译（免费）",
-  "uiSettingsProviderMicrosoft": "微软翻译（免费）",
+  "uiSettingsProviderMicrosoft": "微软翻译（免费，实验性）",
   "uiSettingsProviderOpenAI": "自定义 API（OpenAI 兼容）",
   "uiSettingsFreeTranslationNote": "无需密钥。开启译文后，待译内容会发送给所选服务；连接失败时可切换服务或使用自定义 API。",
   "uiSettingsUnknownProvider": "不支持的翻译服务：{provider}",

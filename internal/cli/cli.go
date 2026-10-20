@@ -35,7 +35,7 @@ import (
 )
 
 // Version 是 CLI 打印的版本号，与 mygo.json 保持一致。
-const Version = "0.1.13"
+const Version = "0.1.14"
 
 // 退出码约定（见包注释与 --help）。
 const (
