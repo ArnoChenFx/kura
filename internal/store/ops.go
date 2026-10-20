@@ -85,10 +85,20 @@ func (c *Config) Disable(name string) (*Result, error) {
 // Remove 把根目录的技能移入 trash/<name>/<stamp>，移动前先做内容快照。
 // 快照与回收站是两个动作：快照永远留在 snapshots/ 里，trash 里的副本用于恢复。
 func (c *Config) Remove(name string) (*Result, error) {
+	return c.removeFrom(name, c.SkillPath(name))
+}
+
+// RemoveDisabled 只把 disabled/<name> 移入回收站；即使根目录里重新安装了
+// 同名技能，也不会操作那份启用副本。快照与恢复规则和 Remove 相同。
+func (c *Config) RemoveDisabled(name string) (*Result, error) {
+	return c.removeFrom(name, c.DisabledPath(name))
+}
+
+// removeFrom 共用先快照再移动的流程；src 只由按状态确定路径的入口提供。
+func (c *Config) removeFrom(name, src string) (*Result, error) {
 	if err := checkName(name); err != nil {
 		return nil, err
 	}
-	src := c.SkillPath(name)
 	if !fileExists(src) {
 		return nil, fmt.Errorf("%w: %s", ErrUnknownSkill, name)
 	}

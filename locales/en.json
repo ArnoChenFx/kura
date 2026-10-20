@@ -2881,6 +2881,14 @@
   "@uiTranslateTranslated": {
     "description": "译文模式选项：译文。"
   },
+  "uiLibraryTitle": "SKILL LIBRARY",
+  "@uiLibraryTitle": {
+    "description": "技能工作区标题上方的小标题。"
+  },
+  "uiSearchClear": "Clear search",
+  "@uiSearchClear": {
+    "description": "搜索无结果时清空搜索词。"
+  },
   "uiViewGrid": "Grid",
   "@uiViewGrid": {
     "description": "排列模式选项：卡片网格。"

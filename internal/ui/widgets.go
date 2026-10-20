@@ -229,7 +229,7 @@ func sectionHeader(c *myui.Context, title string) {
 func searchBox(c *myui.Context, query *string, bg myui.Color) myui.Element {
 	t := c.Theme()
 	row := myui.Row(c).AlignItems(myui.Center).
-		Gap(t.Space(1.5)).Padding(t.Space(1.5), t.Space(2.5)).
+		Gap(t.Space(2)).Padding(t.Space(2), t.Space(3)).
 		Radius(t.Radius).Background(bg).Border(1, t.Border).
 		Cursor(myui.CursorText)
 	row.Children(func() {
@@ -241,7 +241,32 @@ func searchBox(c *myui.Context, query *string, bg myui.Color) myui.Element {
 		// 焦点在输入框里时 Escape 清空（与 SearchField 的行为一致）。
 		in.OnShortcut(0, myui.KeyEscape, func() { *query = "" })
 	})
+	focus := row.AnimateTo("focus", boolF(row.FocusWithin()), interactionMotion)
+	row.Border(1, t.Border.Mix(t.Accent, focus))
 	return row
+}
+
+// segmentSurface 统一分段控件的选中、悬停与文字过渡，不改变原生选择语义。
+func segmentSurface(e myui.Element, t *myui.Theme, selected bool) {
+	on := e.AnimateTo("selected", boolF(selected), interactionMotion)
+	hover := e.AnimateTo("hover", boolF(e.Hovered() && !selected), interactionMotion)
+	e.Background(t.SurfaceHover.Alpha(hover).Mix(t.SurfacePressed, on)).
+		TextColor(t.TextMuted.Mix(t.Text, max(on, hover)))
+}
+
+// filterTabs 用无障碍和键盘行为完整的 SegmentedBase，计数变化不会重建控件身份。
+func filterTabs(c *myui.Context, selected *int, labels ...string) myui.Element {
+	t := c.Theme()
+	parts := myui.SegmentedBase(c, selected, len(labels))
+	return parts.Track.Padding(3).Gap(2).Radius(t.Radius).Background(t.Surface).Children(func() {
+		for i, label := range labels {
+			b := parts.Segment(i).Label(label).Padding(t.Space(1.5), t.Space(2)).Radius(t.Radius - 3)
+			segmentSurface(b, t, i == *selected)
+			b.Children(func() {
+				countMotion(c, myui.Text(c, label).SingleLine().FontSize(t.FontSize-1))
+			})
+		}
+	})
 }
 
 // sourceIcon 返回卡片底行的来源图标。

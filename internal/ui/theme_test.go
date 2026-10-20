@@ -99,8 +99,8 @@ func TestSchemeFollowsSystemAppearance(t *testing.T) {
 
 	tt.SetDark(true)
 	refresh(a, tt)
-	if a.pal.canvas != myui.Hex("#1a1a1e") || a.pal.card != myui.Hex("#232327") || a.pal.line != myui.Hex("#333339") {
-		t.Errorf("深色皮肤应取参考图的底色、卡片色与描边：%+v", a.pal)
+	if a.pal.canvas != kuraScheme.dark.pal.canvas || a.pal.card != kuraScheme.dark.pal.card || a.pal.line != kuraScheme.dark.pal.line {
+		t.Errorf("深色皮肤应使用统一的底色、卡片色与描边：%+v", a.pal)
 	}
 
 	tt.SetDark(false)

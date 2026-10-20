@@ -22,7 +22,7 @@ const (
 	// cardMinWidth / cardHeight 是卡片的最小宽度与固定高度：网格按窗口宽度
 	// 决定列数，列宽在最小宽度之上平分剩余空间。
 	cardMinWidth = 248
-	cardHeight   = 140
+	cardHeight   = 168
 	// titleBarMinHeight 是自绘标题栏的高度（DIP），与 main.go 里
 	// WindowOptions.TitleBarHeight 保持一致：全屏时窗口按钮藏起来、
 	// c.TitleBar() 返回零，高度取这个兑底，顶栏不塌。
@@ -96,7 +96,7 @@ func (a *App) View(c *myui.Context) {
 		// 技能市场页面替换三栏的内容区（标题栏仍在，见 market.go）。
 		a.viewMarketPage(c)
 	} else {
-		body := myui.Row(c).Key("body").Grow(1).MinHeight(0).AlignItems(myui.Stretch)
+		body := myui.Row(c.Key("body")).Grow(1).MinHeight(0).AlignItems(myui.Stretch)
 		body.Children(func() {
 			a.viewRoots(c)
 			a.viewGrip(c, &a.rootsW, a.rootsEff, 1, rootsMinW, rootsHi)
@@ -126,7 +126,7 @@ func (a *App) View(c *myui.Context) {
 		if a.confirm.purge {
 			a.PurgeAsync(a.confirm.name)
 		} else {
-			a.RemoveAsync(a.confirm.name)
+			a.RemoveSkillAsync(a.confirm.name, a.confirm.state)
 		}
 	}
 
@@ -151,11 +151,11 @@ func (a *App) viewTitlebar(c *myui.Context) {
 	t := c.Theme()
 	bar := c.TitleBar()
 	myui.Row(c).FillWidth().Shrink(0).Height(max(bar.Height, titleBarMinHeight)).
-		Padding(0, bar.Right+12, 0, bar.Left+12).Background(a.pal.sidebar).
+		Padding(0, bar.Right+16, 0, bar.Left+16).Background(a.pal.sidebar).
 		AlignItems(myui.Center).Gap(t.Space(2)).DragWindow().Children(func() {
 		// 标识：项目里的应用图标（四周透明，直接放进顶栏）。
-		myui.Image(c, appIcon).Size(t.Space(6), t.Space(6))
-		myui.Text(c, "kura").Bold().SingleLine()
+		myui.Image(c, appIcon).Size(22, 22)
+		myui.Text(c, "kura").FontWeight(600).SingleLine()
 	})
 }
 
@@ -255,10 +255,10 @@ func dragWidth(cur, delta, lo, hi float32) float32 {
 func (a *App) viewRoots(c *myui.Context) {
 	t := c.Theme()
 	myui.Column(c).Width(a.rootsEff).Shrink(0).FillHeight().Background(a.pal.sidebar).Children(func() {
-		myui.Text(c, locales.UiRootsTitle()).FontSize(t.FontSize-1).FontWeight(600).TextColor(t.TextMuted).
-			Padding(t.Space(4), t.Space(5), t.Space(1.5), t.Space(5))
+		myui.Text(c, locales.UiRootsTitle()).FontSize(t.FontSize-2).FontWeight(600).TextColor(t.TextMuted).
+			Padding(t.Space(6), t.Space(5), t.Space(3), t.Space(5))
 		myui.Scroll(c).Grow(1).FillWidth().Children(func() {
-			myui.Column(c).FillWidth().Padding(0, t.Space(2.5)).Gap(t.Space(0.5)).Children(func() {
+			myui.Column(c).FillWidth().Padding(0, t.Space(3)).Gap(t.Space(1.5)).Children(func() {
 				for i, root := range a.lib.Roots {
 					a.rootItem(c, root, i == 0)
 				}
@@ -277,6 +277,7 @@ func (a *App) viewRoots(c *myui.Context) {
 			ab := myui.ButtonBase(c).Label(locales.UiRootsAddFolder()).FillWidth().Disabled(a.adding).
 				Justify(myui.Start).Gap(t.Space(2)).Padding(t.Space(2), t.Space(3)).
 				Radius(t.Radius).Border(1, t.Border).TextColor(a.pal.textMid)
+			buttonMotion(c, ab, !a.adding)
 			if ab.Hovered() {
 				ab.Background(t.SurfaceHover).TextColor(t.Text)
 			}
@@ -287,6 +288,7 @@ func (a *App) viewRoots(c *myui.Context) {
 			if ab.Clicked() {
 				a.AddRootAsync()
 			}
+			myui.Divider(c)
 			a.viewRootsFooter(c)
 		})
 	})
@@ -360,9 +362,9 @@ func (a *App) railButton(c *myui.Context, icon *myui.SVG, label, tip string, dis
 	b := myui.ButtonBase(c).Label(label).Tooltip(tip).Disabled(disabled).
 		Padding(t.Space(1.75)).Radius(t.Radius).TextColor(t.TextMuted)
 	hover := b.Hovered() && !disabled
-	if hover {
-		b.Background(t.SurfaceHover).TextColor(t.Text)
-	}
+	h := b.AnimateTo("hover", boolF(hover), interactionMotion)
+	b.Background(t.SurfaceHover.Alpha(h)).TextColor(t.TextMuted.Mix(t.Text, h))
+	buttonMotion(c, b, !disabled)
 	if disabled {
 		b.Opacity(0.45)
 	}
@@ -393,7 +395,7 @@ func notifyDot(c *myui.Context, col, ring myui.Color) {
 	// 圆点直径取 2 个间距单位（默认 8px），放在按钮右上角那块空出来的角上：
 	// 图标居中、只占中间的 16px，所以小圆点盖不到它。
 	d := c.Theme().Space(2)
-	myui.Box(c).Key("update-dot").Size(d, d).Radius(d/2).Background(col).
+	myui.Box(c.Key("update-dot")).Size(d, d).Radius(d/2).Background(col).
 		Border(1, ring).Absolute().Top(0).Right(0).PassThrough()
 }
 
@@ -410,12 +412,7 @@ func (a *App) viewThemeSwitch(c *myui.Context) {
 		for i, m := range themeModes {
 			b := seg.Segment(i).Label(m.label()).Tooltip(m.label()).
 				Padding(t.Space(1.25), t.Space(2)).Radius(t.Radius - 2).TextColor(t.TextMuted)
-			switch {
-			case i == sel:
-				b.Background(t.SurfacePressed).TextColor(t.Text)
-			case b.Hovered():
-				b.Background(t.SurfaceHover).TextColor(t.Text)
-			}
+			segmentSurface(b, t, i == sel)
 			b.Children(func() { myui.Icon(c, m.icon).FontSize(t.FontSize + 1) })
 		}
 	})
@@ -434,15 +431,14 @@ type rootRef string
 // 放）。拖动时的落点边框亮起强调色。
 func (a *App) rootItem(c *myui.Context, root string, isDefault bool) {
 	t := c.Theme()
-	b := myui.ButtonBase(c).Key(root).Label(rootLabel(root)).Tooltip(root).
-		FillWidth().Justify(myui.Start).Gap(t.Space(2.5)).
-		Padding(t.Space(1.75), t.Space(2.5)).Radius(t.Radius - 2).TextColor(a.pal.textMid)
-	switch {
-	case root == a.rootSel:
-		b.Background(a.pal.sel).TextColor(t.Text)
-	case b.Hovered():
-		b.Background(t.SurfaceHover).TextColor(t.Text)
-	}
+	b := myui.ButtonBase(c.Key(root)).Label(rootLabel(root)).Tooltip(root).
+		FillWidth().Justify(myui.Start).Gap(t.Space(2)).
+		Padding(t.Space(2), t.Space(2.5)).Radius(t.Radius).TextColor(a.pal.textMid)
+	chosen := b.AnimateTo("chosen", boolF(root == a.rootSel), interactionMotion)
+	hover := b.AnimateTo("hover", boolF(b.Hovered()), interactionMotion)
+	b.Background(a.pal.sidebar.Mix(t.SurfaceHover, hover).Mix(a.pal.sel, chosen)).
+		TextColor(a.pal.textMid.Mix(t.Text, chosen))
+	buttonMotion(c, b, true)
 	if !isDefault {
 		b.Drag(rootRef(root))
 		if _, over := myui.DragOver[rootRef](b); over {
@@ -457,10 +453,15 @@ func (a *App) rootItem(c *myui.Context, root string, isDefault bool) {
 		if isDefault {
 			icon = iconHome
 		}
-		myui.Icon(c, icon).FontSize(16)
+		myui.Box(c).Size(26, 26).Shrink(0).Radius(7).
+			Background(t.Accent.Alpha(0.06 + 0.08*chosen)).Center().Children(func() {
+			myui.Icon(c, icon).FontSize(14).TextColor(a.pal.textMid.Mix(t.Accent, chosen))
+		})
 		myui.Text(c, rootLabel(root)).SingleLine().Grow(1).MinWidth(0)
 		if n, ok := a.rootCounts[root]; ok {
-			myui.Text(c, itoa(n)).SingleLine().FontSize(t.FontSize - 1).TextColor(t.TextMuted)
+			n := myui.Text(c, itoa(n)).SingleLine().FontSize(t.FontSize-2).
+				TextColor(t.TextMuted).Padding(2, 6).Radius(6).Background(a.pal.card.Alpha(0.6))
+			countMotion(c, n)
 		}
 	})
 	b.ContextMenu(func(m *myui.Menu) { a.rootMenu(c, m, root, isDefault) })
@@ -508,37 +509,46 @@ func rootLabel(root string) string {
 func (a *App) viewMainHeader(c *myui.Context) {
 	t := c.Theme()
 	isDefault := a.cfg.Root == a.lib.Default()
-	myui.Row(c).FillWidth().Padding(t.Space(4), t.Space(5), t.Space(2), t.Space(5)).
-		Gap(t.Space(1)).AlignItems(myui.Center).Children(func() {
-		myui.Column(c).Grow(1).MinWidth(0).Gap(t.Space(1)).Children(func() {
-			myui.Text(c, rootLabel(a.cfg.Root)).Bold().FontSize(t.FontSize + 6).SingleLine()
-			myui.Row(c).Gap(t.Space(1.5)).AlignItems(myui.Center).Children(func() {
+	myui.Column(c).FillWidth().Shrink(0).Padding(t.Space(5), t.Space(5), t.Space(2)).
+		Gap(t.Space(3)).Children(func() {
+		myui.Row(c).FillWidth().Gap(t.Space(3)).AlignItems(myui.Center).Children(func() {
+			myui.Column(c).Grow(1).MinWidth(0).Gap(t.Space(1)).Children(func() {
+				myui.Text(c, locales.UiLibraryTitle()).FontSize(t.FontSize - 2).FontWeight(600).TextColor(t.TextMuted)
+				myui.Text(c, rootLabel(a.cfg.Root)).FontWeight(600).FontSize(t.FontSize + 10).SingleLine()
+			})
+			ib := myui.PrimaryButton(c, "").Label(locales.UiActionInstall()).Shrink(0).
+				Padding(t.Space(2.5), t.Space(3.5))
+			buttonMotion(c, ib, true)
+			ib.Children(func() {
+				myui.Icon(c, iconPlus).FontSize(t.FontSize)
+				myui.Text(c, locales.UiActionInstall()).FontWeight(600)
+			})
+			if ib.Clicked() {
+				a.OpenInstall()
+			}
+		})
+		// 路径与辅助操作独占第二行，最窄中栏仍能完整显示主操作。
+		myui.Row(c).FillWidth().Wrap().Gap(t.Space(2)).AlignItems(myui.Center).Children(func() {
+			myui.Row(c).Grow(1).Basis(160).MinWidth(0).Gap(t.Space(1.5)).AlignItems(myui.Center).Children(func() {
 				myui.Icon(c, iconFolder).TextColor(t.TextMuted).FontSize(t.FontSize - 1)
-				myui.Text(c, a.cfg.Root).SingleLine().MinWidth(0).FontSize(t.FontSize - 1).TextColor(t.TextMuted)
+				myui.Text(c, a.cfg.Root).SingleLine().MinWidth(0).Grow(1).
+					Tooltip(a.cfg.Root).FontSize(t.FontSize - 2).TextColor(t.TextMuted)
+			})
+			myui.Row(c).Shrink(0).AlignItems(myui.Center).Gap(t.Space(0.5)).
+				Padding(2).Radius(t.Radius).Background(a.pal.panel).Border(1, a.pal.line).Children(func() {
+				if a.scanning || a.checkingAll || a.checking != "" {
+					myui.Spinner(c)
+				}
+				ghostButton(c, iconRefresh, locales.UiActionRefresh(), a.scanning, a.ReloadAsync)
+				ghostButton(c, iconCheckAll, locales.UiActionCheckAll(), a.checkingAll || a.checking != "", a.CheckAllAsync)
+				if isDefault {
+					ghostButton(c, iconImport, locales.UiActionImportMeta(), false, a.ImportAsync)
+				} else {
+					ghostButton(c, iconUnlink, locales.UiActionRemoveRoot(), false, func() { a.RemoveRootAsync(a.cfg.Root) })
+				}
+				ghostButton(c, iconGlobe, locales.UiActionMarket(), false, a.OpenMarket)
 			})
 		})
-		if a.scanning || a.checkingAll || a.checking != "" {
-			myui.Spinner(c)
-		}
-		ghostButton(c, iconRefresh, locales.UiActionRefresh(), a.scanning, a.ReloadAsync)
-		ghostButton(c, iconCheckAll, locales.UiActionCheckAll(), a.checkingAll || a.checking != "", a.CheckAllAsync)
-		// .skill-lock.json 只描述默认目录里的技能。
-		if isDefault {
-			ghostButton(c, iconImport, locales.UiActionImportMeta(), false, a.ImportAsync)
-		} else {
-			ghostButton(c, iconUnlink, locales.UiActionRemoveRoot(), false, func() { a.RemoveRootAsync(a.cfg.Root) })
-		}
-		// 技能市场（skills.sh 的榜单）：打开后替换三栏的内容区，见 market.go。
-		ghostButton(c, iconGlobe, locales.UiActionMarket(), false, a.OpenMarket)
-		myui.Box(c).Width(t.Space(2))
-		ib := myui.PrimaryButton(c, "").Label(locales.UiActionInstall())
-		ib.Children(func() {
-			myui.Icon(c, iconPlus)
-			myui.Text(c, locales.UiActionInstall()).FontWeight(600)
-		})
-		if ib.Clicked() {
-			a.OpenInstall()
-		}
 	})
 }
 
@@ -551,7 +561,7 @@ func (a *App) viewFilterBar(c *myui.Context) {
 		AlignItems(myui.Center).Children(func() {
 		searchBox(c, &a.query, a.pal.card).Grow(1).Basis(t.Space(50)).MaxWidth(t.Space(80))
 		myui.Spacer(c)
-		myui.Segmented(c, &a.filter,
+		filterTabs(c, &a.filter,
 			locales.UiFilterAll(en+dis), locales.UiFilterEnabled(en),
 			locales.UiFilterDisabled(dis), locales.UiFilterTrashed(trash)).
 			Shrink(0)
@@ -595,12 +605,7 @@ func (a *App) viewModeSwitch(c *myui.Context) {
 		for i, m := range viewModes {
 			b := seg.Segment(i).Label(m.label()).Tooltip(m.label()).
 				Padding(t.Space(1.5), t.Space(2)).Radius(t.Radius - 2).TextColor(t.TextMuted)
-			switch {
-			case i == sel:
-				b.Background(t.SurfacePressed).TextColor(t.Text)
-			case b.Hovered():
-				b.Background(t.SurfaceHover).TextColor(t.Text)
-			}
+			segmentSurface(b, t, i == sel)
 			b.Children(func() { myui.Icon(c, m.icon).FontSize(t.FontSize + 1) })
 		}
 	})
@@ -645,7 +650,7 @@ func (a *App) viewList(c *myui.Context, rows []*store.Skill) {
 		myui.Column(c).FillWidth().Gap(t.Space(1.5)).
 			Padding(0, t.Space(5), t.Space(3), t.Space(5)).Children(func() {
 			for _, s := range rows {
-				a.viewRow(c, s, s.Name == a.selName)
+				a.viewRow(c, s, a.isSelected(s))
 			}
 		})
 	})
@@ -662,16 +667,9 @@ func (a *App) viewRow(c *myui.Context, s *store.Skill, selected bool) {
 	t := c.Theme()
 	busy := a.isBusy(s.Name)
 	dim := s.State != store.StateEnabled
-	row := myui.ButtonBase(c).Key(s.Name).FillWidth().Justify(myui.Start).
+	row := myui.ButtonBase(c.Key(skillKey(s))).FillWidth().Justify(myui.Start).
 		Padding(t.Space(2.5), t.Space(3)).Radius(t.Radius + 2)
-	bg, border := a.pal.card, a.pal.line
-	switch {
-	case selected:
-		bg, border = a.pal.cardSel, t.Accent
-	case row.Hovered():
-		bg, border = a.pal.cardHover, a.pal.lineHover
-	}
-	row.Background(bg).Border(1, border)
+	surfaceMotion(c, row, a.pal, selected, false)
 	// 只有左键会选中这一行。右键只弹菜单（同卡片，见 viewCard）：菜单动作以
 	// s 为准，不改选中。
 	row.ContextMenu(func(m *myui.Menu) { a.cardMenu(c, m, s) })
@@ -735,8 +733,8 @@ func (a *App) viewRow(c *myui.Context, s *store.Skill, selected bool) {
 			})
 		})
 	})
-	if row.Clicked() && a.selName != s.Name {
-		a.selName = s.Name
+	if row.Clicked() && !a.isSelected(s) {
+		a.selectSkill(s)
 		c.Invalidate()
 	}
 }
@@ -782,15 +780,23 @@ func (a *App) viewGridEmpty(c *myui.Context) {
 			msg = locales.UiEmptyNoTrashed()
 		}
 	}
-	myui.Box(c).Grow(1).FillWidth().Center().Children(func() {
+	empty := myui.Box(c.Key("empty-skills")).Grow(1).FillWidth().Center().Padding(t.Space(5))
+	enterMotion(c, empty)
+	empty.Children(func() {
 		myui.Column(c).Gap(t.Space(3)).AlignItems(myui.Center).Children(func() {
-			myui.Box(c).Size(t.Space(16), t.Space(16)).Radius(t.Space(8)).
-				Background(t.Accent.Alpha(0.08)).Center().Children(func() {
+			myui.Box(c).Size(t.Space(18), t.Space(18)).Radius(t.Space(5)).
+				Background(a.pal.card).Border(1, a.pal.line).
+				Shadow(0, 4, 12, 0, a.pal.shadow).Center().Children(func() {
 				myui.Icon(c, iconInbox).TextColor(t.Accent).FontSize(t.FontSize * 2)
 			})
-			myui.Text(c, msg).Bold().FontSize(t.FontSize + 1)
+			myui.Text(c, msg).FontWeight(600).FontSize(t.FontSize + 3).MaxWidth(280)
 			if hint != "" {
-				myui.Text(c, hint).TextColor(t.TextMuted)
+				myui.Text(c, hint).TextColor(t.TextMuted).MaxWidth(280)
+			}
+			if a.query != "" {
+				if myui.Button(c, locales.UiSearchClear()).Clicked() {
+					a.query = ""
+				}
 			}
 		})
 	})
@@ -808,24 +814,17 @@ func (a *App) viewCard(c *myui.Context, s *store.Skill, selected bool) {
 	t := c.Theme()
 	busy := a.isBusy(s.Name)
 	dim := s.State != store.StateEnabled
-	card := myui.Column(c).Fill().Padding(t.Space(3.5)).Gap(t.Space(2.5)).
-		Radius(t.Radius+4).Shadow(0, 1, 3, 0, a.pal.shadow)
+	card := myui.Column(c).Fill().Padding(t.Space(4)).Gap(t.Space(3)).
+		Radius(t.Radius + 4)
 	// 选中与悬停都由卡片自己画：同一圈边框、同一个圆角（网格的单元格不画，
 	// 见 skin.cell）。选中优先于悬停。
-	bg, border := a.pal.card, a.pal.line
-	switch {
-	case selected:
-		bg, border = a.pal.cardSel, t.Accent
-	case card.Hovered():
-		bg, border = a.pal.cardHover, a.pal.lineHover
-	}
-	card.Background(bg).Border(1, border)
+	surfaceMotion(c, card, a.pal, selected, true)
 	// 只有左键会选中这张卡片（走网格单元格的点击，见 viewGrid）。右键只弹这
 	// 张卡片自己的菜单：菜单里的动作都以 s 为准，与右栏在看哪个技能无关，所
 	// 以右键不改选中，右栏保持原样。
 	card.ContextMenu(func(m *myui.Menu) { a.cardMenu(c, m, s) })
 	card.Children(func() {
-		myui.Row(c).FillWidth().Gap(t.Space(3)).AlignItems(myui.Center).Children(func() {
+		myui.Row(c).FillWidth().Shrink(0).Gap(t.Space(3)).AlignItems(myui.Center).Children(func() {
 			avatar(c, a.pal, s.Name, t.Space(9), dim)
 			myui.Column(c).Grow(1).MinWidth(0).Gap(t.Space(0.5)).Children(func() {
 				name := myui.Text(c, s.Name).SingleLine().FontWeight(600)
@@ -861,8 +860,8 @@ func (a *App) viewCard(c *myui.Context, s *store.Skill, selected bool) {
 		if desc == "" {
 			desc, color = locales.UiCardNoDescription(), t.TextMuted.Alpha(0.6)
 		}
-		myui.Text(c, desc).MaxLines(2).FontSize(t.FontSize - 1).TextColor(color).Grow(1)
-		myui.Row(c).FillWidth().Gap(t.Space(1.5)).AlignItems(myui.Center).Children(func() {
+		myui.Text(c, desc).MaxLines(2).FontSize(t.FontSize - 1).TextColor(color).Grow(1).MinHeight(0)
+		myui.Row(c).FillWidth().Height(20).Shrink(0).Gap(t.Space(1.5)).AlignItems(myui.Center).Children(func() {
 			if a.updates[s.Name] {
 				pill(c, locales.UiPillHasUpdate(), t.Accent)
 			}
@@ -904,7 +903,7 @@ func (a *App) cardMenu(c *myui.Context, m *myui.Menu, s *store.Skill) {
 	m.Separator()
 	trash := func() {
 		if m.Item(locales.UiMenuMoveTrash()).Disabled(busy).Chosen() {
-			a.confirm = confirmState{open: true, name: s.Name}
+			a.confirm = confirmState{open: true, name: s.Name, state: s.State}
 		}
 	}
 	switch s.State {
@@ -942,13 +941,15 @@ func (a *App) viewDetail(c *myui.Context, s *store.Skill) {
 	busy := a.isBusy(s.Name)
 	// 换技能时把 tab 重置回概览（detailSel 记录 tab 属于哪个技能），
 	// 避免看到上一个技能的全文。
-	if a.detailSel != s.Name {
-		a.detailSel = s.Name
+	if a.detailSel != skillKey(s) {
+		a.detailSel = skillKey(s)
 		a.detailTab = 0
 	}
-	myui.Column(c).Width(a.detailEff).Shrink(0).FillHeight().Background(a.pal.canvas).Children(func() {
+	panel := myui.Column(c.Key("detail-pane")).Width(a.detailEff).Shrink(0).FillHeight().Background(a.pal.panel)
+	enterMotion(c, panel)
+	panel.Children(func() {
 		myui.Scroll(c).Grow(1).FillWidth().Children(func() {
-			myui.Column(c).FillWidth().Padding(t.Space(4), t.Space(5)).Gap(t.Space(4)).Children(func() {
+			myui.Column(c).FillWidth().Padding(t.Space(5), t.Space(5)).Gap(t.Space(4)).Children(func() {
 				myui.Row(c).FillWidth().Gap(t.Space(3)).AlignItems(myui.Start).Children(func() {
 					avatar(c, a.pal, s.Name, t.Space(12), s.State != store.StateEnabled)
 					myui.Column(c).Grow(1).MinWidth(0).Gap(t.Space(1.5)).Children(func() {
@@ -963,7 +964,7 @@ func (a *App) viewDetail(c *myui.Context, s *store.Skill) {
 							}
 						})
 					})
-					ghostButton(c, iconClose, locales.UiActionCloseDetail(), false, func() { a.selName = "" })
+					ghostButton(c, iconClose, locales.UiActionCloseDetail(), false, a.clearSelection)
 				})
 				a.viewTranslateBar(c)
 				// 概览/全文 tab：绑定 a.detailTab。点选在下一次构建生效，
@@ -973,7 +974,7 @@ func (a *App) viewDetail(c *myui.Context, s *store.Skill) {
 			})
 		})
 		myui.Divider(c)
-		myui.Box(c).FillWidth().Padding(t.Space(3), t.Space(5)).Children(func() {
+		myui.Box(c).FillWidth().Padding(t.Space(3), t.Space(5)).Background(a.pal.card).Children(func() {
 			a.viewDetailActions(c, s, busy)
 		})
 	})
@@ -1085,7 +1086,7 @@ func (a *App) viewTranslateNote(c *myui.Context, s *store.Skill) {
 // 任务跑完时语言可能已经变了（i18n.Error 的文字也是每次 Error() 现取的）。
 func (a *App) viewDetailFullText(c *myui.Context, s *store.Skill) {
 	a.startFullTextLoad(s)
-	doc := a.skillDocs[s.Name]
+	doc := a.skillDocs[skillKey(s)]
 	switch {
 	case doc.loading:
 		myui.Text(c, locales.UiDetailLoading()).TextColor(c.Theme().TextMuted)
@@ -1141,19 +1142,20 @@ type fullTextDoc struct {
 }
 
 // startFullTextLoad 确保技能的 SKILL.md 有一份缓存：没有就去后台读
-// （key 是技能名：同名技能只可能处于启用/停用/回收站之一，名字是稳定
-// 键）。任务发出前先占位「正在读取」，避免重复发任务；读结果回写前检查
+// （key 包含状态和技能名，启用副本与回收站里的同名副本彼此独立）。
+// 任务发出前先占位「正在读取」，避免重复发任务；读结果回写前检查
 // docGen，扫描已刷新过缓存的任务直接丢弃。startFullTextLoad 只在
 // viewDetailFullText（UI 线程）里调用。
 func (a *App) startFullTextLoad(s *store.Skill) {
 	if a.skillDocs == nil {
 		a.skillDocs = map[string]fullTextDoc{}
 	}
-	if _, ok := a.skillDocs[s.Name]; ok {
+	key := skillKey(s)
+	if _, ok := a.skillDocs[key]; ok {
 		return
 	}
-	a.skillDocs[s.Name] = fullTextDoc{loading: true}
-	name, dir, hasMD, gen := s.Name, s.Dir, s.HasSKILLMD, a.docGen
+	a.skillDocs[key] = fullTextDoc{loading: true}
+	dir, hasMD, gen := s.Dir, s.HasSKILLMD, a.docGen
 	a.spawn(func() {
 		doc := fullTextDoc{noMD: true}
 		if hasMD {
@@ -1174,7 +1176,7 @@ func (a *App) startFullTextLoad(s *store.Skill) {
 			if a.skillDocs == nil {
 				a.skillDocs = map[string]fullTextDoc{}
 			}
-			a.skillDocs[name] = doc
+			a.skillDocs[key] = doc
 		})
 	})
 }
@@ -1264,7 +1266,7 @@ func (a *App) viewDetailActions(c *myui.Context, s *store.Skill, busy bool) {
 		}
 		b.Children(func() { myui.Icon(c, iconTrash).FontSize(t.FontSize + 2) })
 		if b.Clicked() {
-			a.confirm = confirmState{open: true, name: s.Name}
+			a.confirm = confirmState{open: true, name: s.Name, state: s.State}
 		}
 	}
 	myui.Row(c).FillWidth().Gap(t.Space(2)).AlignItems(myui.Center).Children(func() {

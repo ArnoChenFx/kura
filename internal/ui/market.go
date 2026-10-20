@@ -274,7 +274,8 @@ func (a *App) InstallMarketSkillAsync(sk market.Skill) {
 			}
 			if gen == a.gen {
 				a.applyScan(skills, scanErr)
-				a.selName, a.filter, a.query = res.ID, filterAll, ""
+				a.selectInstalled(res.ID)
+				a.filter, a.query = filterAll, ""
 			}
 			a.status, a.statusErr = locales.UiStatusInstalled(res.ID), false
 		})
@@ -318,25 +319,38 @@ func (a *App) viewMarketList(c *myui.Context) {
 	// 左右留白给到滚动区里的内容（见 viewMarketDetail 里的说明）：滚动条画在滚动区
 	// 最右侧 12 DIP 内，内容铺满就会压到它。表格以外的段落各自带上同一份留白。
 	pad := marketPad(t)
-	myui.Column(c).Grow(1).MinWidth(0).MinHeight(0).FillWidth().Background(a.pal.canvas).
-		Padding(t.Space(4), marketGutter(t), t.Space(3)).Gap(t.Space(3)).Children(func() {
-		myui.Row(c).FillWidth().Padding(0, pad).Gap(t.Space(2)).AlignItems(myui.Center).Children(func() {
-			marketBackButton(c, locales.UiMarketBackToSkills(), a.CloseMarket)
-			myui.Column(c).Grow(1).MinWidth(0).Gap(t.Space(1)).Children(func() {
-				myui.Text(c, locales.UiActionMarket()).Bold().FontSize(t.FontSize + 6).SingleLine()
-				myui.Text(c, locales.UiMarketSubtitle(a.cfg.Root)).SingleLine().FontSize(t.FontSize - 1).TextColor(t.TextMuted)
+	page := myui.Column(c.Key("market-list")).Grow(1).MinWidth(0).MinHeight(0).FillWidth().
+		Background(a.pal.canvas).Padding(t.Space(4), marketGutter(t), t.Space(3)).Gap(t.Space(4))
+	enterMotion(c, page)
+	page.Children(func() {
+		myui.Column(c).FillWidth().Padding(0, pad).Gap(t.Space(4)).Children(func() {
+			myui.Row(c).FillWidth().Children(func() {
+				marketBackButton(c, locales.UiMarketBackToSkills(), a.CloseMarket)
+			})
+			myui.Row(c).FillWidth().Gap(t.Space(4)).AlignItems(myui.Center).Children(func() {
+				myui.Box(c).Size(t.Space(12), t.Space(12)).Shrink(0).Radius(t.Radius+4).
+					Background(t.Accent.Alpha(0.10)).Border(1, t.Accent.Alpha(0.12)).Center().Children(func() {
+					myui.Icon(c, iconGlobe).FontSize(t.FontSize + 10).TextColor(t.Accent)
+				})
+				myui.Column(c).Grow(1).MinWidth(0).Gap(t.Space(1.5)).Children(func() {
+					myui.Text(c, locales.UiActionMarket()).FontWeight(600).FontSize(t.FontSize + 12).SingleLine()
+					myui.Text(c, locales.UiMarketSubtitle(a.cfg.Root)).SingleLine().FontSize(t.FontSize - 1).TextColor(t.TextMuted)
+				})
 			})
 		})
 		// 分段的点击在构建结束时才写进绑定的变量，所以用局部 sel 接选择，Changed 为真的
 		// 那次构建里 sel 已是新值（同 viewModeSwitch）。排列开关与技能区共用一个偏好。
-		myui.Row(c).FillWidth().Padding(0, pad).AlignItems(myui.Center).Gap(t.Space(2)).Children(func() {
-			sel := m.view
-			if myui.Segmented(c, &sel, marketViewLabels()...).Label(locales.UiActionMarket()).Changed() {
-				m.view = sel
-				a.ensureMarketBoard()
-			}
-			myui.Spacer(c)
-			a.viewModeSwitch(c)
+		myui.Box(c).FillWidth().Padding(0, pad).Children(func() {
+			myui.Row(c).FillWidth().Padding(t.Space(2)).Radius(t.Radius+2).
+				Background(a.pal.panel).Border(1, a.pal.line).AlignItems(myui.Center).Gap(t.Space(2)).Children(func() {
+				sel := m.view
+				if myui.Segmented(c, &sel, marketViewLabels()...).Label(locales.UiActionMarket()).Changed() {
+					m.view = sel
+					a.ensureMarketBoard()
+				}
+				myui.Spacer(c)
+				a.viewModeSwitch(c)
+			})
 		})
 		v := m.current()
 		b := m.boardOr(v)
@@ -355,7 +369,9 @@ func (a *App) viewMarketList(c *myui.Context) {
 				myui.Spinner(c)
 			}
 			if b.loaded && b.hasMore {
-				if myui.Button(c, locales.UiMarketLoadMore()).Disabled(b.loading).Clicked() {
+				more := myui.Button(c, locales.UiMarketLoadMore()).Disabled(b.loading)
+				buttonMotion(c, more, !b.loading)
+				if more.Clicked() {
 					a.loadMarketPageAsync(v, b.next)
 				}
 			}
@@ -371,7 +387,11 @@ func (a *App) viewMarketBoard(c *myui.Context, v market.View, b *marketBoard) {
 	case len(b.skills) > 0:
 		a.viewMarketItems(c, b)
 	case b.loaded:
-		myui.Column(c).Grow(1).FillWidth().AlignItems(myui.Center).Justify(myui.Center).Children(func() {
+		myui.Column(c).Grow(1).FillWidth().Gap(t.Space(4)).AlignItems(myui.Center).Justify(myui.Center).Children(func() {
+			myui.Box(c).Size(t.Space(16), t.Space(16)).Radius(t.Radius+8).
+				Background(a.pal.panel).Border(1, a.pal.line).Center().Children(func() {
+				myui.Icon(c, iconGlobe).FontSize(t.FontSize + 14).TextColor(t.Accent)
+			})
 			myui.Text(c, locales.UiMarketEmpty()).TextColor(t.TextMuted)
 		})
 	case b.err == "":
@@ -391,17 +411,20 @@ func (a *App) viewMarketBoard(c *myui.Context, v market.View, b *marketBoard) {
 // 不会误开详情。
 func (a *App) viewMarketRow(c *myui.Context, sk market.Skill, installed map[string]bool) {
 	t := c.Theme()
-	m := &a.market
-	myui.Box(c).FillWidth().Padding(t.Space(2), t.Space(2.5)).Radius(t.Radius+2).
-		Background(a.pal.card).Border(1, a.pal.line).Children(func() {
-		myui.Row(c).FillWidth().Gap(t.Space(3)).AlignItems(myui.Center).Children(func() {
-			info := myui.ButtonBase(c).Grow(1).MinWidth(0).Justify(myui.Start)
+	row := myui.Box(c.Key(marketKey(sk))).FillWidth().Padding(t.Space(3), t.Space(4)).Radius(t.Radius + 4)
+	surfaceMotion(c, row, a.pal, false, false)
+	row.Children(func() {
+		myui.Row(c).FillWidth().Gap(t.Space(4)).AlignItems(myui.Center).Children(func() {
+			info := myui.ButtonBase(c).Grow(1).MinWidth(0).Justify(myui.Start).Tooltip(sk.Name)
 			info.Children(func() {
 				myui.Row(c).FillWidth().Gap(t.Space(3)).AlignItems(myui.Center).Children(func() {
-					avatar(c, a.pal, sk.Name, t.Space(7), false)
-					myui.Column(c).Grow(1).MinWidth(0).Gap(t.Space(0.5)).Children(func() {
+					avatar(c, a.pal, sk.Name, t.Space(9), false)
+					myui.Column(c).Grow(1).MinWidth(0).Gap(t.Space(1)).Children(func() {
 						myui.Text(c, sk.Name).SingleLine().FontWeight(600).MinWidth(0)
-						myui.Text(c, sk.Source).SingleLine().MinWidth(0).FontSize(t.FontSize - 2).TextColor(t.TextMuted)
+						myui.Row(c).FillWidth().Gap(t.Space(1)).AlignItems(myui.Center).Children(func() {
+							myui.Icon(c, iconGitHub).Shrink(0).FontSize(t.FontSize - 2).TextColor(t.TextMuted)
+							myui.Text(c, sk.Source).SingleLine().MinWidth(0).FontSize(t.FontSize - 2).TextColor(t.TextMuted)
+						})
 					})
 				})
 			})
@@ -410,16 +433,7 @@ func (a *App) viewMarketRow(c *myui.Context, sk market.Skill, installed map[stri
 			}
 			myui.Text(c, locales.UiMarketInstalls(int(sk.Installs))).SingleLine().Shrink(0).
 				FontSize(t.FontSize - 2).TextColor(t.TextMuted)
-			switch {
-			case installed[strings.ToLower(sk.Name)]:
-				pill(c, locales.UiMarketInstalled(), t.Accent)
-			case m.installing == marketKey(sk):
-				myui.Spinner(c)
-			default:
-				if myui.Button(c, locales.UiMarketInstall()).Disabled(m.installing != "").Clicked() {
-					a.InstallMarketSkillAsync(sk)
-				}
-			}
+			a.marketInstallAction(c, sk, installed[strings.ToLower(sk.Name)], false)
 		})
 	})
 }
@@ -434,30 +448,40 @@ func (a *App) viewMarketDetail(c *myui.Context) {
 	// 左右留白加在滚动区里面（同本地详情页 viewDetail），不夹在滚动区外面：
 	// 滚动条画在滚动区最右侧 12 DIP 内，内容铺满就会压到它。
 	pad := marketPad(t)
-	myui.Column(c).Grow(1).MinWidth(0).MinHeight(0).FillWidth().Background(a.pal.canvas).
-		Padding(t.Space(4), marketGutter(t), t.Space(3)).Gap(t.Space(3)).Children(func() {
+	page := myui.Column(c.Key("market-detail")).Grow(1).MinWidth(0).MinHeight(0).FillWidth().Background(a.pal.canvas).
+		Padding(t.Space(4), marketGutter(t), t.Space(3)).Gap(t.Space(4))
+	enterMotion(c, page)
+	page.Children(func() {
 		myui.Row(c).FillWidth().Padding(0, pad).AlignItems(myui.Center).Children(func() {
 			marketBackButton(c, locales.UiMarketBackToBoard(), a.CloseMarketDetail)
 		})
 		myui.Scroll(c).Grow(1).MinHeight(0).FillWidth().Children(func() {
-			myui.Column(c).FillWidth().Padding(0, pad).Gap(t.Space(3)).Children(func() {
+			myui.Column(c).FillWidth().Padding(0, pad, t.Space(4)).Gap(t.Space(4)).Children(func() {
 				a.viewMarketDetailHead(c, sk)
 				a.viewTranslateBar(c)
 				if d.loaded && d.doc.Description != "" {
-					myui.Text(c, a.marketDescText(sk, d.doc.Description)).FontSize(t.FontSize).TextColor(t.TextMuted)
+					myui.Text(c, a.marketDescText(sk, d.doc.Description)).FontSize(t.FontSize + 1).TextColor(a.pal.textMid)
 					a.viewMarketTranslateNote(c, sk, d.doc.Description)
 				}
 				myui.Row(c).FillWidth().Wrap().Gap(t.Space(2)).Children(func() {
-					if myui.Button(c, locales.UiMarketViewSkillsSh()).Clicked() {
+					skillsLink := myui.Button(c, locales.UiMarketViewSkillsSh())
+					buttonMotion(c, skillsLink, true)
+					if skillsLink.Clicked() {
 						a.openMarketURL(marketSkillsShURL(sk))
 					}
-					if myui.Button(c, locales.UiMarketViewGitHub()).Clicked() {
+					githubLink := myui.Button(c, locales.UiMarketViewGitHub())
+					buttonMotion(c, githubLink, true)
+					if githubLink.Clicked() {
 						a.openMarketURL(marketGitHubURL(sk))
 					}
 				})
 				if d.loaded && len(d.doc.Files) > 0 {
-					myui.Column(c).FillWidth().Gap(t.Space(1)).Children(func() {
-						myui.Text(c, locales.UiMarketFiles(len(d.doc.Files))).FontSize(t.FontSize - 1).TextColor(t.TextMuted)
+					myui.Column(c).FillWidth().Padding(t.Space(4)).Gap(t.Space(2)).
+						Radius(t.Radius+2).Background(a.pal.panel).Border(1, a.pal.line).Children(func() {
+						myui.Row(c).Gap(t.Space(2)).AlignItems(myui.Center).Children(func() {
+							myui.Icon(c, iconFolder).FontSize(t.FontSize).TextColor(t.TextMuted)
+							myui.Text(c, locales.UiMarketFiles(len(d.doc.Files))).FontSize(t.FontSize - 1).FontWeight(600).TextColor(a.pal.textMid)
+						})
 						myui.Text(c, strings.Join(d.doc.Files, "\n")).FontSize(t.FontSize - 1).TextColor(t.TextMuted).MaxLines(10)
 					})
 				}
@@ -475,26 +499,43 @@ func (a *App) viewMarketDetail(c *myui.Context) {
 // 标记、正在装的转圈）。
 func (a *App) viewMarketDetailHead(c *myui.Context, sk market.Skill) {
 	t := c.Theme()
-	m := &a.market
 	installed := a.installedNames()[strings.ToLower(sk.Name)]
-	myui.Row(c).FillWidth().Gap(t.Space(3)).AlignItems(myui.Center).Children(func() {
-		avatar(c, a.pal, sk.Name, t.Space(12), false)
-		myui.Column(c).Grow(1).MinWidth(0).Gap(t.Space(1)).Children(func() {
-			myui.Text(c, sk.Name).Bold().FontSize(t.FontSize + 5).SingleLine()
+	myui.Row(c).FillWidth().Padding(t.Space(5)).Gap(t.Space(4)).AlignItems(myui.Center).
+		Radius(t.Radius+6).Background(a.pal.panel).Border(1, a.pal.line).Children(func() {
+		avatar(c, a.pal, sk.Name, t.Space(14), false)
+		myui.Column(c).Grow(1).MinWidth(0).Gap(t.Space(1.5)).Children(func() {
+			myui.Text(c, sk.Name).FontWeight(600).FontSize(t.FontSize + 9).SingleLine()
 			myui.Text(c, sk.Source).SingleLine().FontSize(t.FontSize - 1).TextColor(t.TextMuted)
-			myui.Text(c, locales.UiMarketInstalls(int(sk.Installs))).SingleLine().FontSize(t.FontSize - 1).TextColor(t.TextMuted)
+			myui.Text(c, locales.UiMarketInstalls(int(sk.Installs))).SingleLine().FontSize(t.FontSize - 2).TextColor(t.TextMuted)
 		})
-		switch {
-		case installed:
-			pill(c, locales.UiMarketInstalled(), t.Accent)
-		case m.installing == marketKey(sk):
-			myui.Spinner(c)
-		default:
-			if myui.PrimaryButton(c, locales.UiMarketInstall()).Disabled(m.installing != "").Clicked() {
-				a.InstallMarketSkillAsync(sk)
-			}
-		}
+		a.marketInstallAction(c, sk, installed, true)
 	})
+}
+
+// marketInstallAction 让卡片、列表与详情共享安装反馈；安装按钮独立于详情入口，
+// 动画只改变视觉，不把点击传给外层技能卡片。
+func (a *App) marketInstallAction(c *myui.Context, sk market.Skill, installed, primary bool) {
+	t := c.Theme()
+	m := &a.market
+	switch {
+	case installed:
+		pill(c, locales.UiMarketInstalled(), t.Success)
+	case m.installing == marketKey(sk):
+		myui.Spinner(c)
+	default:
+		var button myui.Element
+		if primary {
+			button = myui.PrimaryButton(c, locales.UiMarketInstall())
+		} else {
+			button = myui.Button(c, locales.UiMarketInstall())
+		}
+		enabled := m.installing == ""
+		button.Disabled(!enabled).Shrink(0)
+		buttonMotion(c, button, enabled)
+		if button.Clicked() {
+			a.InstallMarketSkillAsync(sk)
+		}
+	}
 }
 
 // viewMarketDoc 是 SKILL.md 全文区：读到了就渲染（沿用全文页的 Markdown 视图，会跳过
@@ -524,6 +565,7 @@ func marketBackButton(c *myui.Context, label string, back func()) {
 	if b.Hovered() {
 		b.Background(t.SurfaceHover).TextColor(t.Text)
 	}
+	buttonMotion(c, b, true)
 	b.Children(func() {
 		myui.Row(c).Gap(t.Space(1.5)).AlignItems(myui.Center).Children(func() {
 			myui.Icon(c, iconArrowLeft).FontSize(t.FontSize + 1)
@@ -552,12 +594,16 @@ func (a *App) viewMarketStatus(c *myui.Context) {
 // viewMarketError 是页面里的错误框：text 是整句原因；retry 为空时不给按钮。
 func (a *App) viewMarketError(c *myui.Context, text string, retry func()) {
 	t := c.Theme()
-	myui.Box(c).FillWidth().Padding(t.Space(1.5), t.Space(3)).Radius(t.Radius).
-		Background(t.Danger.Alpha(0.10)).Border(1, t.Danger.Alpha(0.4)).Children(func() {
+	myui.Box(c).FillWidth().Padding(t.Space(3), t.Space(4)).Radius(t.Radius+2).
+		Background(t.Danger.Alpha(0.08)).Border(1, t.Danger.Alpha(0.24)).Children(func() {
 		myui.Row(c).FillWidth().Gap(t.Space(2)).AlignItems(myui.Center).Children(func() {
 			myui.Text(c, text).Grow(1).MinWidth(0).MaxLines(3).TextColor(t.Danger)
-			if retry != nil && myui.Button(c, locales.UiMarketRetry()).Clicked() {
-				retry()
+			if retry != nil {
+				button := myui.Button(c, locales.UiMarketRetry()).Shrink(0)
+				buttonMotion(c, button, true)
+				if button.Clicked() {
+					retry()
+				}
 			}
 		})
 	})
@@ -582,7 +628,7 @@ func (a *App) viewMarketItems(c *myui.Context, b *marketBoard) {
 	installed := a.installedNames()
 	pad := marketPad(c.Theme())
 	myui.List(c, &a.market.list, len(b.skills), func(i int) {
-		myui.Box(c).FillWidth().Padding(0, pad).Children(func() {
+		myui.Box(c).FillWidth().Padding(c.Theme().Space(1), pad, c.Theme().Space(1)).Children(func() {
 			a.viewMarketRow(c, b.skills[i], installed)
 		})
 	}).Grow(1).MinHeight(0)
@@ -599,13 +645,14 @@ func (a *App) viewMarketGrid(c *myui.Context, b *marketBoard) {
 	installed := a.installedNames()
 	pad := marketPad(t)
 	myui.List(c, &a.market.grid, rows, func(r int) {
-		myui.Box(c).FillWidth().Padding(0, pad).Children(func() {
+		// 虚拟行本身没有间隔；留出垂直槽，避免相邻卡片边框相接，也容纳悬停轻抬。
+		myui.Box(c).FillWidth().Padding(t.Space(1), pad, t.Space(2)).Children(func() {
 			myui.Row(c).FillWidth().Gap(gap).AlignItems(myui.Stretch).Children(func() {
 				for k := 0; k < cols; k++ {
 					if i := r*cols + k; i < len(b.skills) {
 						a.viewMarketCard(c, b.skills[i], installed)
 					} else {
-						myui.Box(c).Grow(1).MinWidth(0)
+						myui.Box(c).Grow(1).Basis(0).MinWidth(0)
 					}
 				}
 			})
@@ -618,17 +665,21 @@ func (a *App) viewMarketGrid(c *myui.Context, b *marketBoard) {
 // 读快照之后才有。
 func (a *App) viewMarketCard(c *myui.Context, sk market.Skill, installed map[string]bool) {
 	t := c.Theme()
-	m := &a.market
-	myui.Box(c).Grow(1).MinWidth(0).Padding(t.Space(3)).Radius(t.Radius+2).
-		Background(a.pal.card).Border(1, a.pal.line).Children(func() {
-		myui.Column(c).FillWidth().Gap(t.Space(2.5)).Children(func() {
-			info := myui.ButtonBase(c).FillWidth().Justify(myui.Start)
+	card := myui.Box(c.Key(marketKey(sk))).Grow(1).Basis(0).MinWidth(0).Padding(t.Space(4)).
+		Radius(t.Radius+4).Shadow(0, 2, 8, 0, a.pal.shadow)
+	surfaceMotion(c, card, a.pal, false, true)
+	card.Children(func() {
+		myui.Column(c).FillWidth().Gap(t.Space(4)).Children(func() {
+			info := myui.ButtonBase(c).FillWidth().MinWidth(0).Justify(myui.Start).Tooltip(sk.Name)
 			info.Children(func() {
-				myui.Row(c).FillWidth().Gap(t.Space(2.5)).AlignItems(myui.Center).Children(func() {
-					avatar(c, a.pal, sk.Name, t.Space(7), false)
-					myui.Column(c).Grow(1).MinWidth(0).Gap(t.Space(0.5)).Children(func() {
-						myui.Text(c, sk.Name).SingleLine().FontWeight(600).MinWidth(0)
-						myui.Text(c, sk.Source).SingleLine().MinWidth(0).FontSize(t.FontSize - 2).TextColor(t.TextMuted)
+				myui.Column(c).FillWidth().MinWidth(0).Gap(t.Space(3)).Children(func() {
+					avatar(c, a.pal, sk.Name, t.Space(10), false)
+					myui.Column(c).FillWidth().MinWidth(0).Gap(t.Space(1)).Children(func() {
+						myui.Text(c, sk.Name).SingleLine().FontWeight(600).MinWidth(0).FontSize(t.FontSize + 1)
+						myui.Row(c).FillWidth().Gap(t.Space(1)).AlignItems(myui.Center).Children(func() {
+							myui.Icon(c, iconGitHub).Shrink(0).FontSize(t.FontSize - 2).TextColor(t.TextMuted)
+							myui.Text(c, sk.Source).SingleLine().MinWidth(0).FontSize(t.FontSize - 2).TextColor(t.TextMuted)
+						})
 					})
 				})
 			})
@@ -638,16 +689,7 @@ func (a *App) viewMarketCard(c *myui.Context, sk market.Skill, installed map[str
 			myui.Row(c).FillWidth().Gap(t.Space(2)).AlignItems(myui.Center).Children(func() {
 				myui.Text(c, locales.UiMarketInstalls(int(sk.Installs))).SingleLine().Grow(1).MinWidth(0).
 					FontSize(t.FontSize - 2).TextColor(t.TextMuted)
-				switch {
-				case installed[strings.ToLower(sk.Name)]:
-					pill(c, locales.UiMarketInstalled(), t.Accent)
-				case m.installing == marketKey(sk):
-					myui.Spinner(c)
-				default:
-					if myui.Button(c, locales.UiMarketInstall()).Disabled(m.installing != "").Clicked() {
-						a.InstallMarketSkillAsync(sk)
-					}
-				}
+				a.marketInstallAction(c, sk, installed[strings.ToLower(sk.Name)], false)
 			})
 		})
 	})

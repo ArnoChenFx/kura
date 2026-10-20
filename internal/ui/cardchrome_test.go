@@ -10,8 +10,11 @@ package ui
 import (
 	"image"
 	"image/color"
+	"math"
 	"testing"
+	"time"
 
+	"github.com/ArnoChenFx/kura/locales"
 	myui "github.com/egoist/mygo/ui"
 )
 
@@ -65,14 +68,21 @@ func edgeGroups(img *image.RGBA, region image.Rectangle, col myui.Color) (rows, 
 
 // checkCardRing 检查截图里唯一一张卡片的外框：恰好一圈 1px 的 border 色边，
 // 紧贴它外侧三个像素都是底色（没有第二圈、没有单元格的悬停底），内侧是 bg。
-func checkCardRing(t *testing.T, tt *myui.Tester, sk *skin, w int, bg, border myui.Color, dark bool) {
+func checkCardRing(t *testing.T, tt *myui.Tester, sk *skin, bg, border myui.Color, dark bool) {
 	t.Helper()
 	img := tt.Image()
-	// 118 = 中栏头部的 78px + 自绘标题栏的 40px（viewTitlebar）：窗口加了
-	// 顶栏后全部内容整体下移 40px，区域起点跟着下移。
-	// 左右各让出一道分割线的命中区（gripHit）：分割线的 1px 线与卡片边框同色，
-	// 落进区域就会被当成第二条竖线。
-	region := image.Rect(rootsWidth+gripHit+2, 118+titleBarMinHeight, w-detailWidth-gripHit-2, 770+titleBarMinHeight)
+	name, nameOK := tt.Find("alpha")
+	toggle, toggleOK := tt.Find(locales.UiCardSwitchLabel("alpha"))
+	if !nameOK || !toggleOK {
+		t.Fatal("找不到卡片名字与开关，无法定位外框")
+	}
+	// 从卡片自己的标题/开关向外留出头像、间距与内边距，避免把随布局移动的
+	// 工具栏或分割线算成卡片边框。区域比卡片略大，仍能抓到额外的第二圈。
+	pad := sk.theme.Space(4)
+	regionLeft := name.X - sk.theme.Space(9) - sk.theme.Space(3) - pad
+	regionTop := min(name.Y, toggle.Y) - pad - 4
+	region := image.Rect(int(math.Floor(float64(regionLeft-4))), int(math.Floor(float64(regionTop))),
+		int(math.Ceil(float64(toggle.X+toggle.W+pad+4))), int(math.Ceil(float64(regionTop+cardHeight+10))))
 	rows, cols := edgeGroups(img, region, border)
 	one := func(g [][2]int) bool { return len(g) == 2 && g[0][0] == g[0][1] && g[1][0] == g[1][1] }
 	if !one(rows) || !one(cols) {
@@ -124,16 +134,19 @@ func TestCardChromeIsOneAlignedRing(t *testing.T) {
 				r, _ := tt.Find("alpha")
 				tt.Move(r.X+r.W/2, r.Y+r.H+30)
 				refresh(a, tt)
+				tt.Advance(interactionMotion.Duration + 50*time.Millisecond)
 				return a.pal.cardHover, a.pal.lineHover
 			}},
 			{"selected-grid-focused", func(t *testing.T, a *App, tt *myui.Tester) (myui.Color, myui.Color) {
 				click(t, a, tt, "alpha")
+				tt.Advance(interactionMotion.Duration + 50*time.Millisecond)
 				return a.pal.cardSel, a.skin.theme.Accent
 			}},
 			{"selected-pointer-away", func(t *testing.T, a *App, tt *myui.Tester) (myui.Color, myui.Color) {
 				click(t, a, tt, "alpha")
 				tt.Move(700, 700)
 				refresh(a, tt)
+				tt.Advance(interactionMotion.Duration + 50*time.Millisecond)
 				return a.pal.cardSel, a.skin.theme.Accent
 			}},
 			{"selected-focus-elsewhere", func(t *testing.T, a *App, tt *myui.Tester) (myui.Color, myui.Color) {
@@ -141,6 +154,7 @@ func TestCardChromeIsOneAlignedRing(t *testing.T) {
 				click(t, a, tt, "刷新")
 				tt.Move(700, 700)
 				refresh(a, tt)
+				tt.Advance(interactionMotion.Duration + 50*time.Millisecond)
 				return a.pal.cardSel, a.skin.theme.Accent
 			}},
 		}
@@ -151,11 +165,12 @@ func TestCardChromeIsOneAlignedRing(t *testing.T) {
 				tt := showApp(a, w, h)
 				tt.SetDark(dark)
 				refresh(a, tt)
+				tt.Advance(contentMotion.Duration + 50*time.Millisecond)
 				bg, border := c.act(t, a, tt)
 				if c.name != "idle" && c.name != "hover" && a.selName != "alpha" {
 					t.Fatalf("selName = %q，想要 alpha", a.selName)
 				}
-				checkCardRing(t, tt, a.skin, w, bg, border, dark)
+				checkCardRing(t, tt, a.skin, bg, border, dark)
 			})
 		}
 	}

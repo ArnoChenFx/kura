@@ -23,7 +23,7 @@ func recordSource(a *App) *[]string {
 // canvasIs 检查窗口里一块没有卡片的空白处，真实渲染出来的颜色是 want。
 func canvasIs(t *testing.T, tt *myui.Tester, want myui.Color, why string) {
 	t.Helper()
-	if got := tt.Image().RGBAAt(1100, 720); !near(got, want, 2) {
+	if got := tt.Image().RGBAAt(500, 720); !near(got, want, 2) {
 		t.Errorf("%s：空白处渲染成 %v，想要 %v", why, got, want)
 	}
 }
