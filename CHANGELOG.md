@@ -6,6 +6,8 @@ kura 遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 的格�
 
 ## [Unreleased]
 
+## 0.1.16
+
 - 修复左右面板分割线与背景边界错位的问题，保留原有拖拽调整栏宽的操作范围。
 - 将回收站空状态文案改为“回收站为空”。
 
