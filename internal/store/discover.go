@@ -237,17 +237,24 @@ func skipDiscoverDir(name string) bool {
 // clone 与清理方式，不在网络边界上另起一套逻辑。仓库里没有任何技能时
 // 返回空切片（不报错：调用方自行决定怎么展示）。
 func (c *Config) DiscoverRepoSkills(repo, ref string) ([]string, error) {
+	return c.DiscoverRepoSkillsWithProgress(repo, ref, nil)
+}
+
+// DiscoverRepoSkillsWithProgress 为安装弹窗报告发现过程的下载与解析阶段。
+func (c *Config) DiscoverRepoSkillsWithProgress(repo, ref string, progress InstallProgress) ([]string, error) {
 	opts := &AddOptions{Repo: repo, Ref: ref}
 	if err := opts.validate(); err != nil {
 		return nil, err
 	}
 	// resolveGitHub 在 SubPath 为空时只检出发现技能要用的文件（各级 SKILL.md
 	// 与插件清单），clone 根本身正好是发现入口需要的「已 clone 好的仓库目录」。
+	progress.report(InstallDownload)
 	u, _, err := c.resolveGitHub(opts)
 	if err != nil {
 		return nil, err
 	}
 	defer u.Close()
+	progress.report(InstallInspect)
 	dr, err := DiscoverSkills(u.dir)
 	if err != nil {
 		return nil, err

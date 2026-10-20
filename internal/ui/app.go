@@ -42,6 +42,21 @@ type skillSelection struct {
 	state store.State
 }
 
+// visibleSkill 保存扫描快照的搜索键；输入变化时只过滤，排序和大小写转换只做一次。
+type visibleSkill struct {
+	skill                      *store.Skill
+	name, description, display string
+}
+
+type visibleCache struct {
+	skills []*store.Skill
+	sorted []visibleSkill
+	rows   []*store.Skill
+	query  string
+	filter int
+	valid  bool
+}
+
 // App 是 kura 主窗口的状态。View 由 MyGo 在主线程反复调用，
 // 从这些字段构建每一帧。
 type App struct {
@@ -102,7 +117,11 @@ type App struct {
 	syncIdx  int              // 上一次 syncSelection 写入 selIdx 的值：不同即网格里点了别的卡片
 	shown    []skillSelection // 上一次构建网格时各卡片的身份，用来还原点击
 	grid     myui.GridState   // 卡片网格的滚动与选择状态
+	list     myui.ListState   // 列表的滚动与选择状态
 	updates  map[string]bool  // 最近一次检查发现有更新的技能（当前目录）
+	// 扫描产生的 Skill 是只读快照；指针序列副本也能识别测试直接替换 skills。
+	visibleRows visibleCache
+	skillsSeq   uint64 // 扫描结果发布的代数，防止更早的刷新盖掉操作后的列表或错误
 
 	// 详情栏的「概览/全文」tab：detailTab 是当前选中的下标（0=概览，
 	// 1=全文），detailSel 记录 tab 属于哪个技能：viewDetail 发现换人时
@@ -123,25 +142,29 @@ type App struct {
 	md      markdown.Options
 	mdTheme myui.Theme
 
-	busy           map[string]bool // 正在执行操作的技能（busyKey）
-	checking       string          // 正在预览更新的技能名（空为无）
-	checkingAll    bool            // 正在全部检查
-	checkingUpdate bool            // 正在检查 kura 应用自身的更新（按钮防抖）
-	scanning       bool            // 正在重新扫描
-	loadErr        string          // 扫描/环境错误（如根目录不存在）
-	status         string          // 底部状态行的文字
-	statusErr      bool            // 状态行是否为错误
-	confirm        confirmState    // 待确认的删除操作
-	install        installState    // 安装技能弹窗
-	pal            palette         // 本帧的表面色（由 themeMode 决定浅色/深色）
-	skin           *skin           // 本帧的皮肤；卡片网格用它的 cell 主题
-	themeMode      string          // 外观偏好：store.ThemeSystem / ThemeLight / ThemeDark
-	themeSeq       atomic.Int64    // 外观切换的序号：后台任务只执行最新一次
-	themeMu        sync.Mutex      // 串行化同步原生外观与写 config.json
-	viewMode       string          // 技能区排列模式：store.ViewGrid / store.ViewList
-	viewSeq        atomic.Int64    // 排列模式切换的序号：后台任务只执行最新一次
-	langPref       string          // 界面语言偏好：store.LangSystem / LangZH / LangEN
-	langSeq        atomic.Int64    // 语言切换的序号：后台任务只执行最新一次
+	busy           map[string]bool    // 正在执行操作的技能（busyKey）
+	checking       string             // 正在预览更新的技能名（空为无）
+	checkingAll    bool               // 正在全部检查
+	checkCancel    context.CancelFunc // 取消旧目录或用户停止的只读更新检查
+	checkSeq       uint64             // 旧检查的发布不能清掉新任务状态
+	checkingUpdate bool               // 正在检查 kura 应用自身的更新（按钮防抖）
+	scanning       bool               // 正在扫描当前目录；其他目录计数不占用刷新按钮
+	scanGen        int                // scanning 属于哪个目录代数
+	scanSeq        uint64             // 扫描请求序号，旧列表与旧计数结果不能覆盖新请求
+	loadErr        string             // 扫描/环境错误（如根目录不存在）
+	status         string             // 底部状态行的文字
+	statusErr      bool               // 状态行是否为错误
+	confirm        confirmState       // 待确认的删除操作
+	install        installState       // 安装技能弹窗
+	pal            palette            // 本帧的表面色（由 themeMode 决定浅色/深色）
+	skin           *skin              // 本帧的皮肤；卡片网格用它的 cell 主题
+	themeMode      string             // 外观偏好：store.ThemeSystem / ThemeLight / ThemeDark
+	themeSeq       atomic.Int64       // 外观切换的序号：后台任务只执行最新一次
+	themeMu        sync.Mutex         // 串行化同步原生外观与写 config.json
+	viewMode       string             // 技能区排列模式：store.ViewGrid / store.ViewList
+	viewSeq        atomic.Int64       // 排列模式切换的序号：后台任务只执行最新一次
+	langPref       string             // 界面语言偏好：store.LangSystem / LangZH / LangEN
+	langSeq        atomic.Int64       // 语言切换的序号：后台任务只执行最新一次
 	// setLocale 把语言偏好应用到「应用显示的语言」。生产环境交给 mygo.App
 	// （它同时重绘窗口、更新菜单、通知窗口与页面）；测试里 mygo 的事件循环
 	// 没跑，换成 internal/i18n 的进程级覆盖（见 app_test.go 的 newAppFor）。
@@ -349,22 +372,41 @@ func filterState(f int) store.State {
 // 「全部」不含回收站：回收站里的技能只在「回收站」筛选下出现，避免与在用技能
 // 混在一起。
 func (a *App) visible() []*store.Skill {
+	cache := &a.visibleRows
+	sameSkills := cache.valid && slices.Equal(cache.skills, a.skills)
+	if sameSkills && cache.query == a.query && cache.filter == a.filter {
+		return cache.rows
+	}
+	if !sameSkills {
+		cache.skills = slices.Clone(a.skills)
+		cache.sorted = make([]visibleSkill, len(a.skills))
+		for i, s := range a.skills {
+			entry := visibleSkill{
+				skill: s, name: strings.ToLower(s.Name), description: strings.ToLower(s.Description),
+			}
+			if s.Meta != nil {
+				entry.display = strings.ToLower(s.Meta.DisplayName)
+			}
+			cache.sorted[i] = entry
+		}
+		slices.SortStableFunc(cache.sorted, func(x, y visibleSkill) int {
+			return cmp.Or(cmp.Compare(x.name, y.name), cmp.Compare(x.skill.Name, y.skill.Name))
+		})
+	}
 	q := strings.ToLower(strings.TrimSpace(a.query))
 	want := filterState(a.filter)
 	var rows []*store.Skill
-	for _, s := range a.skills {
+	for _, entry := range cache.sorted {
+		s := entry.skill
 		if want == "" && s.State == store.StateTrashed || want != "" && s.State != want {
 			continue
 		}
-		if q == "" || strings.Contains(strings.ToLower(s.Name), q) ||
-			strings.Contains(strings.ToLower(s.Description), q) ||
-			(s.Meta != nil && strings.Contains(strings.ToLower(s.Meta.DisplayName), q)) {
+		if q == "" || strings.Contains(entry.name, q) ||
+			strings.Contains(entry.description, q) || strings.Contains(entry.display, q) {
 			rows = append(rows, s)
 		}
 	}
-	slices.SortStableFunc(rows, func(x, y *store.Skill) int {
-		return cmp.Or(cmp.Compare(strings.ToLower(x.Name), strings.ToLower(y.Name)), cmp.Compare(x.Name, y.Name))
-	})
+	cache.rows, cache.query, cache.filter, cache.valid = rows, a.query, a.filter, true
 	return rows
 }
 
@@ -462,6 +504,7 @@ func (a *App) counts() (en, dis, trash int) {
 
 // applyScan 应用一次扫描结果；失败时保留旧列表并记录错误，绝不 panic。
 func (a *App) applyScan(skills []*store.Skill, err error) {
+	a.skillsSeq++
 	if err != nil {
 		a.loadErr = err.Error()
 		return
@@ -471,6 +514,7 @@ func (a *App) applyScan(skills []*store.Skill, err error) {
 		a.loadErr = locales.UiStatusRootMissing(a.cfg.Root)
 	}
 	a.skills = skills
+	a.visibleRows = visibleCache{}
 	n := 0
 	for _, s := range skills {
 		if s.State == store.StateEnabled {
@@ -518,27 +562,23 @@ func (a *App) ReloadAsync() { a.reload(true) }
 // 切换目录之后状态行留给「已添加目录」「已从列表移除」这类消息，不被
 // 紧随其后的「已扫描 N 个技能」盖掉；出错时照常报告。
 func (a *App) reload(announce bool) {
-	if a.scanning {
+	if a.scanning && a.scanGen == a.gen {
 		return
 	}
 	a.scanning = true
+	a.scanGen = a.gen
+	a.scanSeq++
 	cfg, gen, others := a.cfg, a.gen, a.lib.Configs()
+	seq, skillsSeq := a.scanSeq, a.skillsSeq
 	a.spawn(func() {
 		skills, err := cfg.ScanAll()
-		counts := map[string]int{}
-		for _, o := range others {
-			if o.Root != cfg.Root {
-				counts[o.Root] = o.CountEnabled()
-			}
-		}
 		a.publish(func() {
-			a.scanning = false
-			for r, n := range counts {
-				a.rootCounts[r] = n
+			if gen != a.gen || seq != a.scanSeq {
+				return
 			}
-			if gen != a.gen {
-				// 扫描期间切换了目录：结果作废，给新目录再扫一次。
-				a.reload(false)
+			a.scanning = false
+			if skillsSeq != a.skillsSeq {
+				// 本次刷新之后已有操作发布新列表，不能倒退到更早的快照。
 				return
 			}
 			a.applyScan(skills, err)
@@ -554,6 +594,29 @@ func (a *App) reload(announce bool) {
 				// 与筛选栏的「全部」、状态条的总数一致：不含回收站。
 				en, dis, _ := a.counts()
 				a.status, a.statusErr = locales.UiStatusScanned(en+dis), false
+			}
+			// 先发布当前目录，再统计其他目录。慢盘徽标不拖住列表和刷新按钮；
+			// 在 UI 回调里发起第二阶段，也避免同步测试的 spawn 嵌套死锁。
+			if len(others) > 1 {
+				a.spawn(func() {
+					counts := make(map[string]int, len(others)-1)
+					for _, o := range others {
+						if o.Root != cfg.Root {
+							counts[o.Root] = o.CountEnabled()
+						}
+					}
+					a.publish(func() {
+						if gen != a.gen || seq != a.scanSeq {
+							return
+						}
+						for root, n := range counts {
+							// 扫描期间可能移除了其他目录，不能把徽标加回来。
+							if slices.Contains(a.lib.Roots, root) {
+								a.rootCounts[root] = n
+							}
+						}
+					})
+				})
 			}
 		})
 	})
@@ -671,10 +734,12 @@ func (a *App) SelectRoot(root string) {
 	if root == a.cfg.Root {
 		return
 	}
+	a.cancelCheck()
 	a.cfg = a.lib.Config(root)
 	a.gen++
 	a.clearSelection()
 	a.skills, a.selIdx, a.loadErr = nil, -1, ""
+	a.visibleRows = visibleCache{}
 	a.updates = map[string]bool{}
 	a.review = reviewState{}
 	a.status, a.statusErr = "", false

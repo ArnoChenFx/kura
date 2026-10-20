@@ -2900,5 +2900,19 @@
   "uiViewList": "List",
   "@uiViewList": {
     "description": "排列模式选项：列表。"
-  }
+  },
+  "uiActionCancelCheck": "Cancel check",
+  "uiStatusCheckCancelled": "Update check cancelled",
+  "uiInstallPhaseDownload": "Downloading skill files…",
+  "uiInstallPhaseInspect": "Reading skill information…",
+  "uiInstallPhaseWrite": "Installing skill files…",
+  "uiMarketSearchScope": "Search loaded skills only ({count, number, ::group-off})",
+  "@uiMarketSearchScope": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "uiMarketSearchEmpty": "No matching skills in the loaded results"
 }

@@ -614,5 +614,19 @@
   "uiSearchClear": "清除搜索",
   "uiViewGrid": "卡片网格",
   "uiViewLabel": "排列",
-  "uiViewList": "列表"
+  "uiViewList": "列表",
+  "uiActionCancelCheck": "取消检查",
+  "uiStatusCheckCancelled": "已取消更新检查",
+  "uiInstallPhaseDownload": "正在下载技能文件…",
+  "uiInstallPhaseInspect": "正在解析技能信息…",
+  "uiInstallPhaseWrite": "正在安装技能文件…",
+  "uiMarketSearchScope": "仅搜索已加载的 {count, number, ::group-off} 个技能",
+  "@uiMarketSearchScope": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "uiMarketSearchEmpty": "已加载的技能中没有匹配项"
 }

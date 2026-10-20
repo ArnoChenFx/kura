@@ -69,8 +69,8 @@ func TestSwitchRootShowsThatRootsSkills(t *testing.T) {
 	if !tt.HasText("in-extra 开关") || tt.HasText("in-default") {
 		t.Errorf("切换后应只显示另一个目录的技能，文本 %v", tt.Texts())
 	}
-	if !tt.HasText(other) {
-		t.Errorf("头部应显示另一个目录的完整路径，文本 %v", tt.Texts())
+	if countText(tt, rootLabel(other)) != 3 {
+		t.Errorf("侧栏和紧凑头部应显示另一个目录的名称，文本 %v", tt.Texts())
 	}
 	if _, ok := tt.Find("从列表移除此目录"); !ok {
 		t.Errorf("非默认目录的头部应有移除按钮，文本 %v", tt.Texts())

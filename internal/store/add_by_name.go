@@ -29,6 +29,11 @@ var ErrSkillNotInRepo = i18n.NewError("storeErrNoSkillInRepo", func() string { r
 // 安装名取 name（市场上显示的名字）；它不能当目录名用时退回 installDir 的
 // 默认命名（SKILL.md 的 name，再退回目录名）。
 func (c *Config) AddSkillByName(repo, name string) (*Result, error) {
+	return c.AddSkillByNameWithProgress(repo, name, nil)
+}
+
+// AddSkillByNameWithProgress 为市场安装报告实际阶段，保持单次 clone 与原安装语义。
+func (c *Config) AddSkillByNameWithProgress(repo, name string, progress InstallProgress) (*Result, error) {
 	opts := &AddOptions{Repo: repo}
 	if err := opts.validate(); err != nil {
 		return nil, err
@@ -41,6 +46,7 @@ func (c *Config) AddSkillByName(repo, name string) (*Result, error) {
 		return nil, err
 	}
 	url := githubURL(repo)
+	progress.report(InstallDownload)
 	u, err := cloneUpstream(url, "")
 	if err != nil {
 		return nil, err
@@ -50,6 +56,7 @@ func (c *Config) AddSkillByName(repo, name string) (*Result, error) {
 	if err := u.CheckoutDiscovery(); err != nil {
 		return nil, err
 	}
+	progress.report(InstallInspect)
 	dr, err := DiscoverSkills(u.dir)
 	if err != nil {
 		return nil, err
@@ -69,14 +76,16 @@ func (c *Config) AddSkillByName(repo, name string) (*Result, error) {
 		sub = "" // 仓库根本身是技能。
 	}
 	src := Source{Type: SourceGitHub, URL: url, SubPath: sub, Commit: u.Commit}
+	progress.report(InstallDownload)
 	if err := c.checkoutSkill(u, &src); err != nil {
 		return nil, err
 	}
+	progress.report(InstallInspect)
 	installName := name
 	if !validSkillDirName(installName) {
 		installName = ""
 	}
-	return c.installDir(u.Dir(sub), src, installName)
+	return c.installDir(u.Dir(sub), src, installName, progress)
 }
 
 // matchSkillPaths 在候选 paths（相对仓库根，"." 为仓库根）里找名为 name 的技能。

@@ -15,6 +15,7 @@ package store
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"os"
@@ -103,7 +104,12 @@ func (p *UpdatePreview) Counts() (added, changed, removed int) {
 
 // PreviewUpdate 检查单个技能的更新，等价于只含一个技能的 PreviewUpdates。
 func (c *Config) PreviewUpdate(name string) (*UpdatePreview, error) {
-	r := c.PreviewUpdates([]string{name})[0]
+	return c.PreviewUpdateContext(context.Background(), name)
+}
+
+// PreviewUpdateContext 是可取消的单技能只读检查。
+func (c *Config) PreviewUpdateContext(ctx context.Context, name string) (*UpdatePreview, error) {
+	r := c.PreviewUpdatesContext(ctx, []string{name})[0]
 	return r.Preview, r.Err
 }
 
@@ -134,12 +140,22 @@ type PreviewResult struct {
 // 错误语义与 Update 对齐：技能不存在 → ErrUnknownSkill；元数据缺失或
 // 损坏 → 明确报错；git 失败/超时/来源路径消失 → 记入对应技能，不影响其他技能。
 func (c *Config) PreviewUpdates(names []string) []PreviewResult {
+	return c.PreviewUpdatesContext(context.Background(), names)
+}
+
+// PreviewUpdatesContext 取消时中止在途 git，并在文件与技能之间停止比较。
+// 返回值仍与 names 一一对应；未完成的项返回 context 的错误。
+func (c *Config) PreviewUpdatesContext(ctx context.Context, names []string) []PreviewResult {
 	out := make([]PreviewResult, len(names))
 	metas := make([]*Meta, len(names))
 	groups := map[repoKey][]int{}
 	var order []repoKey
 	for i, name := range names {
 		out[i].Name = name
+		if err := ctx.Err(); err != nil {
+			out[i].Err = err
+			continue
+		}
 		meta, err := c.sourceMeta(name, i18n.NewError("storeErrMetaMissingCheck", func() string { return locales.StoreErrMetaMissingCheck(name) }))
 		if err != nil {
 			out[i].Err = err
@@ -147,7 +163,7 @@ func (c *Config) PreviewUpdates(names []string) []PreviewResult {
 		}
 		metas[i] = meta
 		if meta.Source.Type == SourceLocal {
-			out[i].Preview, out[i].Err = c.contentPreview(name, meta, meta.Source.Path, "")
+			out[i].Preview, out[i].Err = c.contentPreview(ctx, name, meta, meta.Source.Path, "")
 			continue
 		}
 		k := newRepoKey(meta.Source.URL, meta.Source.Ref)
@@ -157,7 +173,7 @@ func (c *Config) PreviewUpdates(names []string) []PreviewResult {
 		groups[k] = append(groups[k], i)
 	}
 	for _, k := range order {
-		c.previewRepo(groups[k], names, metas, out)
+		c.previewRepo(ctx, groups[k], names, metas, out)
 	}
 	return out
 }
@@ -165,14 +181,14 @@ func (c *Config) PreviewUpdates(names []string) []PreviewResult {
 // previewRepo 检查同一仓库（同 URL 与 ref）里的一组技能（idx 是它们在 names
 // 里的下标），结果写回 out。整个仓库最多一次 ls-remote、一次只取树的 clone、
 // 一次稀疏检出。
-func (c *Config) previewRepo(idx []int, names []string, metas []*Meta, out []PreviewResult) {
+func (c *Config) previewRepo(ctx context.Context, idx []int, names []string, metas []*Meta, out []PreviewResult) {
 	url, ref := metas[idx[0]].Source.URL, metas[idx[0]].Source.Ref
 	fail := func(is []int, err error) {
 		for _, i := range is {
 			out[i].Err = err
 		}
 	}
-	head, err := remoteHead(url, ref)
+	head, err := remoteHeadContext(ctx, url, ref)
 	if err != nil {
 		fail(idx, err)
 		return
@@ -181,7 +197,7 @@ func (c *Config) previewRepo(idx []int, names []string, metas []*Meta, out []Pre
 	var pending []int
 	for _, i := range idx {
 		if m := metas[i]; m.Source.Commit != "" && m.Source.Commit == head {
-			out[i].Preview, out[i].Err = c.upToDatePreview(names[i], m, head, BasisCommit)
+			out[i].Preview, out[i].Err = c.upToDatePreview(ctx, names[i], m, head, BasisCommit)
 			continue
 		}
 		pending = append(pending, i)
@@ -189,7 +205,7 @@ func (c *Config) previewRepo(idx []int, names []string, metas []*Meta, out []Pre
 	if len(pending) == 0 {
 		return
 	}
-	u, err := cloneUpstream(url, ref)
+	u, err := cloneUpstreamContext(ctx, url, ref)
 	if err != nil {
 		fail(pending, err)
 		return
@@ -215,7 +231,7 @@ func (c *Config) previewRepo(idx []int, names []string, metas []*Meta, out []Pre
 			continue
 		}
 		if m.Source.Tree != "" && m.Source.Tree == r.Tree {
-			out[i].Preview, out[i].Err = c.upToDatePreview(names[i], m, u.Commit, BasisTree)
+			out[i].Preview, out[i].Err = c.upToDatePreview(ctx, names[i], m, u.Commit, BasisTree)
 			continue
 		}
 		need = append(need, i)
@@ -230,21 +246,21 @@ func (c *Config) previewRepo(idx []int, names []string, metas []*Meta, out []Pre
 		return
 	}
 	for _, i := range need {
-		out[i].Preview, out[i].Err = c.contentPreview(names[i], metas[i], u.Dir(metas[i].Source.SubPath), u.Commit)
+		out[i].Preview, out[i].Err = c.contentPreview(ctx, names[i], metas[i], u.Dir(metas[i].Source.SubPath), u.Commit)
 	}
 }
 
 // upToDatePreview 构造「上游没有变化」的预览：Files 为空。上游没变，意味着
 // 更新后的内容就是安装/更新时记录的那份，所以 NewHash 取元数据里的
 // ContentHash；本地没被改过时，已安装的文件都算「一致」。
-func (c *Config) upToDatePreview(name string, meta *Meta, commit, basis string) (*UpdatePreview, error) {
+func (c *Config) upToDatePreview(ctx context.Context, name string, meta *Meta, commit, basis string) (*UpdatePreview, error) {
 	p := &UpdatePreview{ID: name, SourceType: meta.Source.Type, Commit: commit, Basis: basis,
 		Files: []FileDiff{}, NewHash: meta.ContentHash}
-	if err := c.fillLocalState(p, meta); err != nil {
+	if err := c.fillLocalState(ctx, p, meta); err != nil {
 		return nil, err
 	}
 	if !p.LocalModified {
-		files, err := listFiles(c.SkillPath(name))
+		files, err := listFilesContext(ctx, c.SkillPath(name))
 		if err != nil {
 			return nil, err
 		}
@@ -254,11 +270,11 @@ func (c *Config) upToDatePreview(name string, meta *Meta, commit, basis string) 
 }
 
 // contentPreview 逐文件比较已安装内容与上游目录 newDir。
-func (c *Config) contentPreview(name string, meta *Meta, newDir, commit string) (*UpdatePreview, error) {
+func (c *Config) contentPreview(ctx context.Context, name string, meta *Meta, newDir, commit string) (*UpdatePreview, error) {
 	if !fileExists(newDir) {
 		return nil, i18n.NewError("storeErrUpstreamDirMissing", func() string { return locales.StoreErrUpstreamDirMissing(newDir) })
 	}
-	p, err := diffTree(c.SkillPath(name), newDir)
+	p, err := diffTreeContext(ctx, c.SkillPath(name), newDir)
 	if err != nil {
 		return nil, err
 	}
@@ -266,11 +282,11 @@ func (c *Config) contentPreview(name string, meta *Meta, newDir, commit string) 
 	p.SourceType = meta.Source.Type
 	p.Commit = commit
 	p.Basis = BasisContent
-	if err := c.fillLocalState(p, meta); err != nil {
+	if err := c.fillLocalState(ctx, p, meta); err != nil {
 		return nil, err
 	}
 	// 新哈希排除 .git 与元数据文件，与「Update 完成后 HashDir 的结果」一致。
-	p.NewHash, err = hashTreeExcluding(newDir, skipUpstream)
+	p.NewHash, err = hashTreeExcludingContext(ctx, newDir, skipUpstream)
 	if err != nil {
 		return nil, err
 	}
@@ -278,9 +294,9 @@ func (c *Config) contentPreview(name string, meta *Meta, newDir, commit string) 
 }
 
 // fillLocalState 填写已安装一侧的目录哈希，以及它是否偏离安装时记录的哈希。
-func (c *Config) fillLocalState(p *UpdatePreview, meta *Meta) error {
+func (c *Config) fillLocalState(ctx context.Context, p *UpdatePreview, meta *Meta) error {
 	// 旧哈希与 Meta.ContentHash/doctor 同口径（HashDir），便于展示漂移。
-	h, err := HashDir(c.SkillPath(p.ID))
+	h, err := hashDirContext(ctx, c.SkillPath(p.ID))
 	if err != nil {
 		return err
 	}
@@ -300,8 +316,15 @@ func skipUpstream(rel string) bool {
 // exclude 的相对路径（目录命中时整棵剪枝）。实现与 hash.go 保持一致：
 // 相对路径 / 分隔、字节序排序、内容按「路径\0内容\0」拼接后取 sha256。
 func hashTreeExcluding(dir string, exclude func(rel string) bool) (string, error) {
+	return hashTreeExcludingContext(context.Background(), dir, exclude)
+}
+
+func hashTreeExcludingContext(ctx context.Context, dir string, exclude func(rel string) bool) (string, error) {
 	var paths []string
 	err := filepath.WalkDir(dir, func(p string, d os.DirEntry, err error) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if err != nil {
 			return err
 		}
@@ -331,6 +354,9 @@ func hashTreeExcluding(dir string, exclude func(rel string) bool) (string, error
 	sort.Strings(paths)
 	h := sha256.New()
 	for _, rel := range paths {
+		if err := ctx.Err(); err != nil {
+			return "", err
+		}
 		_, _ = h.Write([]byte(rel))
 		h.Write([]byte{0})
 		data, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(rel)))
@@ -347,11 +373,15 @@ func hashTreeExcluding(dir string, exclude func(rel string) bool) (string, error
 // 已安装一侧的 .git 同样跳过：正常安装流程不会把 .git 带进技能目录
 // （Add/Update 都会剥离），万一用户手工放入，跳过可避免整片噪音行。
 func diffTree(oldDir, newDir string) (*UpdatePreview, error) {
-	oldFiles, err := listFiles(oldDir)
+	return diffTreeContext(context.Background(), oldDir, newDir)
+}
+
+func diffTreeContext(ctx context.Context, oldDir, newDir string) (*UpdatePreview, error) {
+	oldFiles, err := listFilesContext(ctx, oldDir)
 	if err != nil {
 		return nil, err
 	}
-	newFiles, err := listFiles(newDir)
+	newFiles, err := listFilesContext(ctx, newDir)
 	if err != nil {
 		return nil, err
 	}
@@ -369,6 +399,9 @@ func diffTree(oldDir, newDir string) (*UpdatePreview, error) {
 
 	p := &UpdatePreview{Files: []FileDiff{}}
 	for _, rel := range rels {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		of, hasOld := oldFiles[rel]
 		nf, hasNew := newFiles[rel]
 		switch {
@@ -420,8 +453,15 @@ func diffTree(oldDir, newDir string) (*UpdatePreview, error) {
 // 根级 .kura-meta.json 一律跳过（kura 自管文件，不属于技能内容），
 // .git 目录整棵剪枝（两侧一致，理由见 diffTree）。
 func listFiles(dir string) (map[string]string, error) {
+	return listFilesContext(context.Background(), dir)
+}
+
+func listFilesContext(ctx context.Context, dir string) (map[string]string, error) {
 	files := map[string]string{}
 	err := filepath.WalkDir(dir, func(p string, d os.DirEntry, err error) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if err != nil {
 			return err
 		}
