@@ -4,7 +4,7 @@
 迁移（自写 i18n → MyGo 官方 ARB catalogs）完成后留下的回归脚本：
 
 1. `tools/i18n-migrate/keys.json` 是从旧的四份 `catalog.go` 抽出来的原始取值
-   （old_key → {zh, en, verbs}），`mapping.tsv` 是 old_key → new_key 对照表。
+   （old_key → {zh, en, verbs}），旧 key 由下方 `camel` 函数转换为新 key。
 2. 把新 catalogs 的 ICU 文案「反格式化」回旧的 `%s`/`%d`/`%q`/`%v`，与旧取值
    逐字比对——防止有人悄悄改动中文/英文措辞（中文取值是用户看惯的界面文字，
    改动等于改产品）。
