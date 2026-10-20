@@ -122,6 +122,7 @@ func protectedTranslationRanges(src string) []translationRange {
 		offset = end
 	}
 	fence, htmlTag, htmlComment := "", "", false
+	fenceIndent, fenceQuotes := 0, 0
 	for offset < len(src) {
 		end := strings.IndexByte(src[offset:], '\n')
 		if end < 0 {
@@ -131,11 +132,18 @@ func protectedTranslationRanges(src string) []translationRange {
 		}
 		line := strings.TrimRight(src[offset:end], "\r\n")
 		trimmed := strings.TrimSpace(line)
-		body := strings.TrimLeft(line, " ")
+		body := line
+		if unindented, ok := trimFenceIndent(line); ok {
+			body = unindented
+		}
+		listIndent := len(line) - len(body)
 		// 引用内的围栏同样视为代码；多层引用的 “>” 不发送给翻译服务。
 		quotedCode := false
+		quotes := 0
 		for strings.HasPrefix(body, ">") {
 			body = strings.TrimPrefix(body[1:], " ")
+			listIndent = 0
+			quotes++
 			quotedCode = quotedCode || strings.HasPrefix(body, "    ") || strings.HasPrefix(body, "\t")
 			next := strings.TrimLeft(body, " ")
 			if !strings.HasPrefix(next, ">") {
@@ -143,14 +151,22 @@ func protectedTranslationRanges(src string) []translationRange {
 			}
 			body = next
 		}
+		if unindented, ok := trimFenceIndent(body); ok {
+			listIndent += len(body) - len(unindented)
+			body = unindented
+		}
 		if prefix := translationList.FindString(body); prefix != "" {
+			listIndent += len(prefix)
 			body = body[len(prefix):]
+		} else {
+			listIndent = 0
 		}
 		switch {
 		case fence != "":
 			add(offset, end)
-			if isClosingFence(body, fence) {
+			if translationClosesFence(line, fence, fenceQuotes, fenceIndent) {
 				fence = ""
+				fenceIndent, fenceQuotes = 0, 0
 			}
 		case htmlComment:
 			add(offset, end)
@@ -160,6 +176,10 @@ func protectedTranslationRanges(src string) []translationRange {
 			if strings.Contains(strings.ToLower(line), "</"+htmlTag+">") {
 				htmlTag = ""
 			}
+		case strings.HasPrefix(line, "    "), strings.HasPrefix(line, "\t"), quotedCode:
+			// 独立的缩进代码行不能开启 HTML 或围栏状态，否则后续普通正文
+			// 会被误吞成代码。已有代码/HTML 状态仍由前面的分支延续。
+			add(offset, end)
 		case translationRawHTMLTag(trimmed) != "":
 			htmlTag = translationRawHTMLTag(trimmed)
 			add(offset, end)
@@ -171,9 +191,10 @@ func protectedTranslationRanges(src string) []translationRange {
 			htmlComment = !strings.Contains(trimmed, "-->")
 		case fenceMarker(body) != "":
 			fence = fenceMarker(body)
+			fenceIndent = listIndent
+			fenceQuotes = quotes
 			add(offset, end)
-		case strings.HasPrefix(line, "    "), strings.HasPrefix(line, "\t"), quotedCode,
-			translationRef.MatchString(line), translationRuleLine(trimmed),
+		case translationRef.MatchString(line), translationRuleLine(trimmed),
 			strings.HasPrefix(trimmed, "<"):
 			add(offset, end)
 		default:
@@ -207,6 +228,25 @@ func protectedTranslationRanges(src string) []translationRange {
 		offset = end
 	}
 	return ranges
+}
+
+// 围栏内的行只能剥掉开围栏时已有的容器。代码示例中的 “- ```” 或 “> ```”
+// 不是新列表/引用，也不能因此提前闭合顶层围栏而把后续代码暴露给翻译服务。
+func translationClosesFence(line, fence string, quotes, indent int) bool {
+	for range quotes {
+		rest, ok := trimFenceIndent(line)
+		if !ok || !strings.HasPrefix(rest, ">") {
+			return false
+		}
+		line = strings.TrimPrefix(rest[1:], " ")
+	}
+	if indent > 0 {
+		if len(line)-len(strings.TrimLeft(line, " ")) < indent {
+			return false
+		}
+		line = line[indent:]
+	}
+	return isClosingFence(line, fence)
 }
 
 func translationSpace(b byte) bool { return b == ' ' || b == '\t' || b == '\n' || b == '\r' }

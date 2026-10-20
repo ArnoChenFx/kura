@@ -204,8 +204,8 @@ func snippetOf(data []byte) string {
 
 // SplitForTranslation 把长文本（技能的 SKILL.md 全文）切成若干段，每段尽量不超过
 // maxRunes 个字符，供调用方逐段调用 Translate：一份文档往往远超一次请求能处理
-// 的长度。切分只发生在空行处，且绝不切开围栏代码块（``` 或 ~~~ 之间的内容整块
-// 留在同一段），所以每段都是完整的 markdown 块，译文按空行拼回去结构不变。
+// 的长度。切分只发生在空行处，且不切开代码、frontmatter 等跨行保护区，
+// 所以每段仍保留保护所需的上下文，译文按空行拼回去结构不变。
 // 单个块本身超过上限时整块保留，不硬切。空白文本返回 nil。
 func SplitForTranslation(text string, maxRunes int) []string {
 	if maxRunes <= 0 {
@@ -234,13 +234,28 @@ func SplitForTranslation(text string, maxRunes int) []string {
 	return out
 }
 
-// markdownBlocks 按空行把 text 切成块，围栏代码块内的空行不算分界。每块去掉
-// 首尾的空行；全是空白的块不返回。
+// markdownBlocks 按空行把 text 切成块，完整文档保护区内的空行不算分界。
+// 保护必须先于分段，否则列表围栏、HTML 或元数据的后半段会被误认成正文。
+// 每块去掉首尾的空行；全是空白的块不返回。
 func markdownBlocks(text string) []string {
+	// 保护区包含相邻空白；去掉这些边缘空白后再检查分界，避免普通段落的
+	// 换行标记把全篇错误地合成一块。区间内部的空行仍然不可切开。
+	ranges := protectedTranslationRanges(text)
+	kept := ranges[:0]
+	for _, r := range ranges {
+		part := text[r.start:r.end]
+		r.start += len(part) - len(strings.TrimLeft(part, " \t\r\n"))
+		r.end -= len(part) - len(strings.TrimRight(part, " \t\r\n"))
+		if r.start < r.end {
+			kept = append(kept, r)
+		}
+	}
+	ranges = kept
 	var (
 		blocks []string
 		cur    []string
-		fence  string // 当前所在围栏的标记（如 "```"），不在代码块里时为空
+		offset int
+		active int
 	)
 	emit := func() {
 		// 去掉首尾空行后整块保留（缩进与代码内容都原样）。
@@ -257,21 +272,16 @@ func markdownBlocks(text string) []string {
 		cur = cur[:0]
 	}
 	for _, line := range strings.Split(text, "\n") {
-		if fence != "" {
-			// 闭合围栏：同样的标记字符，长度不短于开围栏，行上不再有别的内容，
-			// 缩进同样不超过 3 个空格。
-			if isClosingFence(line, fence) {
-				fence = ""
-			}
-			cur = append(cur, line)
-			continue
+		start := offset
+		offset += len(line) + 1
+		for active < len(ranges) && ranges[active].end <= start {
+			active++
 		}
-		if strings.TrimSpace(line) == "" {
+		protected := active < len(ranges) && ranges[active].start < start &&
+			ranges[active].end > start+len(line)
+		if strings.TrimSpace(line) == "" && !protected {
 			emit()
 			continue
-		}
-		if m := fenceMarker(line); m != "" {
-			fence = m
 		}
 		cur = append(cur, line)
 	}
