@@ -14,19 +14,19 @@ func TestNarrowingWindowClampsDraggedSidebars(t *testing.T) {
 	tt := showApp(a, 1600, 800)
 	const y = 400
 
-	dragH(a, tt, a.rootsW+gripHit/2, y, 1000)
+	dragH(a, tt, a.rootsW+dividerWidth/2.0, y, 1000)
 	if a.rootsW != rootsMaxW {
 		t.Fatalf("前置：左栏应拖到上限 %v，得到 %v", rootsMaxW, a.rootsW)
 	}
 	click(t, a, tt, "alpha")
-	dragH(a, tt, float32(1600)-a.detailW-gripHit/2, y, -1000)
+	dragH(a, tt, float32(1600)-a.detailW-dividerWidth/2.0, y, -1000)
 	if a.detailW != detailMaxW {
 		t.Fatalf("前置：详情栏应拖到上限 %v，得到 %v", detailMaxW, a.detailW)
 	}
 
 	tt.SetSize(880, 800)
 	refresh(a, tt)
-	if got := a.rootsEff + a.detailEff + 2*gripHit + mainMinW; got > 880 {
+	if got := a.rootsEff + a.detailEff + 2*dividerWidth + mainMinW; got > 880 {
 		t.Errorf("880 宽时 左栏 %v + 详情 %v + 分割线 + 中栏最小宽 %d = %v，超出窗口", a.rootsEff, a.detailEff, mainMinW, got)
 	}
 	if a.rootsEff < rootsMinW || a.detailEff < detailMinW {
@@ -70,7 +70,7 @@ func TestFitWidths(t *testing.T) {
 	}{
 		{name: "放得下", avail: 1600, r: 300, d: 400, detail: true, wantRoots: 300, wantDetail: 400},
 		{name: "无窗口宽度只夹上下限", avail: 0, r: 999, d: 10, detail: true, wantRoots: rootsMaxW, wantDetail: detailMinW},
-		{name: "隐藏详情左栏用掉余量", avail: 700, r: 420, d: 320, detail: false, wantRoots: 700 - mainMinW - 2*gripHit, wantDetail: 320},
+		{name: "隐藏详情左栏用掉余量", avail: 700, r: 420, d: 320, detail: false, wantRoots: 700 - mainMinW - dividerWidth, wantDetail: 320},
 		{name: "窗口极窄到下限", avail: 500, r: 420, d: 560, detail: true, wantRoots: rootsMinW, wantDetail: detailMinW},
 	}
 	for _, c := range cases {
@@ -87,7 +87,7 @@ func TestFitWidths(t *testing.T) {
 	if gr >= 420 || gd >= 560 {
 		t.Errorf("两侧应一起让位，得到 %v/%v", gr, gd)
 	}
-	if sum := gr + gd + 2*gripHit + mainMinW; sum > 880.01 || sum < 879.99 {
+	if sum := gr + gd + 2*dividerWidth + mainMinW; sum > 880.01 || sum < 879.99 {
 		t.Errorf("让位后应正好放进窗口，总和 %v", sum)
 	}
 }

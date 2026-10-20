@@ -12,6 +12,7 @@
 
 有意删除的 key 登记在 DELETED 里（本文件是唯一台账）：删掉文案时必须在这里
 登记理由，脚本会断言它确实不在新 catalogs 里。
+有意修订的旧文案登记在 REVISED 里，保留迁移快照并继续逐字检查新预期。
 
 用法：python tools/i18n-migrate/verify_catalog.py
 """
@@ -140,6 +141,13 @@ ADDED = {
 }
 
 
+# 有意修订的旧文案：保留迁移快照，在这里明确登记新的逐字预期。
+# Issue 17：用户反馈回收站空状态中文不自然。
+REVISED = {
+    ("ui.empty.noTrashed", "zh"): "回收站为空",
+}
+
+
 def camel(old):
     """旧的点分 key → 新的扁平 camelCase key（与生成物里的函数名同形）。"""
     parts = old.split(".")
@@ -160,6 +168,7 @@ def main():
             continue
         nk = camel(old)
         for lang, table, orig in (("zh", zh, info["zh"]), ("en", en, info["en"])):
+            orig = REVISED.get((old, lang), orig)
             if nk not in table:
                 print("MISSING %s %s" % (lang, nk))
                 bad += 1

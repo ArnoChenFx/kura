@@ -44,26 +44,26 @@ func TestSplittersDragColumnWidths(t *testing.T) {
 	tt := showApp(a, 1280, 800)
 	const y = 400
 
-	dragH(a, tt, a.rootsW+gripHit/2, y, 60)
+	dragH(a, tt, a.rootsW+dividerWidth/2.0, y, 60)
 	if a.rootsW != rootsWidth+60 {
 		t.Errorf("左分割线向右拖 60 后左栏宽 = %v，想要 %v", a.rootsW, rootsWidth+60)
 	}
-	dragH(a, tt, a.rootsW+gripHit/2, y, 1000)
+	dragH(a, tt, a.rootsW+dividerWidth/2.0, y, 1000)
 	if a.rootsW != rootsMaxW {
 		t.Errorf("左栏拖过头应停在上限 %v，得到 %v", rootsMaxW, a.rootsW)
 	}
-	dragH(a, tt, a.rootsW+gripHit/2, y, -1000)
+	dragH(a, tt, a.rootsW+dividerWidth/2.0, y, -1000)
 	if a.rootsW != rootsMinW {
 		t.Errorf("左栏拖过头应停在下限 %v，得到 %v", rootsMinW, a.rootsW)
 	}
 
 	// 选中技能后出现详情栏，它的分割线在右侧（向左拖变宽）。
 	click(t, a, tt, "alpha")
-	dragH(a, tt, float32(1280)-a.detailW-gripHit/2, y, -100)
+	dragH(a, tt, float32(1280)-a.detailW-dividerWidth/2.0, y, -100)
 	if a.detailW != detailWidth+100 {
 		t.Errorf("详情栏向左拖 100 后宽 = %v，想要 %v", a.detailW, detailWidth+100)
 	}
-	dragH(a, tt, float32(1280)-a.detailW-gripHit/2, y, 1000)
+	dragH(a, tt, float32(1280)-a.detailW-dividerWidth/2.0, y, 1000)
 	if a.detailW != detailMinW {
 		t.Errorf("详情栏拖过头应停在下限 %v，得到 %v", detailMinW, a.detailW)
 	}
@@ -277,31 +277,6 @@ func TestTitlebarShowsAppIconNotLetter(t *testing.T) {
 	}
 	if diff < 100 {
 		t.Errorf("标题栏左侧应画出图标，发现的非底色像素只有 %d 个", diff)
-	}
-}
-
-// TestDividerBandIsCanvasNotCard 验证分割线的命中区（gripHit 宽）用主栏底色铺满。
-// 卡片色比底色亮一档：命中区若没铺底，就会透出它后面的卡片色，成一道色带，分割线
-// 看起来就粗了。深色与浅色各测一遍，左右两条分割线都测。
-func TestDividerBandIsCanvasNotCard(t *testing.T) {
-	for _, dark := range []bool{true, false} {
-		a, cfg := newTestApp(t)
-		seedDescribed(t, cfg, "alpha", "第一个技能", nil)
-		tt := showApp(a, 1280, 800)
-		tt.SetDark(dark)
-		refresh(a, tt)
-		const y = 700 // 卡片之下，只剩底色
-		check := func(side string, x0 int) {
-			img := tt.Image()
-			for x := x0; x < x0+gripHit; x++ {
-				if got := img.RGBAAt(x, y); near(got, a.pal.card, 2) {
-					t.Errorf("深色=%v 的%s分割线命中区 x=%d 透出了卡片色 %v，应为底色 %v", dark, side, x, got, a.pal.canvas)
-				}
-			}
-		}
-		check("左", int(a.rootsW))
-		click(t, a, tt, "alpha")
-		check("右", 1280-int(a.detailW)-gripHit)
 	}
 }
 

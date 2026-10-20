@@ -311,7 +311,7 @@
   "uiEmptyNoMatchHint": "换个关键词试试",
   "uiEmptyNoSkills": "这个目录里还没有技能",
   "uiEmptyNoSkillsHint": "点右上角的「安装技能」，从 GitHub 或本地文件夹安装",
-  "uiEmptyNoTrashed": "没有回收站的技能",
+  "uiEmptyNoTrashed": "回收站为空",
   "uiFileDialogAddRootButton": "添加",
   "uiFileDialogAddRootTitle": "添加技能目录",
   "uiFilterAll": "全部 {count, number, ::group-off}",

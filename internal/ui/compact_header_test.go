@@ -25,7 +25,7 @@ func TestCompactHeaderKeepsSpaceForSkillsAndActionsVisible(t *testing.T) {
 				tt.SetPreferences(myui.Preferences{ReduceMotion: true})
 				a.selectSkill(a.skills[0])
 				refresh(a, tt)
-				left, right := a.rootsEff+gripHit, float32(width)-a.detailEff-gripHit
+				left, right := a.rootsEff+dividerWidth, float32(width)-a.detailEff-dividerWidth
 				var actions []myui.Rect
 				for _, label := range []string{
 					locales.UiActionRefresh(), locales.UiActionCheckAll(), locales.UiActionImportMeta(),
