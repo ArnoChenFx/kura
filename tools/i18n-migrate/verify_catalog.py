@@ -4,7 +4,7 @@
 迁移（自写 i18n → MyGo 官方 ARB catalogs）完成后留下的回归脚本：
 
 1. `tools/i18n-migrate/keys.json` 是从旧的四份 `catalog.go` 抽出来的原始取值
-   （old_key → {zh, en, verbs}），`mapping.tsv` 是 old_key → new_key 对照表。
+   （old_key → {zh, en, verbs}），旧 key 由下方 `camel` 函数转换为新 key。
 2. 把新 catalogs 的 ICU 文案「反格式化」回旧的 `%s`/`%d`/`%q`/`%v`，与旧取值
    逐字比对——防止有人悄悄改动中文/英文措辞（中文取值是用户看惯的界面文字，
    改动等于改产品）。
@@ -12,6 +12,7 @@
 
 有意删除的 key 登记在 DELETED 里（本文件是唯一台账）：删掉文案时必须在这里
 登记理由，脚本会断言它确实不在新 catalogs 里。
+有意修订的旧文案登记在 REVISED 里，保留迁移快照并继续逐字检查新预期。
 
 用法：python tools/i18n-migrate/verify_catalog.py
 """
@@ -140,6 +141,13 @@ ADDED = {
 }
 
 
+# 有意修订的旧文案：保留迁移快照，在这里明确登记新的逐字预期。
+# Issue 17：用户反馈回收站空状态中文不自然。
+REVISED = {
+    ("ui.empty.noTrashed", "zh"): "回收站为空",
+}
+
+
 def camel(old):
     """旧的点分 key → 新的扁平 camelCase key（与生成物里的函数名同形）。"""
     parts = old.split(".")
@@ -160,6 +168,7 @@ def main():
             continue
         nk = camel(old)
         for lang, table, orig in (("zh", zh, info["zh"]), ("en", en, info["en"])):
+            orig = REVISED.get((old, lang), orig)
             if nk not in table:
                 print("MISSING %s %s" % (lang, nk))
                 bad += 1

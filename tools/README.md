@@ -5,10 +5,7 @@
 | 路径 | 用途 |
 | --- | --- |
 | `capture-window.ps1` | 启动构建好的 `kura.exe`、截一张真机窗口图再关掉。界面改动必须用它实际看过（见 `AGENTS.md` 的「验证要求」）。 |
-| `capture-multiinstall.ps1` | 「安装技能」弹窗的真机端到端验证：本地造仓库（不联网）→ UI Automation 驱动窗口（勾选候选、安装、改仓库）→ 截图 + 文字证据。全程用隔离的 HOME，不碰真实的 `~/.agents` 与 `~/.kura`。 |
-| `demo-discover/main.go` | `go run ./tools/demo-discover`：打印「仓库内技能发现」的三种情形（调用真实的 `internal/store` API，在临时目录里构造仓库）。 |
-| `watch-agent.sh` | 守望一个 herdr 编码 agent：定期采样窗格内容并算哈希，判断它是真在干活还是卡住。`bash tools/watch-agent.sh <agent 名> <采样次数> <间隔秒>`。 |
-| `prompts/review-brief.txt` | 派给独立评审 agent 的提示词模板：只认探针证据、必查的缺陷类别、报告格式。 |
-| `i18n-migrate/` | i18n 迁移后留下的回归脚本：`verify_catalog.py` 用 `keys.json`（旧四份 catalog.go 的原始取值）与 `mapping.tsv`（old_key → new_key 对照表）反格式化校验新 `locales/*.json`，保证中文/英文措辞逐字未变，并登记有意删除的 key。改文案后跑 `python tools/i18n-migrate/verify_catalog.py`。 |
+| `capture-multiinstall.ps1` | 中文 Windows 界面下「安装技能」弹窗的真机验证：本地造仓库（不联网），通过 UI Automation 勾选候选、安装与更换仓库，输出截图和文字证据。全程用隔离的 HOME，不碰真实的 `~/.agents` 与 `~/.kura`。 |
+| `i18n-migrate/verify_catalog.py`、`keys.json` | 用迁移前的中英文原始取值校验 `locales/*.json`，按规则转换旧 key 并反格式化 ICU 文案；有意新增、删除和修订的文案在脚本中登记。改文案后跑 `python tools/i18n-migrate/verify_catalog.py`。 |
 
-截图脚本的输出目录由 `-OutDir` 指定（默认写到仓库根的 `tools/multiinstall-window`，同样属于临时材料）。
+`capture-window.ps1` 用 `-Out` 指定截图文件；`capture-multiinstall.ps1` 用 `-OutDir` 指定输出目录（默认 `tools/multiinstall-window`）。截图、日志与本地测试仓库均为临时材料，验证后删除，不入库。

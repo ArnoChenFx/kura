@@ -22,7 +22,7 @@ kura 的「技能市场」页面浏览 [skills.sh](https://skills.sh) 的榜单�
 - vercel-labs/skills @ `13e4063a1cf913f5606d57d42ab83a86f5001e04`（`src/find.ts`、`src/blob.ts`、`src/skills.ts`）
 - mastra-ai/skills-api @ `6e6474c807a251526b8282fd53fd8227de92cbbe`（`src/scraper/scrape.ts`）
 
-`vercel-labs/skills` 的 `find.ts` 还调用了 `GET /api/search?q=&limit=`（返回 `{skills:[{id,name,installs,source}]}`），kura 目前没用它：页面没有搜索框。
+`vercel-labs/skills` 的 `find.ts` 还调用了 `GET /api/search?q=&limit=`（返回 `{skills:[{id,name,installs,source}]}`），kura 目前没用它：页面的搜索框只在已加载的榜单条目中按技能名或来源仓库本地过滤，不向服务端搜索。
 
 ## 按名字安装的规则
 
@@ -60,9 +60,9 @@ curl -s "https://skills.sh/api/download/vercel-labs/skills/find-skills" | head -
 
 ## 页面行为
 
-- 列表页：分段「总榜 / 热度 / 趋势」（默认总榜，即唯一有外部代码佐证的榜单）；「加载更多」接着读下一页；读失败保留原因并可重试；每个榜单各自缓存，切回来不重读。
+- 列表页：分段「总榜 / 热度 / 趋势」（默认总榜）；搜索已加载条目的技能名或来源仓库；「加载更多」接着读下一页；读失败保留原因并可重试；每个榜单各自缓存，切回来不重读。
 - 详情页：头像、名字、来源、安装次数；`description`（SKILL.md frontmatter 里的）；两个外部链接（在后台用系统浏览器打开）；文件列表；SKILL.md 全文（沿用全文页的 Markdown 视图，跳过 frontmatter，超大源码截断）。快照按技能缓存，读失败可重试。
 - 排列：列表与卡片网格共用技能区的排列偏好（`config.json` 的 `view`，在市场页面顶部切换）。卡片网格的列数随窗口宽度变；两种排列都是虚拟的，只构建看得见的行。
-- 翻译：详情页的「原文 / 译文」开关与本地详情页是同一个全局开关，描述与 SKILL.md 走同一套翻译设置、缓存与失败规则（只显示、只在内存里、未配置不发请求）。市场的译文 key 带 `market:` / `mdoc:` 前缀，同名的本地技能不共用译文。榜单与卡片没有描述，不翻译。
+- 翻译：详情页与本地详情页共用全局「原文 / 译文」开关和翻译设置，只在用户开启译文后请求。新用户默认使用免密钥 Google；微软免费服务同样无需密钥，自定义 OpenAI 服务须填齐地址、密钥和模型，未知或损坏配置不自动改用免费服务。描述与 SKILL.md 的译文只在内存中显示，未译成的部分保留原文。市场缓存键分别为 `market:<来源仓库>/<技能名>:description` 和 `mdoc:<来源仓库>/<技能名>:full`，与本地技能的译文隔离。榜单与卡片没有描述，不翻译。
 - 安装：列表行与详情页的按钮都调用 `InstallMarketSkillAsync`，装进当前技能目录；同一时间只装一个；装的途中切换了目录，旧结果不改选中（同安装弹窗的 `gen` 守卫）。
 - 榜单、快照都只在内存里，不落盘，也不写进任何技能目录。
