@@ -43,8 +43,6 @@
 
 ## 验证
 
-本轮原生窗口截图：[亮色](../interaction-polish/light.png)、[深色](../interaction-polish/dark.png)。
-
 - 全库测试、无 CGO 测试/构建、Go vet、MyGo vet、i18n 检查与文案迁移校验。
 - 取消/安装、缓存/扫描、市场交互的 race 检查。
 - 真实隔离 Linux 窗口：84 个临时技能、深浅主题、网格与列表滚轮中间帧、
