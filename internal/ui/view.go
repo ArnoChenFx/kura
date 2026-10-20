@@ -103,6 +103,14 @@ func (a *App) View(c *myui.Context) {
 			myui.Column(c).Grow(1).MinWidth(0).FillHeight().Background(a.pal.canvas).Children(func() {
 				a.viewMainHeader(c)
 				a.viewFilterBar(c)
+				var separator, gap float32
+				if !c.Theme().Dark {
+					separator, gap = 1, c.Theme().Space(4)
+				}
+				// 白色工具区与银灰画布留出间距；深色保留零高节点，
+				// 避免主题切换改变后续列表的身份、丢失滚动位置。
+				myui.Box(c).FillWidth().Height(separator).Shrink(0).Background(a.pal.line)
+				myui.Box(c).Height(gap).Shrink(0)
 				a.viewErrorBanner(c)
 				a.viewSkills(c, rows)
 				a.viewStatusBar(c)
@@ -250,8 +258,8 @@ func dragWidth(cur, delta, lo, hi float32) float32 {
 
 // viewRoots 是左栏：技能目录列表（每项带在用技能数，追加的目录可以拖动排序，
 // 默认目录总在第一个）与底部的「添加文件夹」，再往下是 viewRootsFooter 的一行。
-// 底色与中栏相同，只靠右侧的分隔线区分；选中项用浅一档的底色。品牌标识在窗口
-// 顶栏里，这里不再重复。
+// 浅色导航用银灰底与白色选中项，深色沿用石墨层次。品牌标识在窗口顶栏里，
+// 这里不再重复。
 func (a *App) viewRoots(c *myui.Context) {
 	t := c.Theme()
 	myui.Column(c).Width(a.rootsEff).Shrink(0).FillHeight().Background(a.pal.sidebar).Children(func() {
@@ -408,7 +416,11 @@ func (a *App) viewThemeSwitch(c *myui.Context) {
 	sel := themeIndex(a.themeMode)
 	seg := myui.SegmentedBase(c, &sel, len(themeModes))
 	track := seg.Track.Label(locales.UiThemeLabel()).Padding(t.Space(0.5)).Gap(t.Space(0.5)).
-		Radius(t.Radius).Background(a.pal.card).Border(1, a.pal.line).Shrink(0).Children(func() {
+		Radius(t.Radius).Background(a.pal.card).Border(1, a.pal.line).Shrink(0)
+	if !t.Dark {
+		track.Background(t.Surface)
+	}
+	track.Children(func() {
 		for i, m := range themeModes {
 			b := seg.Segment(i).Label(m.label()).Tooltip(m.label()).
 				Padding(t.Space(1.25), t.Space(2)).Radius(t.Radius - 2).TextColor(t.TextMuted)
@@ -438,6 +450,10 @@ func (a *App) rootItem(c *myui.Context, root string, isDefault bool) {
 	hover := b.AnimateTo("hover", boolF(b.Hovered()), interactionMotion)
 	b.Background(a.pal.sidebar.Mix(t.SurfaceHover, hover).Mix(a.pal.sel, chosen)).
 		TextColor(a.pal.textMid.Mix(t.Text, chosen))
+	if !t.Dark {
+		b.Border(1, a.pal.line.Alpha(chosen)).
+			Shadow(0, 2, 7, 0, a.pal.shadow.Mix(myui.Transparent, 1-chosen))
+	}
 	buttonMotion(c, b, true)
 	if !isDefault {
 		b.Drag(rootRef(root))
@@ -449,6 +465,11 @@ func (a *App) rootItem(c *myui.Context, root string, isDefault bool) {
 		}
 	}
 	b.Children(func() {
+		if !t.Dark {
+			// 标记只绘制，不改变目录行的点击、拖放和右键行为。
+			myui.Box(c.Key("root-marker")).Absolute().Left(0).Top(12).Bottom(12).
+				Width(3).Radius(1.5).Background(t.Accent.Alpha(chosen)).PassThrough()
+		}
 		icon := iconFolder
 		if isDefault {
 			icon = iconHome
@@ -510,7 +531,7 @@ func (a *App) viewMainHeader(c *myui.Context) {
 	t := c.Theme()
 	isDefault := a.cfg.Root == a.lib.Default()
 	myui.Column(c).FillWidth().Shrink(0).Padding(t.Space(5), t.Space(5), t.Space(2)).
-		Gap(t.Space(3)).Children(func() {
+		Background(a.pal.header).Gap(t.Space(3)).Children(func() {
 		myui.Row(c).FillWidth().Gap(t.Space(3)).AlignItems(myui.Center).Children(func() {
 			myui.Column(c).Grow(1).MinWidth(0).Gap(t.Space(1)).Children(func() {
 				myui.Text(c, locales.UiLibraryTitle()).FontSize(t.FontSize - 2).FontWeight(600).TextColor(t.TextMuted)
@@ -558,7 +579,7 @@ func (a *App) viewFilterBar(c *myui.Context) {
 	t := c.Theme()
 	en, dis, trash := a.counts()
 	myui.Row(c).FillWidth().Wrap().Padding(t.Space(2), t.Space(5), t.Space(3), t.Space(5)).Gap(t.Space(2)).
-		AlignItems(myui.Center).Children(func() {
+		Background(a.pal.header).AlignItems(myui.Center).Children(func() {
 		searchBox(c, &a.query, a.pal.card).Grow(1).Basis(t.Space(50)).MaxWidth(t.Space(80))
 		myui.Spacer(c)
 		filterTabs(c, &a.filter,
@@ -601,7 +622,11 @@ func (a *App) viewModeSwitch(c *myui.Context) {
 	sel := viewIndex(a.viewMode)
 	seg := myui.SegmentedBase(c, &sel, len(viewModes))
 	track := seg.Track.Label(locales.UiViewLabel()).Padding(t.Space(0.5)).Gap(t.Space(0.5)).
-		Radius(t.Radius).Background(a.pal.card).Border(1, a.pal.line).Shrink(0).Children(func() {
+		Radius(t.Radius).Background(a.pal.card).Border(1, a.pal.line).Shrink(0)
+	if !t.Dark {
+		track.Background(t.Surface)
+	}
+	track.Children(func() {
 		for i, m := range viewModes {
 			b := seg.Segment(i).Label(m.label()).Tooltip(m.label()).
 				Padding(t.Space(1.5), t.Space(2)).Radius(t.Radius - 2).TextColor(t.TextMuted)
@@ -1181,7 +1206,7 @@ func (a *App) startFullTextLoad(s *store.Skill) {
 	})
 }
 
-// detailGroup 是详情里的一个信息块：小标题 + 比底色浅一档的圆角框。
+// detailGroup 是详情里的一个信息块：浅色用银灰内嵌面，深色用提亮的圆角框。
 // selectable 为 true 时内层容器加 Selectable：组内文字可拖选、双击选词、
 // Ctrl+C 拷贝（MyGo 容器上的 Selectable 让内部 Text/RichText 共享一次
 // 选择）。只给「元数据」「位置」这两组开：组里现在没有控件，将来若有
@@ -1192,7 +1217,7 @@ func (a *App) detailGroup(c *myui.Context, title string, selectable bool, fn fun
 	myui.Column(c).FillWidth().Gap(t.Space(1.5)).Children(func() {
 		sectionHeader(c, title)
 		inner := myui.Column(c).FillWidth().Padding(t.Space(3)).Gap(t.Space(1.5)).
-			Radius(t.Radius).Background(a.pal.card).Border(1, a.pal.line)
+			Radius(t.Radius).Background(a.pal.group).Border(1, a.pal.groupLine)
 		if selectable {
 			inner.Selectable()
 		}

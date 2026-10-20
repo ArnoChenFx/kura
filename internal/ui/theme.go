@@ -13,20 +13,24 @@ import (
 
 // palette 是主题之外、kura 自己用的颜色。
 type palette struct {
-	sidebar myui.Color // 左栏底色
-	canvas  myui.Color // 中栏底色
-	panel   myui.Color // 详情检查器的底色
-	card    myui.Color // 卡片、详情分组与搜索框的底色（比底色浅一档）
-	line    myui.Color // 卡片与分隔线的描边
-	shadow  myui.Color // 卡片的轻投影
-	sel     myui.Color // 左栏选中项的底色
-	textMid myui.Color // 左栏未选中项的文字（介于正文与弱化色之间）
-	toggle  myui.Color // 开关「开」的颜色
+	sidebar     myui.Color // 左栏底色
+	canvas      myui.Color // 中栏底色
+	header      myui.Color // 工作区标题与筛选区的底色
+	panel       myui.Color // 详情检查器的底色
+	group       myui.Color // 详情内信息分组的底色
+	groupLine   myui.Color // 信息分组的弱描边
+	card        myui.Color // 卡片与搜索框的底色（比底色浅一档）
+	line        myui.Color // 卡片与分隔线的描边
+	shadow      myui.Color // 卡片的轻投影
+	shadowHover myui.Color // 卡片悬停或选中时的投影
+	sel         myui.Color // 左栏选中项的底色
+	textMid     myui.Color // 左栏未选中项的文字（介于正文与弱化色之间）
+	toggle      myui.Color // 开关「开」的颜色
 	// notify 是「有新版本」的小圆点的颜色：一个真正的蓝（色相近 210°），
 	// 与中性的主操作色明显不同，但不刺眼。
 	notify myui.Color
-	// 卡片的三种交互态：悬停时底色与描边都亮（深色）/暗（浅色）一点，
-	// 选中时描边是强调色、底色带一丝强调色。
+	// 卡片的三种交互态：深色用底色和描边变化；浅色保持纸白，
+	// 通过更清楚的描边与投影表达悬停、选中。
 	cardHover, lineHover, cardSel myui.Color
 	// avatars 是头像色板：低饱和的暖色与青绿，刻意不含蓝紫，
 	// 不和强调色抢戏。
@@ -77,7 +81,8 @@ type tone struct {
 	bg, surface, surfaceHover, surfacePressed string
 	border, text, muted, textMid              string
 	sidebar, canvas, panel, card, line, sel   string
-	shadow                                    myui.Color
+	header, group, groupLine                  string
+	shadow, shadowHover                       myui.Color
 	avatars                                   []string
 }
 
@@ -104,13 +109,17 @@ func newSkin(dark bool, k tone) *skin {
 	}
 	pal := palette{
 		sidebar: hx(k.sidebar), canvas: hx(k.canvas), panel: hx(k.panel), card: hx(k.card), line: hx(k.line),
-		shadow: k.shadow, sel: hx(k.sel), textMid: hx(k.textMid), toggle: hx(k.toggle),
+		header: hx(k.header), group: hx(k.group), groupLine: hx(k.groupLine),
+		shadow: k.shadow, shadowHover: k.shadowHover, sel: hx(k.sel), textMid: hx(k.textMid), toggle: hx(k.toggle),
 		notify: hx(k.notify), avatars: avatars,
 	}
-	// 向正文色混一点：深色里变亮、浅色里变暗，两个皮肤用同一条规则。
-	pal.cardHover = pal.card.Mix(t.Text, 0.035)
+	// 浅色卡片保持纸白；深色仍沿用向正文色混入的层次。
+	pal.cardHover, pal.cardSel = pal.card, pal.card
 	pal.lineHover = pal.line.Mix(t.Text, 0.22)
-	pal.cardSel = pal.card.Mix(t.Accent, 0.07)
+	if dark {
+		pal.cardHover = pal.card.Mix(t.Text, 0.035)
+		pal.cardSel = pal.card.Mix(t.Accent, 0.07)
+	}
 
 	// GridView 给每个单元格自己画一层选中框与悬停底：选中（网格有焦点）时是
 	// 2px 的 Accent 边加 Accent 淡底，选中（无焦点）时是 SurfacePressed 底加
@@ -127,14 +136,15 @@ func newSkin(dark bool, k tone) *skin {
 // kuraScheme 是应用的配色。
 var kuraScheme = &scheme{
 	light: newSkin(false, tone{
-		accent: "#3e3e3a", accentHover: "#30302d", accentPressed: "#232320", accentText: "#ffffff",
+		accent: "#2b2e29", accentHover: "#20231e", accentPressed: "#171a15", accentText: "#ffffff",
 		toggle:  "#36a874",
 		notify:  "#2f7dd1",
 		success: "#2f9e6a", warning: "#b7791f", danger: "#d64550",
-		bg: "#ffffff", surface: "#efefec", surfaceHover: "#e7e7e3", surfacePressed: "#deded9",
-		border: "#deded9", text: "#272724", muted: "#74746e", textMid: "#4d4d47",
-		sidebar: "#efefec", canvas: "#f6f6f4", panel: "#fbfbf9", card: "#ffffff", line: "#e1e1dd", sel: "#dfdfd9",
-		shadow:  myui.RGBA(25, 26, 23, 0.045),
+		bg: "#ffffff", surface: "#eaece8", surfaceHover: "#e2e5df", surfacePressed: "#d8ddd4",
+		border: "#d9ddd5", text: "#252824", muted: "#6d7269", textMid: "#4c5248",
+		sidebar: "#e8eae6", canvas: "#f1f2ef", panel: "#ffffff", card: "#ffffff", line: "#deded9", sel: "#ffffff",
+		header: "#ffffff", group: "#f4f5f2", groupLine: "#e9ebe6",
+		shadow: myui.RGBA(25, 26, 23, 0.045), shadowHover: myui.RGBA(25, 26, 23, 0.08),
 		avatars: []string{"#488779", "#a08038", "#b36870", "#b47850", "#737870", "#7a8b4c", "#a16c84", "#8a7055"},
 	}),
 	dark: newSkin(true, tone{
@@ -145,7 +155,8 @@ var kuraScheme = &scheme{
 		bg: "#262626", surface: "#292929", surfaceHover: "#323232", surfacePressed: "#3b3b39",
 		border: "#3d3d3a", text: "#f0f0ed", muted: "#989891", textMid: "#c0c0b9",
 		sidebar: "#171717", canvas: "#1e1e1e", panel: "#222222", card: "#282828", line: "#3a3a38", sel: "#333332",
-		shadow:  myui.RGBA(0, 0, 0, 0.10),
+		header: "#1e1e1e", group: "#282828", groupLine: "#3a3a38",
+		shadow: myui.RGBA(0, 0, 0, 0.10), shadowHover: myui.RGBA(0, 0, 0, 0.10),
 		avatars: []string{"#94bcae", "#c8b184", "#ca9da1", "#cfaa8b", "#adb3a5", "#b4bd8e", "#bca0b0", "#c4af94"},
 	}),
 }

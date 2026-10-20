@@ -243,6 +243,11 @@ func searchBox(c *myui.Context, query *string, bg myui.Color) myui.Element {
 	})
 	focus := row.AnimateTo("focus", boolF(row.FocusWithin()), interactionMotion)
 	row.Border(1, t.Border.Mix(t.Accent, focus))
+	if !t.Dark {
+		// 白色工具栏内用银灰底标出输入区域，聚焦后回到纸白并显出轻投影。
+		row.Background(t.Surface.Mix(bg, 0.45).Mix(bg, focus)).
+			Shadow(0, 1, 3, 0, t.Text.Alpha(0.05*focus))
+	}
 	return row
 }
 
@@ -250,14 +255,24 @@ func searchBox(c *myui.Context, query *string, bg myui.Color) myui.Element {
 func segmentSurface(e myui.Element, t *myui.Theme, selected bool) {
 	on := e.AnimateTo("selected", boolF(selected), interactionMotion)
 	hover := e.AnimateTo("hover", boolF(e.Hovered() && !selected), interactionMotion)
-	e.Background(t.SurfaceHover.Alpha(hover).Mix(t.SurfacePressed, on)).
-		TextColor(t.TextMuted.Mix(t.Text, max(on, hover)))
+	e.TextColor(t.TextMuted.Mix(t.Text, max(on, hover)))
+	if t.Dark {
+		e.Background(t.SurfaceHover.Alpha(hover).Mix(t.SurfacePressed, on))
+		return
+	}
+	// 亮色分段从银灰轨道浮起白色选项，描边与投影随选中状态一起过渡。
+	e.Background(t.SurfaceHover.Alpha(hover).Mix(t.Background, on)).
+		Border(1, t.Border.Alpha(0.55*on)).
+		Shadow(0, 1, 3, 0, t.Text.Alpha(0.075*on))
 }
 
 // filterTabs 用无障碍和键盘行为完整的 SegmentedBase，计数变化不会重建控件身份。
 func filterTabs(c *myui.Context, selected *int, labels ...string) myui.Element {
 	t := c.Theme()
 	parts := myui.SegmentedBase(c, selected, len(labels))
+	if !t.Dark {
+		parts.Track.Border(1, t.Border.Alpha(0.55))
+	}
 	return parts.Track.Padding(3).Gap(2).Radius(t.Radius).Background(t.Surface).Children(func() {
 		for i, label := range labels {
 			b := parts.Segment(i).Label(label).Padding(t.Space(1.5), t.Space(2)).Radius(t.Radius - 3)

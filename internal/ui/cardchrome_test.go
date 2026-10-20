@@ -94,10 +94,11 @@ func checkCardRing(t *testing.T, tt *myui.Tester, sk *skin, bg, border myui.Colo
 	}
 	midX, midY := (left+right)/2, (top+bottom)/2
 
-	// 浅色皮肤的卡片有一层很淡的投影，紧贴边框处最多比底色暗 7 左右。
+	// 浅色卡片的交互投影最高 8% 不透明度，紧贴边框处比底色暗约 13。
+	// 只放宽外侧底色采样；上方仍严格检查边框恰好一圈、宽度为 1px。
 	tol := 3
 	if !dark {
-		tol = 9
+		tol = 15
 	}
 	for d := 1; d <= 3; d++ {
 		for _, p := range []image.Point{{left - d, midY}, {right + d, midY}, {midX, top - d}, {midX, bottom + d}} {

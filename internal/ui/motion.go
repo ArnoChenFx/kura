@@ -18,9 +18,14 @@ var (
 func surfaceMotion(c *myui.Context, e myui.Element, pal palette, selected, lift bool) {
 	hover := e.AnimateTo("surface-hover", boolF(e.Hovered() && !selected), interactionMotion)
 	chosen := e.AnimateTo("surface-selected", boolF(selected), interactionMotion)
+	emphasis := hover
+	if !c.Theme().Dark {
+		// 纸白卡片以投影表达选中，深色保留原有的底色与悬停投影。
+		emphasis = max(hover, chosen)
+	}
 	e.Background(pal.card.Mix(pal.cardHover, hover).Mix(pal.cardSel, chosen)).
 		Border(1, pal.line.Mix(pal.lineHover, hover).Mix(c.Theme().Accent, chosen)).
-		Shadow(0, 2+3*hover, 6+6*hover, 0, pal.shadow)
+		Shadow(0, 2+3*emphasis, 6+6*emphasis, 0, pal.shadow.Mix(pal.shadowHover, emphasis))
 	pose := myui.Pose{}
 	if lift && e.Hovered() && !c.Preferences().ReduceMotion {
 		pose.Y = -2
