@@ -94,8 +94,8 @@ kura 自己的目录：
 - 状态更新后调用 `Invalidate` 请求重绘，不要在同一次构建里同步写模型再查询。
 - UI 失败用 `ui.NewTester` 复现，要覆盖元素消失后重现的额外帧。
 - **切换根目录要作废旧结果**：后台任务启动时记下 `App.gen`，发布时 `gen != a.gen` 就只清 busy、不覆盖当前列表（见 `publishAfterWork`、`reload`）。新增后台路径必须照做。
-- 选中以**技能名**为准（`selName`），网格里才用下标（`selIdx`，由 `syncSelection` 对齐）；筛选把选中项藏起来时右栏保持不变。
-- **颜色只从 `internal/ui/theme.go` 来**（`kuraScheme` / `palette`），视图代码里不写十六进制。配色取自参考截图：深炭灰底、带边框的卡片、薄荷绿开关、一种低饱和的雾蓝紫强调色。**不要用饱和的蓝紫/靛蓝**（用户明确说过很丑），头像色板也刻意不含蓝紫（`theme_test.go` 守着）。
+- 选中以**技能名与存放状态**为准（`selName` / `selState`），区分启用、停用和回收站里的同名副本；网格里才用下标（`selIdx`，由 `syncSelection` 对齐）。筛选把选中项藏起来时右栏保持不变；移动成功后跟随该副本的新状态，但不能覆盖操作期间用户的新选择。
+- **颜色只从 `internal/ui/theme.go` 来**（`kuraScheme` / `palette`），视图代码里不写十六进制。用户最新选择是**中性石墨灰黑与纸白暖灰**：导航、画布、详情与卡片分层，主操作用银白/墨灰，薄荷绿用于启用状态。不要恢复深蓝、深紫或雾蓝紫的大面积背景与强调色；头像色板也避开蓝紫（`theme_test.go` 守着）。
 - **GridView 给每个单元格自己画一层选中框与悬停底**（圆角 8、2px 边：网格有焦点时 `Accent`，无焦点时 `SurfacePressed` 底加 `Border` 边，悬停时 `SurfaceHover` 底），颜色取自构建网格时的主题。kura 的卡片自己画选中与悬停（圆角更大、边 1px），两层叠一起就是「高亮框和卡片边框对不齐」。所以 `viewGrid` 用 `skin.cell`（这四个颜色透明的主题副本）构建网格，卡片里换回真主题（见 `viewGrid`、`newSkin`）。动网格或卡片外框后先跑 `TestCardChromeIsOneAlignedRing`（读真实渲染的像素）。
 - **别在要参与网格点击的元素上调 `RightClicked()` / `Clicked()` / `Pressed()`**：它们把元素标成可点击，会吞掉网格单元格要收的左键点击（表现为点卡片选不中）。右键要做的事放进 `ContextMenu` 的构建函数（它只在菜单打开、选了菜单项后各跑一次；右键选中卡片就在那里做）。
 - **部件绑定的局部变量在构建结束或查询响应时才被写入**：构建中途直接比较它，拿不到这一次的点击，下一遍构建又从应用状态重新推出，点击就丢了。分段控件用 `Track.Changed()`、开关用 `Changed()` 在同一次构建里取到新值（见 `viewThemeSwitch`、`viewCard` 里的开关），或者直接绑应用的持久字段（`a.filter`、`a.rootSel`）。
@@ -103,7 +103,7 @@ kura 自己的目录：
 - **外观**：`App.themeMode` 决定皮肤（`View` 开头 `kuraScheme.apply(c, a.themeMode)`，跟随系统时读系统外观）。改它一律走 `SetThemeAsync`：立刻换皮肤，后台同步原生外观（`mygo.Theme.SetSource`）并写 `config.json`，连续切换只有最新一次执行，写盘失败只在状态行报告、不回滚皮肤。启动时 `main.go` 在 `App.Run` 之前调 `app.SyncTheme()`。
 - **窗口没有系统标题栏**（`main.go` 用 `mygo.TitleBarHidden` + `TitleBarHeight: 40`，但保留系统的最小化/最大化/关闭按钮）。`viewTitlebar` 自绘一条顶栏：高度取 `max(c.TitleBar().Height, titleBarMinHeight)`，内边距经 `c.TitleBar()` 的 `Left`/`Right` 避开窗口按钮，整条 `DragWindow()`（拖动窗口，双击 = 最大化/还原）。**标题栏里不放可交互元素**——它们会吃掉拖动手势。
 - **要能选中拷贝的文字放进 `Selectable()` 容器；容器内的控件必须 `Unselectable()`**，否则控件交互与选择打架（见 `detailGroup` 的 `selectable` 参数）。
-- **详情页的「概览 / 全文」tab 用 `myui.Tabs`**，tab 状态 `detailTab` 配 `detailSel`：换技能时重置回概览，避免看到上一个技能的全文。全文页在后台读 `SKILL.md`（`startFullTextLoad`，`spawn` 进 goroutine，按技能名缓存进 `skillDocs`），扫描后缓存整体失效并用 `docGen` 作废在途结果；渲染用 mygo 官方的 `github.com/egoist/mygo/ui/markdown`：`App.md`（`markdown.Options`）跨帧稳定、主题每帧从窗口主题重建，kura 自己只保留 `internal/ui/fulltext.go` 里的两件事（剥掉开头的 YAML frontmatter `stripFrontmatter`、超大源码截断 `capSource`）。
+- **详情页的「概览 / 全文」tab 用 `myui.Tabs`**，tab 状态 `detailTab` 配 `detailSel`：换技能副本时重置回概览，避免看到上一个技能的全文。全文页在后台读 `SKILL.md`（`startFullTextLoad`，`spawn` 进 goroutine，按状态与技能名组成的 `skillKey` 缓存进 `skillDocs`），扫描后缓存整体失效并用 `docGen` 作废在途结果；渲染用 mygo 官方的 `github.com/egoist/mygo/ui/markdown`：`App.md`（`markdown.Options`）跨帧稳定、主题每帧从窗口主题重建，kura 自己只保留 `internal/ui/fulltext.go` 里的两件事（剥掉开头的 YAML frontmatter `stripFrontmatter`、超大源码截断 `capSource`）。
 - **翻译开关只切显示**：`App.trans.on` 为真时，内存里的译文缓存（`translateState.items`，键形如 `card:<技能名>:description`）有值就显示译文、没有就回退原文，**界面永不留白**；发起请求只在 `ensureTranslations` / `TranslateAsync`（后台 + 超时），渲染路径只读缓存。翻译配置变更时 `translateState.epoch` 递增，在途结果作废。
 - **应用自更新的后台检查与界面入口**：「自动检查更新」偏好存在 kura 的 `config.json`（`autoCheckUpdates`，唯一真值），读写只经 `store.Library` 的 `AutoCheck` / `SetAutoCheck`；旧版本留在插件 `updater.json` 里的 `automaticChecks` 由 `store.ResolveAutoCheck` 迁移一次。插件挂载时已关掉自己的调度（`DisableAutomaticChecks`），后台检查由 `internal/selfupdate` 的 `Background`（`watch.go`）排定：启动约 10 秒后、之后每 24 小时调一次 `mygo.Updater.Check`，只把「有新版本」经 `app.SetUpdateFound` 回主线程，亮左栏「检查更新」按钮右上角的蓝点，**从不打开窗口**。窗口只由按钮（`CheckAppUpdateAsync`）与应用菜单（`AppMenu`）打开，两者都先经 `ClearUpdateFound` 熄灭蓝点。插件的 `automaticChecks` 只是派生的调度开关（偏好且勾了「以后自动下载并安装更新」），由 `Background` 写，界面不碰。蓝点用 `Absolute().Top().Right()` + `PassThrough()` 画成按钮的绝对定位子元素，**不改变按钮尺寸、不吃点击**。**测试里绝不直接调 `updater.*` / `mygo.Updater.Check`**：插件未挂载时它们会 panic，一律注入假 host（`selfupdate` 的 `host` 接口）或假钩子。
 - 详见 `.agents/skills/mygo-maintenance/SKILL.md`；MyGo 的 API 以**固定版本源码**为准（`go list -m -f '{{.Dir}}' github.com/egoist/mygo`），不要凭记忆猜。
@@ -129,7 +129,7 @@ kura 自己的目录：
 gofmt -l .                      # 必须为空
 go vet ./...                    # 必须干净
 go tool mygo vet .              # 必须干净
-go tool mygo i18n check         # catalogs 必须无错（460 条消息）
+go tool mygo i18n check         # catalogs 必须无错（462 条消息）
 go test ./...                   # 全包通过
 CGO_ENABLED=0 go test ./...     # 全包通过
 CGO_ENABLED=0 go build ./...    # 成功
@@ -167,6 +167,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools/capture-window.ps1 \
 ## 7. Git 与工作区约定
 
 - **默认不提交、不推送**。只有明确要求时才 `git commit` / `git push`；`git push` 需要用户批准。
+- **GitHub 读写默认使用 `ArnoChenFx` 的已授权连接**。连接工具支持多账号时，每次显式传入该账号对应的 `link_id`；只有用户明确允许时才使用其他已核验身份。`git user.name` / `user.email` 只决定提交署名，不代表 GitHub 登录身份；没有可用且获准的授权时保留本地成果，不擅自替换账号发布。
 - 一个里程碑/任务一个分支，**worktree 必须放在仓库内** `<仓库根>/.worktrees/<名字>`， **绝不要**在仓库的上一级目录下留 `kura-*` 之类的目录。`/.worktrees/` 已在 `.gitignore` 里。
 - **只操作自己的 worktree 与 agent 面板**，不碰用户正在用的会话和其他 worktree。
 - 提交信息用英文，形如 `feat(ui): ...` / `fix(store): ...` / `ci: ...` / `docs: ...`。

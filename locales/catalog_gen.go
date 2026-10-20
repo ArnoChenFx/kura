@@ -6598,6 +6598,34 @@ func (msgs Messages) UiTranslateTranslated() string {
 	return Catalog.Format(msgs.locale, "uiTranslateTranslated", nil)
 }
 
+// UiLibraryTitle says "SKILL LIBRARY"
+// in the language the app shows.
+//
+// 技能工作区标题上方的小标题。
+func UiLibraryTitle() string { return In(i18n.Locale()).UiLibraryTitle() }
+
+// UiLibraryTitle says "SKILL LIBRARY"
+// in the language of msgs.
+//
+// 技能工作区标题上方的小标题。
+func (msgs Messages) UiLibraryTitle() string {
+	return Catalog.Format(msgs.locale, "uiLibraryTitle", nil)
+}
+
+// UiSearchClear says "Clear search"
+// in the language the app shows.
+//
+// 搜索无结果时清空搜索词。
+func UiSearchClear() string { return In(i18n.Locale()).UiSearchClear() }
+
+// UiSearchClear says "Clear search"
+// in the language of msgs.
+//
+// 搜索无结果时清空搜索词。
+func (msgs Messages) UiSearchClear() string {
+	return Catalog.Format(msgs.locale, "uiSearchClear", nil)
+}
+
 // UiViewGrid says "Grid"
 // in the language the app shows.
 //

@@ -310,7 +310,8 @@ func startInstall(a *App, opts *store.AddOptions) {
 			*s = installState{source: s.source}
 			if gen == a.gen {
 				a.applyScan(skills, scanErr)
-				a.selName, a.filter, a.query = res.ID, filterAll, ""
+				a.selectInstalled(res.ID)
+				a.filter, a.query = filterAll, ""
 			}
 			a.status, a.statusErr = locales.UiStatusInstalled(res.ID), false
 		})
@@ -379,7 +380,8 @@ func (a *App) InstallSelectedAsync() {
 				*s = installState{source: s.source}
 				if gen == a.gen {
 					a.applyScan(skills, scanErr)
-					a.selName, a.filter, a.query = lastID, filterAll, ""
+					a.selectInstalled(lastID)
+					a.filter, a.query = filterAll, ""
 				}
 				if okCount == 1 {
 					a.status, a.statusErr = locales.UiStatusInstalled(lastID), false

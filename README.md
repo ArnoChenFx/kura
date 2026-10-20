@@ -6,6 +6,8 @@ A desktop manager for agent skills, built with [MyGo](https://github.com/egoist/
 
 ![Screenshot](docs/screenshot.png)
 
+[Light appearance](docs/screenshot-light.png)
+
 ## What it does
 
 - **Several skill roots at once.** `~/.agents/skills` is the default and always first; any other folder can be added in the UI. Each root keeps its own disabled/trash/snapshot state, so same-named skills never interfere.
@@ -14,7 +16,7 @@ A desktop manager for agent skills, built with [MyGo](https://github.com/egoist/
 - **Checks for upstream changes by git object hash**, not clocks or file times, so an up-to-date skill downloads nothing. Skills from one repository share a single clone, and a locally edited skill is reported as locally modified, not "update available".
 - **Shows the full skill text and can translate it.** The detail column renders `SKILL.md` as Markdown, and its paragraphs can be translated into one global target language, fenced code blocks kept whole. Translations stay in memory: `SKILL.md` is never edited and nothing is written into the skill folder.
 - **Speaks Chinese and English.** Messages live in MyGo's official ARB catalogs (`locales/`), so MyGo's own menus, file dialogs and controls follow the language too. The interface language follows the system on first launch (a `zh*` locale is Chinese, anything else is English) and can be pinned in the settings dialog; the CLI has `--lang` and `KURA_LANG`.
-- **Three-column window** (roots, cards, details). Column widths are draggable, roots can be reordered by dragging, skills show as a card grid or a two-line list, and there are search plus All / Enabled / Disabled / Trash filters with counts. Context menus are the system's native menus; appearance follows the system or is pinned to light or dark.
+- **Three-column window** (roots, cards, details). Column widths are draggable, roots can be reordered by dragging, skills show as a card grid or a two-line list, and there are search plus All / Enabled / Disabled / Trash filters with counts. Context menus use the system's native menus.
 - **Updates itself** through the MyGo updater: the app menu has a check for updates. A background check runs about ten seconds after launch and then daily; a newer version only lights a dot on the update button and never opens a window by itself. A download is installed only after its Ed25519 signature has been verified.
 - **Finds agent directories on this machine.** On startup kura adds the global skill directories that already exist (Claude Code, Codex, Cursor, Gemini CLI, Pi and others — see `internal/store/agentdirs.go`), and a directory removed from the list is never added back.
 

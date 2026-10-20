@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/ArnoChenFx/kura/internal/market"
 	"github.com/ArnoChenFx/kura/internal/store"
@@ -567,6 +568,13 @@ func TestRenderMarketShot(t *testing.T) {
 	tt := showApp(a, 1140, 760)
 	click(t, a, tt, locales.UiActionMarket())
 	saveFrame(t, tt, filepath.Join(out, "market-grid.png"))
+	tt.SetDark(true)
+	saveFrame(t, tt, filepath.Join(out, "market-grid-dark.png"))
+	tt.SetSize(880, 640)
+	saveFrame(t, tt, filepath.Join(out, "market-grid-narrow-dark.png"))
+	tt.SetDark(false)
+	saveFrame(t, tt, filepath.Join(out, "market-grid-narrow.png"))
+	tt.SetSize(1140, 760)
 
 	click(t, a, tt, locales.UiViewList())
 	saveFrame(t, tt, filepath.Join(out, "market-list.png"))
@@ -574,14 +582,19 @@ func TestRenderMarketShot(t *testing.T) {
 
 	click(t, a, tt, sample)
 	saveFrame(t, tt, filepath.Join(out, "market-detail.png"))
+	tt.SetDark(true)
+	saveFrame(t, tt, filepath.Join(out, "market-detail-dark.png"))
+	tt.SetDark(false)
 
 	click(t, a, tt, locales.UiTranslateTranslated())
 	saveFrame(t, tt, filepath.Join(out, "market-detail-translated.png"))
 }
 
-// saveFrame 把 tt 的当前帧存成 PNG。
+// saveFrame 推进虚拟时钟，让页面入场与悬停动画完成，再把稳定帧存成 PNG。
+// Tester 的时间不会随 Frame 自行前进，直接截帧会拍到入场时透明的页面。
 func saveFrame(t *testing.T, tt *myui.Tester, path string) {
 	t.Helper()
+	tt.Advance(250 * time.Millisecond)
 	fh, err := os.Create(path)
 	if err != nil {
 		t.Fatal(err)

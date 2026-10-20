@@ -4,7 +4,7 @@ package resources
 
 import _ "embed"
 
-// IconPNG 是应用图标（resources/icon.png，1024×1024，四周透明）。标题栏里显示它。
+// IconPNG 是应用图标（resources/icon.png，方形透明 PNG）。标题栏和平台打包共用。
 //
 //go:embed icon.png
 var IconPNG []byte

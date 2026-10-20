@@ -37,6 +37,9 @@ DELETED = {
 # ADDED 是迁移之后新增的 key（迁移时不存在，所以 keys.json 里没有它们）。
 # 校验时从「新 catalogs 多出的 key」里排除，避免把新功能误报成 EXTRA。
 ADDED = {
+    # 精致桌面布局的工作区标题与搜索空态动作。
+    "uiLibraryTitle",
+    "uiSearchClear",
     # 后台自动检查发现新版本时，左栏「检查更新」按钮的悬停提示。
     "uiRailUpdateAvailableTip",
     # 设置弹窗里的「自动检查更新」开关（偏好存在更新器插件的 updater.json）。

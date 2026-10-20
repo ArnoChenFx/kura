@@ -31,7 +31,15 @@ import (
 type confirmState struct {
 	open  bool
 	name  string
+	state store.State
 	purge bool
+}
+
+// skillSelection 区分同一目录里不同状态的同名技能：重新安装后，旧副本可以
+// 仍留在停用区或回收站。名字仍是选择的主标识，状态仅用于消除这种歧义。
+type skillSelection struct {
+	name  string
+	state store.State
 }
 
 // App 是 kura 主窗口的状态。View 由 MyGo 在主线程反复调用，
@@ -84,22 +92,24 @@ type App struct {
 	autoCheckSeq atomic.Int64 // 开关切换的序号：后台任务只执行最新一次
 	autoCheckMu  sync.Mutex   // 串行化写盘与通知：最新的值总是最后生效
 
-	skills  []*store.Skill  // 当前目录的全部技能（启用 + 停用 + 回收站）
-	query   string          // 搜索词
-	filter  int             // 状态筛选：filterAll/filterEnabled/filterDisabled/filterTrashed
-	selName string          // 选中的技能名，空为未选中；以名字为准，跨筛选保持
-	selIdx  int             // 网格的选中下标（绑定 GridState.Selected），由 selName 推出
-	syncIdx int             // 上一次 syncSelection 写入 selIdx 的值：不同即网格里点了别的卡片
-	shown   []string        // 上一次构建网格时各卡片的技能名，用来把点击换回名字
-	grid    myui.GridState  // 卡片网格的滚动与选择状态
-	updates map[string]bool // 最近一次检查发现有更新的技能（当前目录）
+	skills   []*store.Skill   // 当前目录的全部技能（启用 + 停用 + 回收站）
+	query    string           // 搜索词
+	filter   int              // 状态筛选：filterAll/filterEnabled/filterDisabled/filterTrashed
+	selName  string           // 选中的技能名，空为未选中；以名字为准，跨筛选保持
+	selState store.State      // 同名技能并存时，选择属于哪个状态；移动后跟随仍存在的同名技能
+	selSeq   uint64           // 选择变更代数：后台移动不能覆盖用户后来的选择
+	selIdx   int              // 网格的选中下标（绑定 GridState.Selected），由 selName 推出
+	syncIdx  int              // 上一次 syncSelection 写入 selIdx 的值：不同即网格里点了别的卡片
+	shown    []skillSelection // 上一次构建网格时各卡片的身份，用来还原点击
+	grid     myui.GridState   // 卡片网格的滚动与选择状态
+	updates  map[string]bool  // 最近一次检查发现有更新的技能（当前目录）
 
 	// 详情栏的「概览/全文」tab：detailTab 是当前选中的下标（0=概览，
 	// 1=全文），detailSel 记录 tab 属于哪个技能：viewDetail 发现换人时
 	// 把 detailTab 重置回 0，避免看到上一个技能的全文。
 	detailTab int
 	detailSel string
-	// skillDocs 缓存每个技能读出的 SKILL.md（键：技能名）：切 tab、来回
+	// skillDocs 缓存每个技能读出的 SKILL.md（键：状态 + 技能名）：切 tab、来回
 	// 切技能不必反复读盘；扫描后失效（applyScan），更新/改文件后的下一帧
 	// 会重新读。docGen 随失效递增，后台读盘任务只回写同一代的缓存。
 	skillDocs map[string]fullTextDoc
@@ -362,17 +372,52 @@ func (a *App) visible() []*store.Skill {
 // 先把上一次构建里点击产生的下标换回名字，再按本次的卡片推出下标。
 func (a *App) syncSelection(rows []*store.Skill) {
 	if a.selIdx != a.syncIdx && a.selIdx >= 0 && a.selIdx < len(a.shown) {
-		a.selName = a.shown[a.selIdx]
+		selection := a.shown[a.selIdx]
+		a.setSelection(selection.name, selection.state)
+	}
+	// 启用、停用、移除与恢复会移动同一个技能。原状态已不存在时跟随它的新
+	// 状态；筛选只隐藏行，不改变这份选择，也不让同名的另一副本抢走详情。
+	if s := a.selected(); s != nil {
+		a.selState = s.State
 	}
 	a.shown = a.shown[:0]
 	a.selIdx = -1
 	for i, s := range rows {
-		a.shown = append(a.shown, s.Name)
-		if s.Name == a.selName {
+		a.shown = append(a.shown, skillSelection{name: s.Name, state: s.State})
+		if a.isSelected(s) {
 			a.selIdx = i
 		}
 	}
 	a.syncIdx = a.selIdx
+}
+
+// skillKey 给控件和详情 tab 一个包含状态的稳定身份，避免同名行共用控件状态。
+func skillKey(s *store.Skill) string { return string(s.State) + "\x00" + s.Name }
+
+// selectSkill 由卡片/列表的选择动作调用，保留用户实际点中的那一个副本。
+func (a *App) selectSkill(s *store.Skill) {
+	a.setSelection(s.Name, s.State)
+}
+
+// selectInstalled 选择刚装进技能根目录的副本，不受仍在回收站的同名旧副本影响。
+func (a *App) selectInstalled(name string) {
+	a.setSelection(name, store.StateEnabled)
+}
+
+// clearSelection 关闭详情，并作废在途操作对原选择的跟随。
+func (a *App) clearSelection() { a.setSelection("", "") }
+
+// setSelection 记录明确的选择变化，包括先离开再选回同一副本的情形。
+func (a *App) setSelection(name string, state store.State) {
+	if a.selName != name || a.selState != state {
+		a.selSeq++
+		a.selName, a.selState = name, state
+	}
+}
+
+// isSelected 只比较选择身份，不随当前的搜索词与状态筛选改变。
+func (a *App) isSelected(s *store.Skill) bool {
+	return s.Name == a.selName && s.State == a.selState
 }
 
 // selected 返回选中的技能（在当前目录的全部技能里找，不受筛选影响）。
@@ -380,12 +425,18 @@ func (a *App) selected() *store.Skill {
 	if a.selName == "" {
 		return nil
 	}
+	var fallback *store.Skill
 	for _, s := range a.skills {
 		if s.Name == a.selName {
-			return s
+			if s.State == a.selState {
+				return s
+			}
+			if fallback == nil {
+				fallback = s
+			}
 		}
 	}
-	return nil
+	return fallback
 }
 
 // busyKey 是 busy 的键：目录 + 技能名，不同目录的同名技能互不影响。
@@ -437,11 +488,19 @@ func (a *App) applyScan(skills []*store.Skill, err error) {
 // err 是任务本身的错误；成功时状态行显示 okMsg。期间切换了目录时只清
 // busy 与报告结果，不用旧目录的扫描覆盖当前列表。
 func (a *App) publishAfterWork(cfg *store.Config, gen int, key string, err error, okMsg string) {
+	a.publishAfterWorkThen(cfg, gen, key, err, okMsg, nil)
+}
+
+// publishAfterWorkThen 只在操作与扫描都成功、目录仍相同时回放后续 UI 动作。
+func (a *App) publishAfterWorkThen(cfg *store.Config, gen int, key string, err error, okMsg string, afterScan func()) {
 	skills, scanErr := cfg.ScanAll()
 	a.publish(func() {
 		delete(a.busy, key)
 		if gen == a.gen {
 			a.applyScan(skills, scanErr)
+			if err == nil && scanErr == nil && afterScan != nil {
+				afterScan()
+			}
 		}
 		if err != nil {
 			a.status, a.statusErr = err.Error(), true
@@ -484,7 +543,7 @@ func (a *App) reload(announce bool) {
 			}
 			a.applyScan(skills, err)
 			if a.selected() == nil {
-				a.selName = ""
+				a.clearSelection()
 			}
 			switch {
 			case err != nil:
@@ -504,10 +563,12 @@ func (a *App) reload(announce bool) {
 // 实际的移动在后台执行，期间该卡片显示忙碌状态。
 func (a *App) ToggleAsync(name string, wantOn bool) {
 	okMsg := locales.UiStatusDisabled(name)
+	from, to := store.StateEnabled, store.StateDisabled
 	if wantOn {
 		okMsg = locales.UiStatusEnabled(name)
+		from, to = store.StateDisabled, store.StateEnabled
 	}
-	a.runOp(name, locales.UiStatusToggling(name), okMsg, func(cfg *store.Config) error {
+	a.runMoveOp(name, from, to, locales.UiStatusToggling(name), okMsg, func(cfg *store.Config) error {
 		var err error
 		if wantOn {
 			_, err = cfg.Enable(name)
@@ -518,9 +579,24 @@ func (a *App) ToggleAsync(name string, wantOn bool) {
 	})
 }
 
-// RemoveAsync 把技能移入回收站（后台执行）。
+// RemoveAsync 把启用技能移入回收站（后台执行）。
 func (a *App) RemoveAsync(name string) {
-	a.runOp(name, locales.UiStatusMovingToTrash(name), locales.UiStatusMovedToTrash(name), func(cfg *store.Config) error {
+	a.RemoveSkillAsync(name, store.StateEnabled)
+}
+
+// RemoveSkillAsync 按发起动作的副本状态移入回收站，避免移走同名启用副本。
+func (a *App) RemoveSkillAsync(name string, state store.State) {
+	if state == "" {
+		state = store.StateEnabled
+	}
+	if state != store.StateEnabled && state != store.StateDisabled {
+		return
+	}
+	a.runMoveOp(name, state, store.StateTrashed, locales.UiStatusMovingToTrash(name), locales.UiStatusMovedToTrash(name), func(cfg *store.Config) error {
+		if state == store.StateDisabled {
+			_, err := cfg.RemoveDisabled(name)
+			return err
+		}
 		_, err := cfg.Remove(name)
 		return err
 	})
@@ -528,7 +604,7 @@ func (a *App) RemoveAsync(name string) {
 
 // RestoreAsync 把回收站中最新一次的技能移回技能目录（后台执行）。
 func (a *App) RestoreAsync(name string) {
-	a.runOp(name, locales.UiStatusRestoring(name), locales.UiStatusRestored(name), func(cfg *store.Config) error {
+	a.runMoveOp(name, store.StateTrashed, store.StateEnabled, locales.UiStatusRestoring(name), locales.UiStatusRestored(name), func(cfg *store.Config) error {
 		_, err := cfg.Restore(name, "")
 		return err
 	})
@@ -545,6 +621,25 @@ func (a *App) PurgeAsync(name string) {
 // runOp 在后台对当前目录的技能 name 执行 op：同一技能同时只跑一个操作，
 // 期间显示 busy；完成后重新扫描并在状态行报告结果。
 func (a *App) runOp(name, doing, okMsg string, op func(*store.Config) error) {
+	a.runOpThen(name, doing, okMsg, op, nil)
+}
+
+// runMoveOp 让仍选中的原副本在移动成功后跟随目标状态。回收站可能还留有
+// 同名旧记录，不能仅靠扫描后原状态是否消失推断；用户期间改选则不抢回详情。
+func (a *App) runMoveOp(name string, from, to store.State, doing, okMsg string, op func(*store.Config) error) {
+	selection := a.selected()
+	seq := a.selSeq
+	follow := selection != nil && selection.Name == name && selection.State == from
+	a.runOpThen(name, doing, okMsg, op, func() {
+		// 并发重扫可能先回退 selState；它不是用户改选，只以选择代数判断。
+		if follow && a.selSeq == seq && a.selName == name {
+			a.setSelection(name, to)
+		}
+	})
+}
+
+// runOpThen 保留 runOp 的忙碌与后台执行约定，额外动作只在 UI 线程执行。
+func (a *App) runOpThen(name, doing, okMsg string, op func(*store.Config) error, afterScan func()) {
 	key := a.busyKey(name)
 	if a.busy[key] {
 		return
@@ -553,7 +648,7 @@ func (a *App) runOp(name, doing, okMsg string, op func(*store.Config) error) {
 	a.status, a.statusErr = doing, false
 	cfg, gen := a.cfg, a.gen
 	a.spawn(func() {
-		a.publishAfterWork(cfg, gen, key, op(cfg), okMsg)
+		a.publishAfterWorkThen(cfg, gen, key, op(cfg), okMsg, afterScan)
 	})
 }
 
@@ -578,7 +673,8 @@ func (a *App) SelectRoot(root string) {
 	}
 	a.cfg = a.lib.Config(root)
 	a.gen++
-	a.skills, a.selName, a.selIdx, a.loadErr = nil, "", -1, ""
+	a.clearSelection()
+	a.skills, a.selIdx, a.loadErr = nil, -1, ""
 	a.updates = map[string]bool{}
 	a.review = reviewState{}
 	a.status, a.statusErr = "", false

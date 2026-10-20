@@ -45,11 +45,12 @@ func TestInvalidNameRejectedAndOutsideUntouched(t *testing.T) {
 	}
 
 	calls := map[string]func(name string) error{
-		"Enable":  func(n string) error { _, err := base.Enable(n); return err },
-		"Disable": func(n string) error { _, err := base.Disable(n); return err },
-		"Remove":  func(n string) error { _, err := base.Remove(n); return err },
-		"Restore": func(n string) error { _, err := base.Restore(n, ""); return err },
-		"Purge":   func(n string) error { _, err := base.Purge(n); return err },
+		"Enable":         func(n string) error { _, err := base.Enable(n); return err },
+		"Disable":        func(n string) error { _, err := base.Disable(n); return err },
+		"Remove":         func(n string) error { _, err := base.Remove(n); return err },
+		"RemoveDisabled": func(n string) error { _, err := base.RemoveDisabled(n); return err },
+		"Restore":        func(n string) error { _, err := base.Restore(n, ""); return err },
+		"Purge":          func(n string) error { _, err := base.Purge(n); return err },
 		"RemoveWithStamp": func(n string) error {
 			_, err := base.RemoveWithStamp(n, "20240101-000000")
 			return err
