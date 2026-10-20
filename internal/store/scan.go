@@ -80,11 +80,25 @@ func (c *Config) CountEnabled() int {
 
 // scanDir 列出 dir 下的一级子目录，构造 Skill 视图。目录不存在视为空。
 func scanDir(dir string, state State) ([]*Skill, error) {
-	entries, err := os.ReadDir(dir)
+	f, err := os.Open(dir)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			return nil, nil
 		}
+		return nil, i18n.Wrapf(err, "storeErrReadDir", func() string { return locales.StoreErrReadDir(dir) })
+	}
+	defer f.Close()
+	// Windows 的目录枚举可能把普通文件当作不存在或空目录。先核对同一
+	// 句柄的类型，再从它枚举，避免路径在核对与读取之间被替换而误判。
+	info, err := f.Stat()
+	if err == nil && !info.IsDir() {
+		err = ErrNotDir
+	}
+	if err != nil {
+		return nil, i18n.Wrapf(err, "storeErrReadDir", func() string { return locales.StoreErrReadDir(dir) })
+	}
+	entries, err := f.ReadDir(-1)
+	if err != nil {
 		return nil, i18n.Wrapf(err, "storeErrReadDir", func() string { return locales.StoreErrReadDir(dir) })
 	}
 	skills := make([]*Skill, 0, len(entries))
