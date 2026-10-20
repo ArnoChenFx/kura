@@ -84,10 +84,11 @@ func (b *marketBoard) filtered(query string) []market.Skill {
 
 // marketDoc 是一个技能的快照读取状态（详情页用）。
 type marketDoc struct {
-	doc     market.Document
-	loaded  bool
-	loading bool
-	err     string
+	doc       market.Document
+	loaded    bool
+	loading   bool
+	truncated bool
+	err       string
 }
 
 // marketState 是技能市场的状态。
@@ -261,13 +262,24 @@ func (a *App) loadMarketDocAsync(sk market.Skill) {
 		ctx, cancel := context.WithTimeout(context.Background(), marketPageTimeout)
 		defer cancel()
 		res, err := fetch(ctx, sk.Source, sk.Name)
+		// 下载接口本身已有响应上限；缓存、翻译和显示进一步共用全文字节上限，
+		// 不把显示范围之外的异常大文档继续发送给翻译服务。
+		var truncated bool
+		if err == nil {
+			res.SkillMD, truncated = capSource(res.SkillMD, fullTextMaxSource)
+			if truncated {
+				// 子串会持有整份大文档的底层内存；只保留受限正文的独立副本。
+				res.SkillMD = strings.Clone(res.SkillMD)
+				res.Description = strings.Clone(res.Description)
+			}
+		}
 		a.publish(func() {
 			d.loading = false
 			if err != nil {
 				d.err = err.Error()
 				return
 			}
-			d.doc, d.loaded = res, true
+			d.doc, d.loaded, d.truncated = res, true, truncated
 		})
 	})
 }
@@ -607,6 +619,9 @@ func (a *App) viewMarketDoc(c *myui.Context, sk market.Skill, d *marketDoc) {
 	t := c.Theme()
 	switch {
 	case d.loaded && d.doc.SkillMD != "":
+		if d.truncated {
+			myui.Text(c, locales.UiMarkdownTruncated()).TextColor(t.TextMuted)
+		}
 		a.viewMarketSkillMD(c, sk, d.doc.SkillMD)
 	case d.loaded:
 		myui.Text(c, locales.UiMarketDocEmpty()).TextColor(t.TextMuted)
@@ -798,6 +813,10 @@ func (a *App) viewMarketTranslateNote(c *myui.Context, sk market.Skill, desc str
 		})
 	case e.err != "":
 		myui.Text(c, locales.UiTranslateFailed(e.err)).MaxLines(4).FontSize(t.FontSize - 1).TextColor(t.Danger)
+		if myui.Button(c, locales.UiTranslateRetry()).Clicked() {
+			delete(a.trans.items, marketDescKey(sk))
+			a.TranslateAsync(marketDescKey(sk), desc)
+		}
 	default:
 		myui.Text(c, locales.UiTranslateNote(a.settings.LangLabel())).FontSize(t.FontSize - 2).TextColor(t.TextMuted)
 	}
@@ -806,26 +825,7 @@ func (a *App) viewMarketTranslateNote(c *myui.Context, sk market.Skill, desc str
 // viewMarketSkillMD 渲染市场技能的 SKILL.md 全文。译文模式下的做法同 viewFullTextBody：译文还在
 // 路上先显示原文，顶上一行「翻译全文中…」；失败说明原因，仍显示原文；译文到了替换成译文。
 func (a *App) viewMarketSkillMD(c *myui.Context, sk market.Skill, src string) {
-	t := c.Theme()
-	if !a.trans.on || !a.settings.Ready() || strings.TrimSpace(src) == "" {
-		a.viewMarkdown(c, src)
-		return
-	}
-	e, ok := a.trans.get(marketDocKey(sk), src)
-	switch {
-	case !ok || e.pending:
-		myui.Row(c).Gap(t.Space(1.5)).AlignItems(myui.Center).Children(func() {
-			myui.Spinner(c)
-			myui.Text(c, locales.UiTranslateFullInProgress()).FontSize(t.FontSize - 1).TextColor(t.TextMuted)
-		})
-		a.viewMarkdown(c, src)
-	case e.err != "":
-		myui.Text(c, locales.UiTranslateFullFailed(e.err)).MaxLines(4).FontSize(t.FontSize - 1).TextColor(t.Danger)
-		a.viewMarkdown(c, src)
-	default:
-		myui.Text(c, locales.UiTranslateNote(a.settings.LangLabel())).FontSize(t.FontSize - 2).TextColor(t.TextMuted)
-		a.viewMarkdown(c, e.dst)
-	}
+	a.viewDocTranslation(c, marketDocKey(sk), src)
 }
 
 // ensureMarketTranslations 为市场详情页里的技能发起翻译（若需要）：译文模式开着、翻译 API 已就绪，

@@ -61,6 +61,14 @@ type translateEntry struct {
 	err     string
 	dst     string
 	src     string
+	// 全文任务保留已经发布的分段结果；停止或失败后仍可继续，不重复请求成功段。
+	doc    bool
+	chunks []string
+	parts  []string
+	paused bool
+	retry  bool
+	ticket uint64
+	cancel context.CancelFunc
 }
 
 // translateState 保存每段文本的翻译结果（键：调用方给的稳定 key，如
@@ -81,6 +89,8 @@ type translateState struct {
 	// 发出，在途的请求也被中断（后台 goroutine 不读 epoch 本身）。
 	ctx    context.Context
 	cancel context.CancelFunc
+	// ticket 在同一配置代次内也唯一，避免停止后立刻继续时旧回调覆盖新任务。
+	ticket uint64
 }
 
 // current 返回当前 epoch 的 context（惰性创建）。只在 UI 线程调用。
@@ -130,6 +140,9 @@ func (s *translateState) begin(key, src string) bool {
 	if _, ok := s.get(key, src); ok {
 		return false
 	}
+	if old := s.items[key]; old.cancel != nil {
+		old.cancel()
+	}
 	s.items[key] = translateEntry{pending: true, src: src}
 	return true
 }
@@ -154,7 +167,13 @@ func (s *translateState) finish(key, src, dst, err string) {
 func (s *translateState) clearErrors() {
 	for k, e := range s.items {
 		if e.err != "" {
-			delete(s.items, k)
+			if e.doc {
+				// 切回译文与显式继续走同一条续译路径，不能丢掉已经成功的段落。
+				e.err, e.retry = "", true
+				s.items[k] = e
+			} else {
+				delete(s.items, k)
+			}
 		}
 	}
 }
@@ -275,39 +294,89 @@ func (a *App) ensureDocTranslation(name, src string) {
 	a.TranslateDocAsync(docTransKey(name), src)
 }
 
-// TranslateDocAsync 在后台把整份 SKILL.md（src）按段翻译，结果写进 key，全文页读它。
-//
-//   - 发起前先在 UI 线程 begin 占位 pending：同一 key 同一原文只发一次。
-//   - 段与段按顺序请求，同一个翻译接口不并发去打；每段有自己的 translateTimeout。
-//     任何一段失败整份记为失败，错误里注明第几段；译文按空行拼回，结构不变。
-//   - 发起时在 UI 线程固定设置副本，所有段用同一套配置；每段请求之前检查
-//     当前 epoch 的 context，配置变了（reset）就停止，不再发后面的段。
-//   - 与 TranslateAsync 一样：结果经 publish 回到 UI 线程写缓存，配置变了（epoch
-//     不同）的旧结果直接丢弃，错误里的 API key 先抹掉。
+// TranslateDocAsync 先查缓存再启动后台分段；已完成、失败或停止的任务不因重绘重发。
+// 失败任务可以由用户切回译文或点击继续来恢复，已经成功的段落只保留在内存里。
 func (a *App) TranslateDocAsync(key, src string) {
-	chunks := store.SplitForTranslation(src, docChunkRunes)
-	if len(chunks) == 0 || !a.trans.begin(key, src) {
+	if src == "" {
 		return
 	}
-	fn, epoch, cfg, live := a.translate, a.trans.epoch, a.settings, a.trans.current()
+	if e, ok := a.trans.get(key, src); ok && !e.retry {
+		return
+	}
+	a.startDocTranslation(key, src)
+}
+
+// StopDocTranslation 立即停止该份全文的请求并保留已经发布的成功段。
+// 只作用于匹配原文的任务，旧页面上的动作不能中止后来打开的同名文档。
+func (a *App) StopDocTranslation(key, src string) {
+	e, ok := a.trans.get(key, src)
+	if !ok || !e.doc || !e.pending {
+		return
+	}
+	if e.cancel != nil {
+		e.cancel()
+	}
+	a.trans.ticket++
+	e.ticket, e.cancel = a.trans.ticket, nil
+	e.pending, e.paused, e.retry, e.err = false, true, false, ""
+	a.trans.items[key] = e
+}
+
+// ResumeDocTranslation 由明确的继续动作调用；续译失败段及其后内容，不重发成功段。
+func (a *App) ResumeDocTranslation(key, src string) {
+	e, ok := a.trans.get(key, src)
+	if !ok || !e.doc || e.pending || e.dst != "" || !a.settings.Ready() {
+		return
+	}
+	a.startDocTranslation(key, src)
+}
+
+// startDocTranslation 在 UI 线程固定配置、任务票号和已完成结果，后台只操作副本。
+func (a *App) startDocTranslation(key, src string) {
+	e, same := a.trans.get(key, src)
+	if !same || !e.doc {
+		if old := a.trans.items[key]; old.cancel != nil {
+			old.cancel()
+		}
+		e = translateEntry{src: src, doc: true}
+	}
+	a.trans.ticket++
+	live, cancel := context.WithCancel(a.trans.current())
+	e.pending, e.paused, e.retry, e.err = true, false, false, ""
+	e.ticket, e.cancel = a.trans.ticket, cancel
+	a.trans.items[key] = e
+	// chunks 在首次分段后不可变；parts 的后台副本与 UI 进度不共享可写底层数组。
+	chunks, parts := e.chunks, append([]string(nil), e.parts...)
+	fn, epoch, cfg, ticket := a.translate, a.trans.epoch, a.settings, e.ticket
 	secret := cfg.APIKey
 	a.spawn(func() {
-		var (
-			parts  []string
-			errMsg string
-		)
+		defer cancel()
+		if live.Err() != nil {
+			return
+		}
+		if chunks == nil {
+			chunks = store.SplitForTranslation(src, docChunkRunes)
+			a.publish(func() {
+				if current, ok := a.docRequest(key, src, epoch, ticket); ok {
+					current.chunks = chunks
+					a.trans.items[key] = current
+				}
+			})
+		}
+		var errMsg string
 		if fn == nil {
 			errMsg = store.ErrNotConfigured.Error()
 		}
-		for i := 0; errMsg == "" && i < len(chunks); i++ {
+		for i := len(parts); errMsg == "" && i < len(chunks); i++ {
 			if live.Err() != nil {
-				// 配置已变更：不再发后面的段（已拿到的结果因 epoch 不符被丢弃）。
-				errMsg = locales.UiTranslateConfigChanged()
-				break
+				return
 			}
-			ctx, cancel := context.WithTimeout(live, translateTimeout)
+			ctx, cancelPart := context.WithTimeout(live, translateTimeout)
 			out, err := fn(ctx, cfg, chunks[i])
-			cancel()
+			cancelPart()
+			if live.Err() != nil {
+				return
+			}
 			switch {
 			case err != nil:
 				errMsg = locales.UiTranslateChunkFailed(i+1, len(chunks), redactSecret(err.Error(), secret))
@@ -315,14 +384,36 @@ func (a *App) TranslateDocAsync(key, src string) {
 				errMsg = locales.UiTranslateChunkEmpty(i+1, len(chunks))
 			default:
 				parts = append(parts, out)
+				// 每段都发布进度；单独传索引和译文，避免后台与 UI 共同追加一个切片。
+				index, translated := i, out
+				a.publish(func() {
+					if current, ok := a.docRequest(key, src, epoch, ticket); ok && len(current.parts) == index {
+						current.parts = append(current.parts, translated)
+						a.trans.items[key] = current
+					}
+				})
 			}
 		}
 		dst := strings.Join(parts, "\n\n")
 		a.publish(func() {
-			if epoch != a.trans.epoch {
-				return // 翻译配置已变，这份旧结果不要
+			current, ok := a.docRequest(key, src, epoch, ticket)
+			if !ok {
+				return
 			}
-			a.trans.finish(key, src, dst, errMsg)
+			current.pending, current.cancel, current.err = false, nil, errMsg
+			if errMsg == "" {
+				current.dst = dst
+			}
+			a.trans.items[key] = current
 		})
 	})
+}
+
+// docRequest 只在 UI 线程检查回调的身份，屏蔽停止、续译、切配置和换原文后的旧结果。
+func (a *App) docRequest(key, src string, epoch int, ticket uint64) (translateEntry, bool) {
+	if epoch != a.trans.epoch {
+		return translateEntry{}, false
+	}
+	e, ok := a.trans.get(key, src)
+	return e, ok && e.doc && e.pending && e.ticket == ticket
 }

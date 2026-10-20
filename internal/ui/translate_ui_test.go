@@ -57,6 +57,8 @@ func trApp(t *testing.T, ready bool) (*App, *store.Config, *fakeTranslator, *myu
 	a.translate = f.translate // 先于一切：绝不让真实实现被调用
 	if ready {
 		a.settings = trReadySettings()
+	} else {
+		a.settings = store.Settings{Provider: store.TranslationOpenAI}
 	}
 	seedDescribed(t, cfg, "alpha", "Reads PDF files.", nil)
 	seedDescribed(t, cfg, "beta", "Writes release notes.", nil)

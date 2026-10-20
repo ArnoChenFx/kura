@@ -1,6 +1,6 @@
 package ui
 
-// 设置弹窗：配置 OpenAI 兼容的翻译 API（地址、密钥、模型）与全局目标语言，
+// 设置弹窗：选择免费翻译或 OpenAI 兼容 API，并配置全局目标语言，
 // 保存到 ~/.kura/settings.json（读写经 store.LoadSettings / SaveSettings，
 // 本包不直接碰磁盘）。密钥以明文保存是用户明确选择的方案，弹窗里写明。
 
@@ -16,14 +16,42 @@ import (
 // 从 App.settings 灌入一次（OpenSettings），之后用户的编辑留在这里，
 // 构建时绝不再从 App.settings 覆盖，否则输入会被抹掉。
 type settingsState struct {
-	open    bool
-	baseURL string // API 地址
-	apiKey  string // 密钥（输入框用 Password 掩盖显示）
-	model   string // 模型名
-	lang    string // 目标语言的可读名（targetLangs 里的 label）
-	busy    bool   // 预留：保存期间禁用按钮（保存本身立即生效，一般不会置位）
-	err     string // 弹窗内的错误（如目标语言不被支持）
-	note    string // 打开时的提示（如已存的语言无法识别，已回到默认）
+	open     bool
+	provider string // 翻译服务的稳定标识，不随界面语言变化
+	baseURL  string // API 地址
+	apiKey   string // 密钥（输入框用 Password 掩盖显示）
+	model    string // 模型名
+	lang     string // 目标语言的可读名（targetLangs 里的 label）
+	busy     bool   // 预留：保存期间禁用按钮（保存本身立即生效，一般不会置位）
+	err      string // 弹窗内的错误（如目标语言不被支持）
+	note     string // 打开时的提示（如已存的语言无法识别，已回到默认）
+}
+
+// providerLabel 与 providerOptions 只转换显示名；保存的始终是稳定标识。
+func providerLabel(provider string) string {
+	switch provider {
+	case store.TranslationGoogle:
+		return locales.UiSettingsProviderGoogle()
+	case store.TranslationMicrosoft:
+		return locales.UiSettingsProviderMicrosoft()
+	case store.TranslationOpenAI:
+		return locales.UiSettingsProviderOpenAI()
+	default:
+		return provider
+	}
+}
+
+func providerOptions() []string {
+	return []string{locales.UiSettingsProviderGoogle(), locales.UiSettingsProviderMicrosoft(), locales.UiSettingsProviderOpenAI()}
+}
+
+func providerValue(label string) string {
+	for _, provider := range []string{store.TranslationGoogle, store.TranslationMicrosoft, store.TranslationOpenAI} {
+		if providerLabel(provider) == label {
+			return provider
+		}
+	}
+	return label
 }
 
 // targetLang 是设置里可选的一个目标语言：规范码 + 显示名的取值函数。
@@ -134,10 +162,11 @@ func langCodeFor(label string) string {
 func (a *App) OpenSettings() {
 	s := &a.settingsUI
 	*s = settingsState{
-		open:    true,
-		baseURL: a.settings.BaseURL,
-		apiKey:  a.settings.APIKey,
-		model:   a.settings.Model,
+		open:     true,
+		provider: a.settings.EffectiveProvider(),
+		baseURL:  a.settings.BaseURL,
+		apiKey:   a.settings.APIKey,
+		model:    a.settings.Model,
 	}
 	code, err := store.NormalizeTargetLang(a.settings.TargetLang)
 	if err != nil {
@@ -153,6 +182,7 @@ func (a *App) OpenSettings() {
 // settingsDraft 把弹窗里的输入换成待保存的 store.Settings（去掉首尾空白）。
 func (s *settingsState) settingsDraft() store.Settings {
 	return store.Settings{
+		Provider:   s.provider,
 		BaseURL:    strings.TrimSpace(s.baseURL),
 		APIKey:     strings.TrimSpace(s.apiKey),
 		Model:      strings.TrimSpace(s.model),
@@ -163,7 +193,8 @@ func (s *settingsState) settingsDraft() store.Settings {
 // sameTranslateConfig 报告两份设置对翻译而言是否等价（不看 CreatedAt）：
 // 只要接口、密钥、模型、目标语言有一项变了，旧译文就不再适用。
 func sameTranslateConfig(a, b store.Settings) bool {
-	return a.BaseURL == b.BaseURL && a.APIKey == b.APIKey && a.Model == b.Model && a.TargetLang == b.TargetLang
+	return a.EffectiveProvider() == b.EffectiveProvider() &&
+		a.BaseURL == b.BaseURL && a.APIKey == b.APIKey && a.Model == b.Model && a.TargetLang == b.TargetLang
 }
 
 // SaveSettingsAsync 保存设置：
@@ -177,6 +208,13 @@ func sameTranslateConfig(a, b store.Settings) bool {
 //
 // 注意写的是 <Home>/settings.json，与技能目录无关；翻译只读它。
 func (a *App) SaveSettingsAsync(s store.Settings) {
+	s.Provider = s.EffectiveProvider()
+	switch s.Provider {
+	case store.TranslationGoogle, store.TranslationMicrosoft, store.TranslationOpenAI:
+	default:
+		a.settingsUI.err = locales.UiSettingsUnknownProvider(s.Provider)
+		return
+	}
 	lang, err := store.NormalizeTargetLang(s.TargetLang)
 	if err != nil {
 		a.settingsUI.err = err.Error()
@@ -247,82 +285,102 @@ func (a *App) viewSettingsModal(c *myui.Context) {
 	s := &a.settingsUI
 	t := c.Theme()
 	ifaceLabel := locales.UiSettingsInterfaceLang()
+	_, height := c.Size()
 	myui.Modal(c, &s.open, func() {
-		myui.Column(c).Width(520).Gap(t.Space(3)).Children(func() {
+		myui.Column(c).Width(520).MaxHeight(max(120, height-80)).Gap(t.Space(3)).Children(func() {
 			myui.Column(c).Gap(t.Space(1)).Children(func() {
 				myui.Text(c, locales.UiSettingsTitle()).FontSize(t.FontSize + 3).Bold()
-				myui.Text(c, locales.UiSettingsTranslateHeading()).FontSize(t.FontSize - 1).TextColor(t.TextMuted)
+				myui.Text(c, locales.UiSettingsTranslation()).FontSize(t.FontSize - 1).TextColor(t.TextMuted)
 			})
-			// settings.json 读不出来（JSON 损坏）：说清楚，保存会覆盖它。
-			if a.settingsErr != "" {
-				myui.Box(c).FillWidth().Padding(t.Space(1.5), t.Space(3)).Radius(t.Radius).
-					Background(t.Warning.Alpha(0.10)).Border(1, t.Warning.Alpha(0.4)).Children(func() {
-					myui.Text(c, locales.UiSettingsLoadFailed(a.settingsErr)).MaxLines(4).TextColor(t.Warning)
-				})
-			}
-			myui.Form(c, func() {
-				myui.Field(c, locales.UiSettingsBaseURL(), func() {
-					myui.TextInput(c, &s.baseURL).Background(a.pal.canvas).FillWidth().
-						Placeholder("https://api.openai.com/v1").Label(locales.UiSettingsBaseURL())
-				})
-				myui.Field(c, locales.UiSettingsApiKey(), func() {
-					myui.TextInput(c, &s.apiKey).Background(a.pal.canvas).FillWidth().
-						Placeholder("sk-…").Label(locales.UiSettingsApiKey()).Password()
-				})
-				myui.Field(c, locales.UiSettingsModel(), func() {
-					myui.TextInput(c, &s.model).Background(a.pal.canvas).FillWidth().
-						Placeholder("gpt-4o-mini").Label(locales.UiSettingsModel())
-				})
-				myui.Field(c, locales.UiSettingsTargetLang(), func() {
-					myui.Select(c, &s.lang, langLabels()).Label(locales.UiSettingsTargetLang())
-				})
-				myui.Field(c, ifaceLabel, func() {
-					// 下拉绑的是「本帧的显示名」而不是持久字段：语言一切，选项名
-					// 就跟着变，把上一次语言的显示名留在状态里会显示成旧语言。
-					// Changed 返回 true 的那次构建里 sel 已是新选中的显示名（同
-					// viewThemeSwitch 的 Segmented），这才不会丢掉点击。
-					sel := ifaceLangLabel(a.langPref)
-					if myui.Select(c, &sel, ifaceLangLabels()).Label(ifaceLabel).Changed() {
-						a.SetLangAsync(ifaceLangPref(sel))
+			// 长表单滚动，标题与确认按钮固定；最小窗口里也能保存或取消。
+			smoothScroll(myui.Scroll(c.Key("settings-body"))).FillWidth().MinHeight(0).
+				MaxHeight(max(80, height-200)).Children(func() {
+				myui.Column(c).FillWidth().Gap(t.Space(3)).Padding(0, t.Space(1), 0, 0).Children(func() {
+					// settings.json 读不出来（JSON 损坏）：说清楚，保存会覆盖它。
+					if a.settingsErr != "" {
+						myui.Box(c).FillWidth().Padding(t.Space(1.5), t.Space(3)).Radius(t.Radius).
+							Background(t.Warning.Alpha(0.10)).Border(1, t.Warning.Alpha(0.4)).Children(func() {
+							myui.Text(c, locales.UiSettingsLoadFailed(a.settingsErr)).MaxLines(4).TextColor(t.Warning)
+						})
 					}
-				})
-			})
-			myui.Text(c, locales.UiSettingsSecretNote()).
-				FontSize(t.FontSize - 1).TextColor(t.TextMuted)
-			// 没填全不阻止保存（可能只想先选语言），只提醒翻译暂时用不了。
-			// 它与下面的 s.note / s.err 都是**翻译那一组**的消息，所以要排在
-			// 「更新」分隔线之前：落在分隔线之后就会读成在说自动检查更新。
-			draft := s.settingsDraft()
-			if !draft.Ready() {
-				myui.Text(c, locales.UiSettingsIncomplete()).
-					FontSize(t.FontSize - 1).TextColor(t.Warning)
-			}
-			if s.note != "" {
-				myui.Text(c, s.note).FontSize(t.FontSize - 1).TextColor(t.TextMuted)
-			}
-			if s.err != "" {
-				myui.Box(c).FillWidth().Padding(t.Space(1.5), t.Space(3)).Radius(t.Radius).
-					Background(t.Danger.Alpha(0.10)).Border(1, t.Danger.Alpha(0.4)).Children(func() {
-					myui.Text(c, s.err).TextColor(t.Danger)
-				})
-			}
-			// 「更新」是另一类偏好（应用自更新，不是翻译），用一条分隔线独立成组：
-			// 组内只有一项——「自动检查更新」。
-			myui.Divider(c).Margin(t.Space(1), 0)
-			myui.Column(c).Gap(t.Space(1.5)).Children(func() {
-				myui.Text(c, locales.UiSettingsUpdateHeading()).FontSize(t.FontSize - 1).TextColor(t.TextMuted)
-				myui.Row(c).FillWidth().AlignItems(myui.Center).Children(func() {
-					myui.Text(c, locales.UiSettingsAutoCheckUpdate()).Grow(1).MinWidth(0)
-					// 「自动检查更新」是即时生效的偏好（同界面语言）：切了就静默写盘，
-					// 不经过「保存」，值存在 config.json 的 autoCheckUpdates（默认开）。
-					// Changed 返回 true 的那次构建里 on 已是新值（同 viewCard 的
-					// 开关），不要写成构建中途直接比较局部变量。
-					on := a.autoCheck
-					if kuraSwitch(c, &on, a.pal.toggle).Label(locales.UiSettingsAutoCheckA11y()).Changed() {
-						a.SetAutoCheckAsync(on)
+					myui.Form(c, func() {
+						myui.Field(c, locales.UiSettingsProvider(), func() {
+							label := providerLabel(s.provider)
+							if myui.Select(c, &label, providerOptions()).Label(locales.UiSettingsProvider()).Changed() {
+								s.provider = providerValue(label)
+							}
+						})
+						if s.provider == store.TranslationOpenAI {
+							myui.Field(c, locales.UiSettingsBaseURL(), func() {
+								myui.TextInput(c, &s.baseURL).Background(a.pal.canvas).FillWidth().
+									Placeholder("https://api.openai.com/v1").Label(locales.UiSettingsBaseURL())
+							})
+							myui.Field(c, locales.UiSettingsApiKey(), func() {
+								myui.TextInput(c, &s.apiKey).Background(a.pal.canvas).FillWidth().
+									Placeholder("sk-…").Label(locales.UiSettingsApiKey()).Password()
+							})
+							myui.Field(c, locales.UiSettingsModel(), func() {
+								myui.TextInput(c, &s.model).Background(a.pal.canvas).FillWidth().
+									Placeholder("gpt-4o-mini").Label(locales.UiSettingsModel())
+							})
+						}
+						myui.Field(c, locales.UiSettingsTargetLang(), func() {
+							myui.Select(c, &s.lang, langLabels()).Label(locales.UiSettingsTargetLang())
+						})
+						myui.Field(c, ifaceLabel, func() {
+							// 下拉绑的是「本帧的显示名」而不是持久字段：语言一切，选项名
+							// 就跟着变，把上一次语言的显示名留在状态里会显示成旧语言。
+							// Changed 返回 true 的那次构建里 sel 已是新选中的显示名（同
+							// viewThemeSwitch 的 Segmented），这才不会丢掉点击。
+							sel := ifaceLangLabel(a.langPref)
+							if myui.Select(c, &sel, ifaceLangLabels()).Label(ifaceLabel).Changed() {
+								a.SetLangAsync(ifaceLangPref(sel))
+							}
+						})
+					})
+					note := locales.UiSettingsFreeTranslationNote()
+					if s.provider == store.TranslationOpenAI {
+						note = locales.UiSettingsSecretNote()
 					}
+					myui.Text(c, note).
+						FontSize(t.FontSize - 1).TextColor(t.TextMuted)
+					// 没填全不阻止保存（可能只想先选语言），只提醒翻译暂时用不了。
+					// 它与下面的 s.note / s.err 都是**翻译那一组**的消息，所以要排在
+					// 「更新」分隔线之前：落在分隔线之后就会读成在说自动检查更新。
+					draft := s.settingsDraft()
+					if !draft.Ready() {
+						myui.Text(c, locales.UiSettingsIncomplete()).
+							FontSize(t.FontSize - 1).TextColor(t.Warning)
+					}
+					if s.note != "" {
+						myui.Text(c, s.note).FontSize(t.FontSize - 1).TextColor(t.TextMuted)
+					}
+					if s.err != "" {
+						myui.Box(c).FillWidth().Padding(t.Space(1.5), t.Space(3)).Radius(t.Radius).
+							Background(t.Danger.Alpha(0.10)).Border(1, t.Danger.Alpha(0.4)).Children(func() {
+							myui.Text(c, s.err).TextColor(t.Danger)
+						})
+					}
+					// 「更新」是另一类偏好（应用自更新，不是翻译），用一条分隔线独立成组：
+					// 组内只有一项——「自动检查更新」。
+					myui.Divider(c).Margin(t.Space(1), 0)
+					myui.Column(c).Gap(t.Space(1.5)).Children(func() {
+						myui.Text(c, locales.UiSettingsUpdateHeading()).FontSize(t.FontSize - 1).TextColor(t.TextMuted)
+						myui.Row(c).FillWidth().AlignItems(myui.Center).Children(func() {
+							myui.Text(c, locales.UiSettingsAutoCheckUpdate()).Grow(1).MinWidth(0)
+							// 「自动检查更新」是即时生效的偏好（同界面语言）：切了就静默写盘，
+							// 不经过「保存」，值存在 config.json 的 autoCheckUpdates（默认开）。
+							// Changed 返回 true 的那次构建里 on 已是新值（同 viewCard 的
+							// 开关），不要写成构建中途直接比较局部变量。
+							on := a.autoCheck
+							if kuraSwitch(c, &on, a.pal.toggle).Label(locales.UiSettingsAutoCheckA11y()).Changed() {
+								a.SetAutoCheckAsync(on)
+							}
+						})
+					})
 				})
 			})
+
 			myui.Row(c).FillWidth().Gap(t.Space(2)).AlignItems(myui.Center).Children(func() {
 				myui.Spacer(c)
 				if myui.Button(c, locales.UiCommonCancel()).Disabled(s.busy).Clicked() {

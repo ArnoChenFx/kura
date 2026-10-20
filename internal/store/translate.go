@@ -1,8 +1,8 @@
 package store
 
-// translate.go — OpenAI 兼容的翻译客户端（需求第 6 条的后端部分）。
+// translate.go — 翻译服务派发与 OpenAI 兼容客户端。
 //
-// 职责边界：把文本发给 OpenAI 兼容的 /chat/completions，返回译文。
+// 职责边界：仅把文本发给用户选择的翻译服务，返回译文。
 // 翻译结果**只返回给调用方（UI）显示**，本文件绝不写技能目录、绝不改
 // SKILL.md、绝不碰 .kura-meta.json——「翻译不落盘」是用户拍板的硬规则。
 //
@@ -74,8 +74,8 @@ const systemPrompt = "你是一名技术文档翻译引擎。把用户发来的�
 	"4. front matter（--- 包围的部分）保持原样，不要翻译。\n" +
 	"5. 术语要自然、符合目标语言的技术写作习惯。"
 
-// Translate 用 OpenAI 兼容的 /chat/completions 接口把 text 翻译成
-// s.TargetLang（空串按 DefaultTargetLang）。
+// Translate 按所选服务把 text 翻译成 s.TargetLang（空串按 DefaultTargetLang）。
+// 免费服务先保护 Markdown 与代码；已有自定义接口仍保留原来的模型请求。
 //
 //   - ctx 用来取消与超时，调用方负责挂超时；本实现不额外设 Client.Timeout。
 //   - s.Ready() 为假时**不发请求**，返回 ErrNotConfigured（errors.Is 可判断）。
@@ -86,15 +86,30 @@ func (s *Settings) Translate(ctx context.Context, text string) (string, error) {
 	if !s.Ready() {
 		return "", ErrNotConfigured
 	}
-	if text == "" {
+	if strings.TrimSpace(text) == "" {
 		return "", nil
 	}
-
-	lang := strings.TrimSpace(s.TargetLang)
-	if lang == "" {
-		lang = DefaultTargetLang
+	lang, err := NormalizeTargetLang(s.TargetLang)
+	if err != nil {
+		return "", err
 	}
+	switch s.EffectiveProvider() {
+	case TranslationGoogle:
+		return translateGoogleMarkdown(ctx, text, func(ctx context.Context, text string) (string, error) {
+			return googleTranslatePlain(ctx, lang, text)
+		})
+	case TranslationMicrosoft:
+		return translateGoogleMarkdown(ctx, text, func(ctx context.Context, text string) (string, error) {
+			return microsoftTranslatePlain(ctx, lang, text)
+		})
+	default:
+		return s.translateOpenAI(ctx, lang, text)
+	}
+}
 
+// translateOpenAI 保留已有 /chat/completions 行为，免费服务不会走这里，
+// 所以保存过的自定义 API 密钥不会被带到 Google 或微软。
+func (s *Settings) translateOpenAI(ctx context.Context, lang, text string) (string, error) {
 	// 端点：BaseURL 去掉尾部斜杠后拼 /chat/completions。
 	endpoint := strings.TrimRight(s.BaseURL, "/") + "/chat/completions"
 

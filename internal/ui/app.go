@@ -44,8 +44,8 @@ type skillSelection struct {
 
 // visibleSkill 保存扫描快照的搜索键；输入变化时只过滤，排序和大小写转换只做一次。
 type visibleSkill struct {
-	skill                      *store.Skill
-	name, description, display string
+	skill                              *store.Skill
+	name, description, display, source string
 }
 
 type visibleCache struct {
@@ -60,13 +60,15 @@ type visibleCache struct {
 // App 是 kura 主窗口的状态。View 由 MyGo 在主线程反复调用，
 // 从这些字段构建每一帧。
 type App struct {
-	lib        *store.Library // 全部技能目录
-	libErr     string         // 读取/保存目录列表的错误（config.json 损坏等）
-	cfg        *store.Config  // 当前选中目录的配置
-	rootSel    string         // 左栏选中的目录，与 cfg.Root 不同时切换
-	gen        int            // 目录切换代数：切换后丢弃旧目录的后台结果
-	rootCounts map[string]int // 每个目录根下在用技能数（左栏徽标）
-	adding     bool           // 正在选择/添加文件夹
+	lib                    *store.Library               // 全部技能目录
+	libErr                 string                       // 读取/保存目录列表的错误（config.json 损坏等）
+	cfg                    *store.Config                // 当前选中目录的配置
+	rootSel                string                       // 左栏选中的目录，与 cfg.Root 不同时切换
+	gen                    int                          // 目录切换代数：切换后丢弃旧目录的后台结果
+	rootCounts             map[string]int               // 每个目录根下在用技能数（左栏徽标）
+	rootBrowsers           map[string]*rootBrowserState // 每个目录本次会话中的浏览位置，不写入配置
+	restoringRootSelection bool                         // 等待扫描验证恢复的精确副本，不能误选同名另一状态
+	adding                 bool                         // 正在选择/添加文件夹
 	// rootsW 与 detailW 是用户拖出来的左栏与详情栏宽度偏好（DIP），由两侧的
 	// 分割线拖动改变；窗口放不下时并不改它们，而是每帧按可用宽度夹紧出实际
 	// 宽度 rootsEff / detailEff（见 fitWidths），窗口再变宽时偏好自然恢复。
@@ -116,8 +118,8 @@ type App struct {
 	selIdx   int              // 网格的选中下标（绑定 GridState.Selected），由 selName 推出
 	syncIdx  int              // 上一次 syncSelection 写入 selIdx 的值：不同即网格里点了别的卡片
 	shown    []skillSelection // 上一次构建网格时各卡片的身份，用来还原点击
-	grid     myui.GridState   // 卡片网格的滚动与选择状态
-	list     myui.ListState   // 列表的滚动与选择状态
+	grid     *myui.GridState  // 当前目录独立持有的卡片网格状态
+	list     *myui.ListState  // 当前目录独立持有的列表状态
 	updates  map[string]bool  // 最近一次检查发现有更新的技能（当前目录）
 	// 扫描产生的 Skill 是只读快照；指针序列副本也能识别测试直接替换 skills。
 	visibleRows visibleCache
@@ -168,8 +170,10 @@ type App struct {
 	// setLocale 把语言偏好应用到「应用显示的语言」。生产环境交给 mygo.App
 	// （它同时重绘窗口、更新菜单、通知窗口与页面）；测试里 mygo 的事件循环
 	// 没跑，换成 internal/i18n 的进程级覆盖（见 app_test.go 的 newAppFor）。
-	setLocale func(pref string)
-	review    reviewState // 更新评审面板（Modal）
+	setLocale   func(pref string)
+	review      reviewState // 更新评审面板（Modal）
+	history     *snapshotHistoryState
+	snapshotSeq uint64
 
 	// 技能市场（skills.sh 的榜单，见 market.go）：页面状态，以及读取榜单与快照的函数。
 	// marketFetch 生产环境是 market.Client.List；测试注入假实现，绝不联网。
@@ -240,6 +244,8 @@ func NewApp(cfg *store.Config) *App {
 	// 翻译设置：读取失败不致命（只报告），界面照常可用。
 	if st, _, err := store.LoadSettings(cfg); err != nil {
 		a.settingsErr = err.Error()
+		// 旧配置损坏时保持未配置状态，不能静默把原先的自定义服务切到外部免费服务。
+		a.settings.Provider = store.TranslationOpenAI
 	} else {
 		a.settings, a.settingsLoaded = *st, true
 	}
@@ -251,13 +257,7 @@ func NewApp(cfg *store.Config) *App {
 	a.marketFetch = marketClient.List
 	a.marketDocFetch = marketClient.Document
 	a.openURL = mygo.Shell.OpenExternal
-	a.grid.Selected = &a.selIdx
-	a.grid.Key = func(i int) any {
-		if i < len(a.shown) {
-			return a.shown[i]
-		}
-		return i
-	}
+	a.restoreRootBrowser()
 	a.pickFolder = func() (string, error) {
 		a.mu.Lock()
 		win := a.win
@@ -386,6 +386,11 @@ func (a *App) visible() []*store.Skill {
 			}
 			if s.Meta != nil {
 				entry.display = strings.ToLower(s.Meta.DisplayName)
+				src := s.Meta.Source
+				entry.source = strings.ToLower(strings.TrimSpace(src.URL) + "\x00" + strings.TrimSpace(src.Path))
+				if src.Type == store.SourceGitHub {
+					entry.source += "\x00" + sourceSearchQuery(src.URL)
+				}
 			}
 			cache.sorted[i] = entry
 		}
@@ -394,6 +399,7 @@ func (a *App) visible() []*store.Skill {
 		})
 	}
 	q := strings.ToLower(strings.TrimSpace(a.query))
+	sourceQ := sourceSearchQuery(q)
 	want := filterState(a.filter)
 	var rows []*store.Skill
 	for _, entry := range cache.sorted {
@@ -402,12 +408,35 @@ func (a *App) visible() []*store.Skill {
 			continue
 		}
 		if q == "" || strings.Contains(entry.name, q) ||
-			strings.Contains(entry.description, q) || strings.Contains(entry.display, q) {
+			strings.Contains(entry.description, q) || strings.Contains(entry.display, q) ||
+			strings.Contains(entry.source, sourceQ) {
 			rows = append(rows, s)
 		}
 	}
 	cache.rows, cache.query, cache.filter, cache.valid = rows, a.query, a.filter, true
 	return rows
+}
+
+// sourceSearchQuery 让 GitHub 仓库链接与 owner/repo 使用同一个搜索词；
+// 名称、描述仍按原始查询匹配，不会因去掉链接外壳而扩大它们的匹配范围。
+func sourceSearchQuery(query string) string {
+	q := strings.ToLower(strings.TrimSpace(query))
+	github := false
+	for _, prefix := range []string{"ssh://git@github.com/", "git@github.com:", "https://github.com/", "http://github.com/", "www.github.com/", "github.com/"} {
+		if strings.HasPrefix(q, prefix) {
+			q, github = strings.TrimPrefix(q, prefix), true
+			break
+		}
+	}
+	bareRepo := strings.Count(strings.TrimRight(q, "/"), "/") == 1 && !strings.HasPrefix(q, "/") && !strings.Contains(q, "://")
+	if github || bareRepo {
+		repo, _, _ := parseRepo(q)
+		q = repo
+	}
+	if q == "" {
+		return strings.ToLower(strings.TrimSpace(query))
+	}
+	return q
 }
 
 // syncSelection 在构建网格前对齐选择：网格以下标表达选择，App 以名字为准。
@@ -451,6 +480,7 @@ func (a *App) clearSelection() { a.setSelection("", "") }
 
 // setSelection 记录明确的选择变化，包括先离开再选回同一副本的情形。
 func (a *App) setSelection(name string, state store.State) {
+	a.restoringRootSelection = false
 	if a.selName != name || a.selState != state {
 		a.selSeq++
 		a.selName, a.selState = name, state
@@ -514,6 +544,7 @@ func (a *App) applyScan(skills []*store.Skill, err error) {
 		a.loadErr = locales.UiStatusRootMissing(a.cfg.Root)
 	}
 	a.skills = skills
+	a.validateRootBrowserSelection()
 	a.visibleRows = visibleCache{}
 	n := 0
 	for _, s := range skills {
@@ -582,7 +613,7 @@ func (a *App) reload(announce bool) {
 				return
 			}
 			a.applyScan(skills, err)
-			if a.selected() == nil {
+			if err == nil && a.selected() == nil {
 				a.clearSelection()
 			}
 			switch {
@@ -728,17 +759,19 @@ func (a *App) ImportAsync() {
 	})
 }
 
-// SelectRoot 切换到目录 root：清空列表与选择，关闭评审面板，重新扫描。
+// SelectRoot 切换到目录 root：保存旧目录的浏览状态，恢复目标目录后重新扫描。
 func (a *App) SelectRoot(root string) {
 	a.rootSel = root
 	if root == a.cfg.Root {
 		return
 	}
 	a.cancelCheck()
+	a.saveRootBrowser()
 	a.cfg = a.lib.Config(root)
+	a.rootSel = a.cfg.Root
 	a.gen++
-	a.clearSelection()
-	a.skills, a.selIdx, a.loadErr = nil, -1, ""
+	a.skills, a.loadErr = nil, ""
+	a.restoreRootBrowser()
 	a.visibleRows = visibleCache{}
 	a.updates = map[string]bool{}
 	a.review = reviewState{}
@@ -796,6 +829,7 @@ func (a *App) RemoveRootAsync(root string) {
 			if root == a.cfg.Root {
 				a.SelectRoot(lib.Default())
 			}
+			delete(a.rootBrowsers, root)
 			a.status, a.statusErr = locales.UiStatusRootRemoved(root), false
 		})
 	})

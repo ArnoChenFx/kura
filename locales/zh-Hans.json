@@ -628,5 +628,107 @@
       }
     }
   },
-  "uiMarketSearchEmpty": "已加载的技能中没有匹配项"
+  "uiMarketSearchEmpty": "已加载的技能中没有匹配项",
+  "uiSettingsTranslation": "翻译",
+  "uiSettingsProvider": "翻译服务",
+  "uiSettingsProviderGoogle": "Google 翻译（免费）",
+  "uiSettingsProviderMicrosoft": "微软翻译（免费）",
+  "uiSettingsProviderOpenAI": "自定义 API（OpenAI 兼容）",
+  "uiSettingsFreeTranslationNote": "无需密钥。开启译文后，待译内容会发送给所选服务；连接失败时可切换服务或使用自定义 API。",
+  "uiSettingsUnknownProvider": "不支持的翻译服务：{provider}",
+  "@uiSettingsUnknownProvider": {
+    "placeholders": {
+      "provider": {
+        "type": "String"
+      }
+    }
+  },
+  "storeErrTranslateMarkup": "store: 翻译服务改变了受保护的格式，已保留原文",
+  "storeErrTranslateMicrosoftSession": "store: 微软翻译暂不可用，请稍后重试或切换翻译服务",
+  "uiTranslateDocProgress": "已翻译 {done, number, ::group-off}/{total, number, ::group-off} 段",
+  "@uiTranslateDocProgress": {
+    "placeholders": {
+      "done": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "uiTranslateStop": "停止翻译",
+  "uiTranslateResume": "继续翻译",
+  "uiTranslateStopped": "翻译已停止，已完成的段落会保留",
+  "uiTranslateRetry": "重试翻译",
+  "storeErrSnapshotInvalid": "store: 快照不完整或不安全：{path}",
+  "@storeErrSnapshotInvalid": {
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "storeErrSnapshotChanged": "store: 内容已在预览后改变，请重新查看快照",
+  "storeErrSnapshotState": "store: 只能为已启用或已停用的技能恢复快照",
+  "storeErrSnapshotReplace": "store: 替换失败，当前内容已保留在 {path}",
+  "@storeErrSnapshotReplace": {
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "uiSnapshotHistory": "历史快照",
+  "uiSnapshotTitle": "{name} 的历史快照",
+  "@uiSnapshotTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "uiSnapshotEmpty": "尚无历史快照",
+  "uiSnapshotLoading": "正在读取快照…",
+  "uiSnapshotChoose": "选择一份快照查看差异",
+  "uiSnapshotRestore": "恢复此快照",
+  "uiSnapshotConfirmTitle": "恢复历史快照",
+  "uiSnapshotConfirm": "用此快照替换 {name} 的当前内容？恢复前会保存当前版本。",
+  "@uiSnapshotConfirm": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "uiSnapshotRestoring": "正在恢复快照…",
+  "uiSnapshotRestored": "已恢复 {name} 的历史快照",
+  "@uiSnapshotRestored": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "uiSnapshotNoChanges": "内容与此快照一致",
+  "uiSnapshotMetadataChanged": "元数据也将恢复为快照中的版本",
+  "uiReviewApplySelected": "应用选中项（{count, number, ::group-off}）",
+  "@uiReviewApplySelected": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "uiReviewRetryFailed": "重试失败项",
+  "uiReviewUpdated": "更新成功",
+  "uiReviewSelectSkill": "选择更新 {name}",
+  "@uiReviewSelectSkill": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "uiSnapshotDiffTruncated": "预览已截断；恢复仍使用完整快照",
+  "uiSnapshotBinary": "二进制文件，无法显示文本差异"
 }

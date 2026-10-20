@@ -220,6 +220,7 @@ func TestAutoCheckSaveFailureIsReported(t *testing.T) {
 // 判据是两者的纵向顺序：翻译组的所有消息都应在「更新」标题之上。
 func TestSettingsModalGroupsUpdateBelowTranslation(t *testing.T) {
 	a, _ := newTestApp(t)
+	a.settings.Provider = store.TranslationOpenAI
 	tt := showApp(a, 1280, 800)
 	click(t, a, tt, locales.UiSettingsTitle())
 

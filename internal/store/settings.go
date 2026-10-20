@@ -43,13 +43,24 @@ var (
 	ErrNoSettings = i18n.NewError("storeErrNoSettings", func() string { return locales.StoreErrNoSettings() })
 )
 
-// DefaultTargetLang 是 TargetLang 为空串时的默认值（简体中文）。
-const DefaultTargetLang = "zh-CN"
+const (
+	// DefaultTargetLang 是 TargetLang 为空串时的默认值（简体中文）。
+	DefaultTargetLang = "zh-CN"
+	// TranslationGoogle 是免密钥的 Google 网页翻译。
+	TranslationGoogle = "google"
+	// TranslationMicrosoft 是免密钥的微软网页翻译。
+	TranslationMicrosoft = "microsoft"
+	// TranslationOpenAI 是用户自行配置的 OpenAI 兼容接口。
+	TranslationOpenAI = "openai"
+)
 
-// Settings 是 ~/.kura/settings.json 的内容：OpenAI 兼容翻译 API 的接入信息
-// 与全局翻译目标语言。JSON 字段用小写驼峰、缩进两格，便于手工编辑，
+// Settings 是 ~/.kura/settings.json 的内容：翻译服务、自定义 API 接入信息
+// 与全局目标语言。JSON 字段用小写驼峰、缩进两格，便于手工编辑，
 // 风格照 config.go 的 HomeConfig。
 type Settings struct {
+	// Provider 决定文本发送到哪个翻译服务。空值按旧配置兼容规则解析，
+	// 不改写已有地址、密钥和模型，切回自定义服务时仍可继续使用。
+	Provider string `json:"provider,omitempty"`
 	// BaseURL 是 OpenAI 兼容 API 的根地址（如 https://api.openai.com/v1）。
 	// 允许指向任何兼容 /chat/completions 的服务（如本地推理网关）。
 	BaseURL string `json:"baseUrl"`
@@ -180,16 +191,38 @@ func NormalizeTargetLang(lang string) (string, error) {
 	return "", fmt.Errorf("%w: %q", ErrUnknownLang, lang)
 }
 
-// Ready 报告翻译所需的三项配置（BaseURL、APIKey、Model）是否都已填好。
-// 判断标准是「去掉首尾空白后非空」：用户只打了几个空格不算配置完成。
-// UI 用它决定「翻译」按钮是否可用；Translate 也用它拦截未配置的调用。
+// EffectiveProvider 保留旧配置的服务选择：只要曾填过任一自定义字段，就继续
+// 使用 OpenAI 接口（即使配置尚未完整）；新用户默认 Google。未知的显式值原样
+// 返回，调用方应报告未配置，绝不悄悄把文本发送到另一个服务。
+func (s *Settings) EffectiveProvider() string {
+	if s == nil {
+		return ""
+	}
+	if provider := strings.TrimSpace(s.Provider); provider != "" {
+		return provider
+	}
+	if strings.TrimSpace(s.BaseURL) != "" || strings.TrimSpace(s.APIKey) != "" || strings.TrimSpace(s.Model) != "" {
+		return TranslationOpenAI
+	}
+	return TranslationGoogle
+}
+
+// Ready 报告所选服务是否具备必要配置。免费服务无需密钥；自定义服务仍要求
+// 地址、密钥与模型齐全。未知服务拒绝请求，不自动回退到免费服务。
 func (s *Settings) Ready() bool {
 	if s == nil {
 		return false
 	}
-	return strings.TrimSpace(s.BaseURL) != "" &&
-		strings.TrimSpace(s.APIKey) != "" &&
-		strings.TrimSpace(s.Model) != ""
+	switch s.EffectiveProvider() {
+	case TranslationGoogle, TranslationMicrosoft:
+		return true
+	case TranslationOpenAI:
+		return strings.TrimSpace(s.BaseURL) != "" &&
+			strings.TrimSpace(s.APIKey) != "" &&
+			strings.TrimSpace(s.Model) != ""
+	default:
+		return false
+	}
 }
 
 // LangLabel 返回目标语言的可读名字（如 zh-CN → 简体中文），给界面显示用。

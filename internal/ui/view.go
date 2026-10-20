@@ -2,7 +2,6 @@ package ui
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -140,6 +139,7 @@ func (a *App) View(c *myui.Context) {
 
 	// 更新评审面板（检查更新/全部检查的结果 + 应用/取消）。
 	a.viewReviewModal(c)
+	a.viewSnapshotsModal(c)
 
 	// 安装技能弹窗。
 	a.viewInstallModal(c)
@@ -672,14 +672,14 @@ func (a *App) viewList(c *myui.Context, rows []*store.Skill) {
 		return
 	}
 	t := c.Theme()
-	smoothScroll(myui.List(c.Key("local-skills"), &a.list, len(rows)).
+	smoothScroll(myui.List(c.Key("local-skills:"+a.cfg.Root), a.list, len(rows)).
 		Grow(1).FillWidth().MinHeight(0).Gap(t.Space(1.5)).
 		Padding(0, t.Space(5), t.Space(3), t.Space(5)).
 		ItemKey(func(i int) any { return skillKey(rows[i]) }).
 		Rows(func(row myui.ListRow) {
 			s := rows[row.Index]
 			a.viewRow(row.Context, s, a.isSelected(s))
-		}))
+		}), uint64(a.gen))
 }
 
 // viewRow 是列表里的一个技能：头像、名称与描述占主区，右侧操作固定宽度；
@@ -778,11 +778,11 @@ func (a *App) viewGrid(c *myui.Context, rows []*store.Skill) {
 	// 主题，建完再切回 cell 主题：下一个单元格在这之后构建，读的是 c 此刻的
 	// 主题。
 	c.SetTheme(a.skin.cell)
-	smoothScroll(myui.GridView(c, &a.grid, len(rows), cardMinWidth, cardHeight, func(i int) {
+	smoothScroll(myui.GridView(c.Key("local-grid:"+a.cfg.Root), a.grid, len(rows), cardMinWidth, cardHeight, func(i int) {
 		c.SetTheme(t)
 		a.viewCard(c, rows[i], i == a.selIdx)
 		c.SetTheme(a.skin.cell)
-	})).Grow(1).FillWidth().Padding(0, t.Space(4), t.Space(2), t.Space(4))
+	}), uint64(a.gen)).Grow(1).FillWidth().Padding(0, t.Space(4), t.Space(2), t.Space(4))
 	c.SetTheme(t)
 }
 
@@ -1095,6 +1095,11 @@ func (a *App) viewTranslateNote(c *myui.Context, s *store.Skill) {
 	case e.err != "":
 		myui.Text(c, locales.UiTranslateFailed(e.err)).MaxLines(4).
 			FontSize(t.FontSize - 1).TextColor(t.Danger)
+		if myui.Button(c, locales.UiTranslateRetry()).Clicked() {
+			delete(a.trans.items, detailDescKey(s.Name))
+			delete(a.trans.items, cardDescKey(s.Name))
+			a.ensureTranslations(s)
+		}
 	default:
 		myui.Text(c, locales.UiTranslateNote(a.settings.LangLabel())).
 			FontSize(t.FontSize - 2).TextColor(t.TextMuted)
@@ -1123,6 +1128,9 @@ func (a *App) viewDetailFullText(c *myui.Context, s *store.Skill) {
 		myui.Text(c, doc.err.Error()).TextColor(c.Theme().Danger)
 	default:
 		// 渲染进外层已有的 Scroll，宽度铺满（官方视图自己处理块内布局）。
+		if doc.truncated {
+			myui.Text(c, locales.UiMarkdownTruncated()).TextColor(c.Theme().TextMuted)
+		}
 		a.viewFullTextBody(c, s, doc.src)
 	}
 }
@@ -1132,29 +1140,7 @@ func (a *App) viewDetailFullText(c *myui.Context, s *store.Skill) {
 // 仍显示原文。翻译只读缓存，发起请求只经 ensureDocTranslation（受缓存占位保护，
 // 同一原文只发一次）。翻译 API 未配好时不发请求，显示原文（引导在开关条里）。
 func (a *App) viewFullTextBody(c *myui.Context, s *store.Skill, src string) {
-	t := c.Theme()
-	if !a.trans.on || !a.settings.Ready() || strings.TrimSpace(src) == "" {
-		a.viewMarkdown(c, src)
-		return
-	}
-	a.ensureDocTranslation(s.Name, src)
-	e, ok := a.trans.get(docTransKey(s.Name), src)
-	switch {
-	case !ok || e.pending:
-		myui.Row(c).Gap(t.Space(1.5)).AlignItems(myui.Center).Children(func() {
-			myui.Spinner(c)
-			myui.Text(c, locales.UiTranslateFullInProgress()).FontSize(t.FontSize - 1).TextColor(t.TextMuted)
-		})
-		a.viewMarkdown(c, src)
-	case e.err != "":
-		myui.Text(c, locales.UiTranslateFullFailed(e.err)).MaxLines(4).
-			FontSize(t.FontSize - 1).TextColor(t.Danger)
-		a.viewMarkdown(c, src)
-	default:
-		myui.Text(c, locales.UiTranslateNote(a.settings.LangLabel())).
-			FontSize(t.FontSize - 2).TextColor(t.TextMuted)
-		a.viewMarkdown(c, e.dst)
-	}
+	a.viewDocTranslation(c, docTransKey(s.Dir), src)
 }
 
 // fullTextDoc 是一个技能的 SKILL.md 读盘结果，三种状态互斥：
@@ -1162,10 +1148,11 @@ func (a *App) viewFullTextBody(c *myui.Context, s *store.Skill, src string) {
 // err 非空是读盘失败。后三项存的是语言无关的状态而不是文案：后台任务跑完时
 // 语言可能已经变了，文案（含错误里的原因）在 viewDetailFullText 里现取。
 type fullTextDoc struct {
-	src     string
-	loading bool
-	noMD    bool
-	err     error
+	src       string
+	truncated bool
+	loading   bool
+	noMD      bool
+	err       error
 }
 
 // startFullTextLoad 确保技能的 SKILL.md 有一份缓存：没有就去后台读
@@ -1186,13 +1173,13 @@ func (a *App) startFullTextLoad(s *store.Skill) {
 	a.spawn(func() {
 		doc := fullTextDoc{noMD: true}
 		if hasMD {
-			data, err := os.ReadFile(filepath.Join(dir, "SKILL.md"))
+			data, truncated, err := store.ReadSkillDocument(dir, fullTextMaxSource)
 			if err != nil {
 				// 错误文字随语言变（i18n.Errorf 到显示时才取文案），
 				// 所以这里存错误本身，不存字符串。
 				doc = fullTextDoc{err: i18n.NewError("uiDetailReadFailed", func() string { return locales.UiDetailReadFailed(err.Error()) })}
 			} else {
-				doc = fullTextDoc{src: string(data)}
+				doc = fullTextDoc{src: data, truncated: truncated}
 			}
 		}
 		a.publish(func() {
@@ -1282,6 +1269,13 @@ func (a *App) viewDetailActions(c *myui.Context, s *store.Skill, busy bool) {
 			myui.Text(c, locales.UiDetailBusy(s.Name)).SingleLine().TextColor(t.TextMuted)
 		})
 		return
+	}
+	if s.State == store.StateEnabled || s.State == store.StateDisabled {
+		myui.Row(c).FillWidth().Children(func() {
+			if myui.Button(c, locales.UiSnapshotHistory()).Clicked() {
+				a.OpenSnapshots(s)
+			}
+		})
 	}
 	// trashButton 是「移入回收站」：Label 保持「详情:移入回收站」供测试与无障碍。
 	trashButton := func() {
@@ -1398,8 +1392,8 @@ func (a *App) viewReviewModal(c *myui.Context) {
 				}
 				smoothScroll(myui.Scroll(c)).Grow(1).Height(340).Children(func() {
 					myui.Column(c).FillWidth().Gap(10).Children(func() {
-						for _, e := range r.entries {
-							a.viewReviewEntry(c, e)
+						for i := range r.entries {
+							a.viewReviewEntry(c.Key(r.entries[i].skill), &r.entries[i])
 						}
 					})
 				})
@@ -1407,11 +1401,16 @@ func (a *App) viewReviewModal(c *myui.Context) {
 					if myui.Button(c, locales.UiCommonClose()).Clicked() {
 						a.CloseReview()
 					}
-					label := locales.UiReviewApplyAll()
+					if r.failedUpdateCount() > 0 {
+						if myui.Button(c, locales.UiReviewRetryFailed()).Disabled(r.applyBusy).Clicked() {
+							a.RetryFailedUpdates()
+						}
+					}
+					label := locales.UiReviewApplySelected(r.selectedUpdateCount())
 					if r.applyBusy {
 						label = locales.UiReviewApplying()
 					}
-					if myui.PrimaryButton(c, label).Disabled(r.applyBusy || !reviewHasChanges(r.entries)).Clicked() {
+					if myui.PrimaryButton(c, label).Disabled(r.applyBusy || r.selectedUpdateCount() == 0).Clicked() {
 						a.ApplyAsync()
 					}
 				})
@@ -1465,12 +1464,17 @@ func (a *App) viewReviewModal(c *myui.Context) {
 }
 
 // viewReviewEntry 渲染全部检查汇总里的一个技能小节。
-func (a *App) viewReviewEntry(c *myui.Context, e skillReviewEntry) {
+func (a *App) viewReviewEntry(c *myui.Context, e *skillReviewEntry) {
 	t := c.Theme()
 	myui.Column(c).FillWidth().Gap(4).Children(func() {
 		myui.Row(c).FillWidth().Gap(8).AlignItems(myui.Center).Children(func() {
+			if e.canApply() {
+				myui.Checkbox(c, &e.selected, "").Label(locales.UiReviewSelectSkill(e.skill)).Disabled(a.review.applyBusy)
+			}
 			myui.Text(c, e.skill).Bold()
 			switch {
+			case e.applied:
+				myui.Text(c, locales.UiReviewUpdated()).TextColor(t.Success)
 			case e.err != "":
 				myui.Text(c, locales.UiReviewCheckFailed()).SingleLine().TextColor(t.Danger)
 			case !e.preview.HasChanges():
@@ -1488,6 +1492,12 @@ func (a *App) viewReviewEntry(c *myui.Context, e skillReviewEntry) {
 		if e.err != "" {
 			myui.Text(c, e.err).TextColor(t.Danger)
 			return
+		}
+		if e.applyErr != "" {
+			myui.Text(c, e.applyErr).TextColor(t.Danger)
+		}
+		if !e.applied && e.preview.LocalModified && e.preview.HasChanges() {
+			myui.Text(c, locales.UiReviewLocalModifiedWithChanges()).TextColor(t.Warning)
 		}
 		for _, f := range e.preview.Files {
 			a.viewDiffRow(c, f)

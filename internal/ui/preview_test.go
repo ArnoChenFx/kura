@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/ArnoChenFx/kura/internal/store"
+	"github.com/ArnoChenFx/kura/locales"
 )
 
 // seedWithLocalSource 建一个已安装技能（github 元数据仅用于展示字段）+
@@ -266,14 +267,18 @@ func TestCheckAllToolbarAction(t *testing.T) {
 		t.Errorf("汇总应列出变更文件，文本 %v", tt.Texts())
 	}
 
-	// 应用全部更新：fresh 更新，失败的不阻塞。
-	if err := tt.Click("应用全部更新"); err != nil {
+	// 夹具的占位哈希被识别为本地修改，需要显式勾选后才更新。
+	if err := tt.Click(locales.UiReviewSelectSkill("fresh")); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if err := tt.Click(locales.UiReviewApplySelected(1)); err != nil {
 		t.Fatal(err)
 	}
 	a.waitBusy()
 	tt.Frame()
-	if a.review.open {
-		t.Error("应用后汇总面板应关闭")
+	if !a.review.open {
+		t.Error("应用后汇总面板应保留逐项结果")
 	}
 	got, err := os.ReadFile(filepath.Join(cfg.SkillPath("fresh"), "SKILL.md"))
 	if err != nil {
@@ -346,7 +351,12 @@ func TestApplyAllPartialFailure(t *testing.T) {
 	if err := os.RemoveAll(badSrc); err != nil {
 		t.Fatal(err)
 	}
-	if err := tt.Click("应用全部更新"); err != nil {
+	// 夹具用占位哈希，两个条目都需要显式勾选后才可更新。
+	for i := range a.review.entries {
+		a.review.entries[i].selected = true
+	}
+	tt.Frame()
+	if err := tt.Click(locales.UiReviewApplySelected(2)); err != nil {
 		t.Fatal(err)
 	}
 	a.waitBusy()
@@ -363,6 +373,9 @@ func TestApplyAllPartialFailure(t *testing.T) {
 	}
 	if !a.statusErr || !strings.Contains(a.status, "已更新 1 个技能，1 个失败") {
 		t.Errorf("状态行应报告部分失败, got %q (err=%v)", a.status, a.statusErr)
+	}
+	if !a.review.open || !batchReviewEntry(t, a, "good").applied || batchReviewEntry(t, a, "bad").applyErr == "" {
+		t.Error("汇总面板应保留逐项成功、失败结果")
 	}
 }
 

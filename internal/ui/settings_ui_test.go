@@ -63,7 +63,7 @@ func TestSaveSettingsRejectsUnknownLang(t *testing.T) {
 	if _, exists, err := store.LoadSettings(cfg); err != nil || exists {
 		t.Fatalf("非法语言不应写盘：exists=%v err=%v", exists, err)
 	}
-	if a.settings.Ready() || a.settingsUI.err == "" {
+	if a.settings.EffectiveProvider() != store.TranslationGoogle || a.settingsUI.err == "" {
 		t.Errorf("非法语言应拒绝并给出弹窗错误：settings=%+v err=%q", a.settings, a.settingsUI.err)
 	}
 
@@ -98,14 +98,14 @@ func TestSettingsModalOpenAndCancel(t *testing.T) {
 	if !a.settingsUI.open {
 		t.Fatalf("点「设置」后弹窗应打开，文本 %v", tt.Texts())
 	}
-	for _, want := range []string{"翻译 API（OpenAI 兼容）", "API 地址", "密钥", "模型", "目标语言"} {
+	for _, want := range []string{"翻译服务", "Google 翻译（免费）", "目标语言"} {
 		if !detHasText(tt, want) {
 			t.Errorf("设置弹窗缺少 %q，文本 %v", want, tt.Texts())
 		}
 	}
 	// 没填全时给出提醒，但不阻止保存。
-	if !detHasText(tt, "才能翻译技能描述") {
-		t.Errorf("未填全时应提醒翻译暂不可用，文本 %v", tt.Texts())
+	if detHasText(tt, "才能翻译技能描述") || detHasText(tt, "API 地址") {
+		t.Errorf("默认免费服务不应要求填写 API，文本 %v", tt.Texts())
 	}
 
 	click(t, a, tt, "取消")
@@ -121,6 +121,7 @@ func TestSettingsModalOpenAndCancel(t *testing.T) {
 // 路径），点「确认保存」后写盘、弹窗关闭、状态行报告。
 func TestSettingsModalSavesFromInputs(t *testing.T) {
 	a, cfg := newTestApp(t)
+	a.settings.Provider = store.TranslationOpenAI
 	tt := showApp(a, 1280, 800)
 	click(t, a, tt, "设置")
 
