@@ -2914,5 +2914,107 @@
       }
     }
   },
-  "uiMarketSearchEmpty": "No matching skills in the loaded results"
+  "uiMarketSearchEmpty": "No matching skills in the loaded results",
+  "uiSettingsTranslation": "Translation",
+  "uiSettingsProvider": "Translation service",
+  "uiSettingsProviderGoogle": "Google Translate (free)",
+  "uiSettingsProviderMicrosoft": "Microsoft Translator (free, experimental)",
+  "uiSettingsProviderOpenAI": "Custom API (OpenAI compatible)",
+  "uiSettingsFreeTranslationNote": "No API key needed. Text is sent to the selected service when translation is enabled. If unavailable, choose another service or a custom API.",
+  "uiSettingsUnknownProvider": "Unsupported translation service: {provider}",
+  "@uiSettingsUnknownProvider": {
+    "placeholders": {
+      "provider": {
+        "type": "String"
+      }
+    }
+  },
+  "storeErrTranslateMarkup": "store: the translation service changed protected formatting; the original text is kept",
+  "storeErrTranslateMicrosoftSession": "store: Microsoft Translator is temporarily unavailable; retry later or choose another translation service",
+  "uiTranslateDocProgress": "Translated {done, number, ::group-off}/{total, number, ::group-off} sections",
+  "@uiTranslateDocProgress": {
+    "placeholders": {
+      "done": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "uiTranslateStop": "Stop translation",
+  "uiTranslateResume": "Resume translation",
+  "uiTranslateStopped": "Translation stopped. Completed sections are kept.",
+  "uiTranslateRetry": "Retry translation",
+  "storeErrSnapshotInvalid": "store: snapshot is incomplete or unsafe: {path}",
+  "@storeErrSnapshotInvalid": {
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "storeErrSnapshotChanged": "store: content changed since preview; review the snapshot again",
+  "storeErrSnapshotState": "store: snapshots can only restore enabled or disabled skills",
+  "storeErrSnapshotReplace": "store: replacement failed; the current content is preserved at {path}",
+  "@storeErrSnapshotReplace": {
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "uiSnapshotHistory": "History snapshots",
+  "uiSnapshotTitle": "History of {name}",
+  "@uiSnapshotTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "uiSnapshotEmpty": "No snapshots yet",
+  "uiSnapshotLoading": "Loading snapshots…",
+  "uiSnapshotChoose": "Select a snapshot to review its changes",
+  "uiSnapshotRestore": "Restore this snapshot",
+  "uiSnapshotConfirmTitle": "Restore snapshot",
+  "uiSnapshotConfirm": "Replace the current content of {name} with this snapshot? The current version will be saved first.",
+  "@uiSnapshotConfirm": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "uiSnapshotRestoring": "Restoring snapshot…",
+  "uiSnapshotRestored": "Restored a snapshot of {name}",
+  "@uiSnapshotRestored": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "uiSnapshotNoChanges": "Content matches this snapshot",
+  "uiSnapshotMetadataChanged": "Metadata will also be restored from this snapshot",
+  "uiReviewApplySelected": "Apply selected ({count, number, ::group-off})",
+  "@uiReviewApplySelected": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "uiReviewRetryFailed": "Retry failed updates",
+  "uiReviewUpdated": "Updated",
+  "uiReviewSelectSkill": "Select update for {name}",
+  "@uiReviewSelectSkill": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "uiSnapshotDiffTruncated": "Preview truncated; restoration still uses the complete snapshot",
+  "uiSnapshotBinary": "Binary file; text preview is unavailable"
 }

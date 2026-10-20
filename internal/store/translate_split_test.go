@@ -3,6 +3,9 @@ package store
 // 全文翻译的分段：只在空行切、不切开围栏代码块、段内结构原样保留。
 
 import (
+	"context"
+	"encoding/json"
+	"net/http"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -178,5 +181,93 @@ func TestSplitIndentedClosingFenceDoesNotClose(t *testing.T) {
 	blocks := markdownBlocks(doc)
 	if len(blocks) != 2 || !strings.Contains(blocks[0], "\n\nb\n") {
 		t.Errorf("缩进的 ``` 不应闭合围栏，得到 %q", blocks)
+	}
+}
+
+// 走真实分段和免费服务派发，避免单独测试保护器时漏掉分段造成的上下文丢失。
+func TestSplitFreeTranslationPreservesProtectedBlocks(t *testing.T) {
+	longCode := strings.Repeat("PROTECTEDCONTENT\n", 130)
+	cases := map[string]string{
+		"list-fence": "- ```python\n" + strings.Repeat("  PROTECTEDCONTENT\n", 130) +
+			"\n  CANARYCODE\n  ```",
+		"list-fence-four-spaces": "-   ```python\n" + strings.Repeat("    PROTECTEDCONTENT\n", 130) +
+			"\n    CANARYCODE\n    ```",
+		"ordered-list-fence": "10. ```python\n" + strings.Repeat("    PROTECTEDCONTENT\n", 130) +
+			"\n    CANARYCODE\n    ```",
+		"indented-list-fence": "  - ```python\n" + strings.Repeat("    PROTECTEDCONTENT\n", 130) +
+			"\n    CANARYCODE\n    ```",
+		"root-fence-with-list-marker":  "```text\n- ```\n" + longCode + "\nCANARYCODE\n```",
+		"root-fence-with-quote-marker": "```text\n> ```\n" + longCode + "\nCANARYCODE\n```",
+		"quote-fence-with-extra-quote": "> ```text\n> > ```\n" + strings.Repeat("> PROTECTEDCONTENT\n", 130) +
+			">\n> CANARYCODE\n> ```",
+		"quoted-list-fence": "> -   ```python\n" + strings.Repeat(">     PROTECTEDCONTENT\n", 130) +
+			">\n>     CANARYCODE\n>     ```",
+		"raw-html":    "<pre>\n" + longCode + "\nCANARYCODE\n</pre>",
+		"comment":     "<!--\n" + longCode + "\nCANARYCODE\n-->",
+		"frontmatter": "---\nnotes: |\n" + strings.Repeat("  PROTECTEDCONTENT\n", 130) + "\nCANARYCODE: metadata\n---",
+		"code-span":   "Read instructions. ``" + longCode + "\nCANARYCODE``",
+	}
+	for name, protected := range cases {
+		t.Run(name, func(t *testing.T) {
+			src := protected + "\n\nRead instructions.\n\n" +
+				strings.Repeat("Normal prose. ", 150) + "\n\nRead instructions."
+			calls := 0
+			withGoogleTransport(t, func(r *http.Request) (*http.Response, error) {
+				calls++
+				plain := r.URL.Query().Get("q")
+				if strings.Contains(plain, "CANARYCODE") || strings.Contains(plain, "PROTECTEDCONTENT") {
+					t.Fatal("分段后的代码或元数据进入了翻译请求")
+				}
+				out := strings.ReplaceAll(plain, "Read instructions.", "Translated prose.")
+				body, err := json.Marshal(map[string]any{
+					"sentences": []map[string]string{{"trans": out}},
+				})
+				if err != nil {
+					t.Fatal(err)
+				}
+				return googleTestResponse(http.StatusOK, string(body)), nil
+			})
+			chunks := SplitForTranslation(src, 1800)
+			if len(chunks) < 3 {
+				t.Fatalf("应只保留保护区完整，不能把整篇长文合为一段：%d", len(chunks))
+			}
+			var translated []string
+			for _, chunk := range chunks {
+				out, err := (&Settings{Provider: TranslationGoogle}).Translate(context.Background(), chunk)
+				if err != nil {
+					t.Fatal(err)
+				}
+				translated = append(translated, out)
+			}
+			want := strings.ReplaceAll(src, "Read instructions.", "Translated prose.")
+			if got := strings.Join(translated, "\n\n"); got != want {
+				t.Fatal("翻译后应保留完整代码、元数据和 Markdown，只改变普通正文")
+			}
+			if calls == 0 {
+				t.Fatal("普通正文仍须调用翻译服务")
+			}
+		})
+	}
+}
+
+func TestIndentedCodeDoesNotHideFollowingProse(t *testing.T) {
+	for _, line := range []string{"    ```", "    <pre>", "    <!--", "\t<pre>", ">     <!--"} {
+		t.Run(line, func(t *testing.T) {
+			src := line + "\n\nRead instructions.\n\n    CANARYCODE"
+			calls := 0
+			got, err := translateGoogleMarkdown(context.Background(), src, func(_ context.Context, plain string) (string, error) {
+				calls++
+				if strings.Contains(plain, "CANARYCODE") {
+					t.Fatal("缩进代码不能进入翻译请求")
+				}
+				return strings.ReplaceAll(plain, "Read instructions.", "Translated prose."), nil
+			})
+			if err != nil || calls != 1 {
+				t.Fatalf("缩进代码后的普通正文应被翻译：calls=%d err=%v", calls, err)
+			}
+			if got != strings.ReplaceAll(src, "Read instructions.", "Translated prose.") {
+				t.Fatal("缩进代码应原样保留，普通正文应翻译")
+			}
+		})
 	}
 }

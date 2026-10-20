@@ -23,9 +23,17 @@ import (
 
 // skillReviewEntry 是「全部检查」汇总里一个技能的结果。
 type skillReviewEntry struct {
-	skill   string               // 技能名
-	preview *store.UpdatePreview // 预览成功时非 nil
-	err     string               // 预览失败原因；成功为空串
+	skill    string               // 技能名
+	preview  *store.UpdatePreview // 预览成功时非 nil
+	err      string               // 预览失败原因；成功为空串
+	selected bool                 // 用户本次勾选；本地有修改的技能默认不勾
+	applied  bool                 // 已成功更新，不能重复应用旧预览
+	applyErr string               // 上次应用失败的原因；保留用于逐项重试
+}
+
+// canApply 只接受预览成功、有变化且尚未成功应用的条目。
+func (e *skillReviewEntry) canApply() bool {
+	return e.err == "" && !e.applied && e.preview != nil && e.preview.HasChanges()
 }
 
 // reviewState 是评审面板（Modal）的数据：一个技能的预览，或全部检查汇总。
@@ -45,9 +53,41 @@ type reviewState struct {
 	applyBusy bool
 }
 
-// hasCheckTarget 报告当前是否可以发起一次检查（避免并发检查互相覆盖）。
+// selectedUpdateCount 是当前勾选且可执行的更新数。
+func (r *reviewState) selectedUpdateCount() int {
+	count := 0
+	for i := range r.entries {
+		if e := &r.entries[i]; e.selected && e.canApply() {
+			count++
+		}
+	}
+	return count
+}
+
+// failedUpdateCount 是当前勾选且上次应用失败的更新数；取消勾选后不参与重试。
+func (r *reviewState) failedUpdateCount() int {
+	count := 0
+	for i := range r.entries {
+		if e := &r.entries[i]; e.selected && e.canApply() && e.applyErr != "" {
+			count++
+		}
+	}
+	return count
+}
+
+// hasCheckTarget 同时拦住当前目录的写入：恢复/移动尚未完成时不能用一份
+// 中间状态生成新的评审；其他根目录仍在完成的写入不阻塞当前目录浏览。
 func (a *App) hasCheckTarget() bool {
-	return a.checkingAll || a.checking != "" || a.review.applyBusy
+	if a.checkingAll || a.checking != "" || a.review.applyBusy {
+		return true
+	}
+	prefix := a.cfg.Root + "\x00"
+	for key, busy := range a.busy {
+		if busy && strings.HasPrefix(key, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 // cancelCheck 在切目录或主动取消时立即释放检查状态，旧回调由序号挡住。
@@ -149,7 +189,10 @@ func (a *App) CheckAllAsync() {
 					entries = append(entries, skillReviewEntry{skill: r.Name, err: r.Err.Error()})
 					continue
 				}
-				entries = append(entries, skillReviewEntry{skill: r.Name, preview: r.Preview})
+				entries = append(entries, skillReviewEntry{
+					skill: r.Name, preview: r.Preview,
+					selected: r.Preview.HasChanges() && !r.Preview.LocalModified,
+				})
 			}
 		}
 		sort.Slice(entries, func(i, j int) bool { return entries[i].skill < entries[j].skill })
@@ -170,9 +213,18 @@ func (a *App) CheckAllAsync() {
 	})
 }
 
-// ApplyAsync 应用评审面板里的结果：单技能 → Update(name)；全部检查 →
-// 对每个有变化的技能依次 Update。都在后台执行，完成后重新扫描并关闭面板。
-func (a *App) ApplyAsync() {
+// ApplyAsync 只应用用户勾选的批量条目；单技能沿用原来的应用行为。
+// 批量结束保留面板与逐项结果，成功条目不能再次执行旧预览。
+func (a *App) ApplyAsync() { a.applyReviewAsync(false) }
+
+// RetryFailedUpdates 只重试仍勾选的失败条目，不连带执行尚未尝试的新条目。
+func (a *App) RetryFailedUpdates() {
+	if a.review.all {
+		a.applyReviewAsync(true)
+	}
+}
+
+func (a *App) applyReviewAsync(failedOnly bool) {
 	r := &a.review
 	if r.applyBusy {
 		return
@@ -180,8 +232,9 @@ func (a *App) ApplyAsync() {
 	// 收集本次要更新的技能名（在 UI 线程里确定，后台只执行）。
 	var names []string
 	if r.all {
-		for _, e := range r.entries {
-			if e.preview != nil && e.preview.HasChanges() {
+		for i := range r.entries {
+			e := &r.entries[i]
+			if e.selected && e.canApply() && (!failedOnly || e.applyErr != "") {
 				names = append(names, e.skill)
 			}
 		}
@@ -191,18 +244,33 @@ func (a *App) ApplyAsync() {
 	if len(names) == 0 {
 		return
 	}
-	r.applyBusy = true
 	cfg, gen := r.cfg, a.gen
 	if cfg == nil {
 		cfg = a.cfg
 	}
+	// 先核对整批，确认没有快照恢复/移动等写入后才一次性登记。不能只靠
+	// 模态窗口挡操作：用户关闭窗口或切换目录后，后台写入仍会继续。
+	keys := make([]string, len(names))
+	for i, name := range names {
+		key := cfg.Root + "\x00" + name
+		if a.busy[key] {
+			a.status, a.statusErr = locales.UiDetailBusy(name), false
+			return
+		}
+		keys[i] = key
+	}
+	for _, key := range keys {
+		a.busy[key] = true
+	}
+	r.applyBusy = true
 	a.status, a.statusErr = locales.UiStatusUpdating(strings.Join(names, locales.UiCommonListSep())), false
 	a.spawn(func() {
 		// 批量更新：同一仓库的技能共用一次 clone。
 		var done []string
 		var firstErr error
 		failed := 0
-		for _, res := range cfg.UpdateMany(names) {
+		results := cfg.UpdateMany(names)
+		for _, res := range results {
 			if res.Err != nil {
 				failed++
 				if firstErr == nil {
@@ -214,17 +282,39 @@ func (a *App) ApplyAsync() {
 		}
 		skills, scanErr := cfg.ScanAll()
 		a.publish(func() {
+			// 不论用户是否切换了目录，都要释放这次任务登记的原目录写入。
+			for _, key := range keys {
+				delete(a.busy, key)
+			}
 			if gen != a.gen {
 				return // 写入照常完成，旧评审不能关闭新目录的评审面板。
 			}
 			r.applyBusy = false
-			r.open = false // 更新完成后关闭评审面板
-			if gen == a.gen {
-				a.applyScan(skills, scanErr)
-				// 只清掉更新成功的；失败的仍然「有更新」。
-				for _, n := range done {
-					delete(a.updates, n)
+			if r.all {
+				// 只更新这次实际执行的条目；取消勾选与尚未尝试的条目原样保留。
+				byName := make(map[string]store.UpdateResult, len(results))
+				for _, result := range results {
+					byName[result.Name] = result
 				}
+				for i := range r.entries {
+					e := &r.entries[i]
+					result, attempted := byName[e.skill]
+					if !attempted {
+						continue
+					}
+					if result.Err != nil {
+						e.applyErr = result.Err.Error()
+					} else {
+						e.applied, e.selected, e.applyErr = true, false, ""
+					}
+				}
+			} else {
+				r.open = false
+			}
+			a.applyScan(skills, scanErr)
+			// 只清掉更新成功的；失败的仍然「有更新」。
+			for _, n := range done {
+				delete(a.updates, n)
 			}
 			switch {
 			case firstErr == nil:

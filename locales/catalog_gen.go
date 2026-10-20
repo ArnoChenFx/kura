@@ -6737,3 +6737,373 @@ func UiMarketSearchEmpty() string { return In(i18n.Locale()).UiMarketSearchEmpty
 func (msgs Messages) UiMarketSearchEmpty() string {
 	return Catalog.Format(msgs.locale, "uiMarketSearchEmpty", nil)
 }
+
+// UiSettingsTranslation says "Translation"
+// in the language the app shows.
+func UiSettingsTranslation() string { return In(i18n.Locale()).UiSettingsTranslation() }
+
+// UiSettingsTranslation says "Translation"
+// in the language of msgs.
+func (msgs Messages) UiSettingsTranslation() string {
+	return Catalog.Format(msgs.locale, "uiSettingsTranslation", nil)
+}
+
+// UiSettingsProvider says "Translation service"
+// in the language the app shows.
+func UiSettingsProvider() string { return In(i18n.Locale()).UiSettingsProvider() }
+
+// UiSettingsProvider says "Translation service"
+// in the language of msgs.
+func (msgs Messages) UiSettingsProvider() string {
+	return Catalog.Format(msgs.locale, "uiSettingsProvider", nil)
+}
+
+// UiSettingsProviderGoogle says "Google Translate (free)"
+// in the language the app shows.
+func UiSettingsProviderGoogle() string { return In(i18n.Locale()).UiSettingsProviderGoogle() }
+
+// UiSettingsProviderGoogle says "Google Translate (free)"
+// in the language of msgs.
+func (msgs Messages) UiSettingsProviderGoogle() string {
+	return Catalog.Format(msgs.locale, "uiSettingsProviderGoogle", nil)
+}
+
+// UiSettingsProviderMicrosoft says "Microsoft Translator (free, experimental)"
+// in the language the app shows.
+func UiSettingsProviderMicrosoft() string { return In(i18n.Locale()).UiSettingsProviderMicrosoft() }
+
+// UiSettingsProviderMicrosoft says "Microsoft Translator (free, experimental)"
+// in the language of msgs.
+func (msgs Messages) UiSettingsProviderMicrosoft() string {
+	return Catalog.Format(msgs.locale, "uiSettingsProviderMicrosoft", nil)
+}
+
+// UiSettingsProviderOpenAI says "Custom API (OpenAI compatible)"
+// in the language the app shows.
+func UiSettingsProviderOpenAI() string { return In(i18n.Locale()).UiSettingsProviderOpenAI() }
+
+// UiSettingsProviderOpenAI says "Custom API (OpenAI compatible)"
+// in the language of msgs.
+func (msgs Messages) UiSettingsProviderOpenAI() string {
+	return Catalog.Format(msgs.locale, "uiSettingsProviderOpenAI", nil)
+}
+
+// UiSettingsFreeTranslationNote says "No API key needed. Text is sent to the selected service when translation is enabled. If unavailable, choose another s…"
+// in the language the app shows.
+func UiSettingsFreeTranslationNote() string { return In(i18n.Locale()).UiSettingsFreeTranslationNote() }
+
+// UiSettingsFreeTranslationNote says "No API key needed. Text is sent to the selected service when translation is enabled. If unavailable, choose another s…"
+// in the language of msgs.
+func (msgs Messages) UiSettingsFreeTranslationNote() string {
+	return Catalog.Format(msgs.locale, "uiSettingsFreeTranslationNote", nil)
+}
+
+// UiSettingsUnknownProvider says "Unsupported translation service: {provider}"
+// in the language the app shows.
+func UiSettingsUnknownProvider(provider string) string {
+	return In(i18n.Locale()).UiSettingsUnknownProvider(provider)
+}
+
+// UiSettingsUnknownProvider says "Unsupported translation service: {provider}"
+// in the language of msgs.
+func (msgs Messages) UiSettingsUnknownProvider(provider string) string {
+	return Catalog.Format(msgs.locale, "uiSettingsUnknownProvider", map[string]any{"provider": provider})
+}
+
+// StoreErrTranslateMarkup says "store: the translation service changed protected formatting; the original text is kept"
+// in the language the app shows.
+func StoreErrTranslateMarkup() string { return In(i18n.Locale()).StoreErrTranslateMarkup() }
+
+// StoreErrTranslateMarkup says "store: the translation service changed protected formatting; the original text is kept"
+// in the language of msgs.
+func (msgs Messages) StoreErrTranslateMarkup() string {
+	return Catalog.Format(msgs.locale, "storeErrTranslateMarkup", nil)
+}
+
+// StoreErrTranslateMicrosoftSession says "store: Microsoft Translator is temporarily unavailable; retry later or choose another translation service"
+// in the language the app shows.
+func StoreErrTranslateMicrosoftSession() string {
+	return In(i18n.Locale()).StoreErrTranslateMicrosoftSession()
+}
+
+// StoreErrTranslateMicrosoftSession says "store: Microsoft Translator is temporarily unavailable; retry later or choose another translation service"
+// in the language of msgs.
+func (msgs Messages) StoreErrTranslateMicrosoftSession() string {
+	return Catalog.Format(msgs.locale, "storeErrTranslateMicrosoftSession", nil)
+}
+
+// UiTranslateDocProgress says "Translated {done, number, ::group-off}/{total, number, ::group-off} sections"
+// in the language the app shows.
+func UiTranslateDocProgress(done int, total int) string {
+	return In(i18n.Locale()).UiTranslateDocProgress(done, total)
+}
+
+// UiTranslateDocProgress says "Translated {done, number, ::group-off}/{total, number, ::group-off} sections"
+// in the language of msgs.
+func (msgs Messages) UiTranslateDocProgress(done int, total int) string {
+	return Catalog.Format(msgs.locale, "uiTranslateDocProgress", map[string]any{"done": done, "total": total})
+}
+
+// UiTranslateStop says "Stop translation"
+// in the language the app shows.
+func UiTranslateStop() string { return In(i18n.Locale()).UiTranslateStop() }
+
+// UiTranslateStop says "Stop translation"
+// in the language of msgs.
+func (msgs Messages) UiTranslateStop() string {
+	return Catalog.Format(msgs.locale, "uiTranslateStop", nil)
+}
+
+// UiTranslateResume says "Resume translation"
+// in the language the app shows.
+func UiTranslateResume() string { return In(i18n.Locale()).UiTranslateResume() }
+
+// UiTranslateResume says "Resume translation"
+// in the language of msgs.
+func (msgs Messages) UiTranslateResume() string {
+	return Catalog.Format(msgs.locale, "uiTranslateResume", nil)
+}
+
+// UiTranslateStopped says "Translation stopped. Completed sections are kept."
+// in the language the app shows.
+func UiTranslateStopped() string { return In(i18n.Locale()).UiTranslateStopped() }
+
+// UiTranslateStopped says "Translation stopped. Completed sections are kept."
+// in the language of msgs.
+func (msgs Messages) UiTranslateStopped() string {
+	return Catalog.Format(msgs.locale, "uiTranslateStopped", nil)
+}
+
+// UiTranslateRetry says "Retry translation"
+// in the language the app shows.
+func UiTranslateRetry() string { return In(i18n.Locale()).UiTranslateRetry() }
+
+// UiTranslateRetry says "Retry translation"
+// in the language of msgs.
+func (msgs Messages) UiTranslateRetry() string {
+	return Catalog.Format(msgs.locale, "uiTranslateRetry", nil)
+}
+
+// StoreErrSnapshotInvalid says "store: snapshot is incomplete or unsafe: {path}"
+// in the language the app shows.
+func StoreErrSnapshotInvalid(path string) string {
+	return In(i18n.Locale()).StoreErrSnapshotInvalid(path)
+}
+
+// StoreErrSnapshotInvalid says "store: snapshot is incomplete or unsafe: {path}"
+// in the language of msgs.
+func (msgs Messages) StoreErrSnapshotInvalid(path string) string {
+	return Catalog.Format(msgs.locale, "storeErrSnapshotInvalid", map[string]any{"path": path})
+}
+
+// StoreErrSnapshotChanged says "store: content changed since preview; review the snapshot again"
+// in the language the app shows.
+func StoreErrSnapshotChanged() string { return In(i18n.Locale()).StoreErrSnapshotChanged() }
+
+// StoreErrSnapshotChanged says "store: content changed since preview; review the snapshot again"
+// in the language of msgs.
+func (msgs Messages) StoreErrSnapshotChanged() string {
+	return Catalog.Format(msgs.locale, "storeErrSnapshotChanged", nil)
+}
+
+// StoreErrSnapshotState says "store: snapshots can only restore enabled or disabled skills"
+// in the language the app shows.
+func StoreErrSnapshotState() string { return In(i18n.Locale()).StoreErrSnapshotState() }
+
+// StoreErrSnapshotState says "store: snapshots can only restore enabled or disabled skills"
+// in the language of msgs.
+func (msgs Messages) StoreErrSnapshotState() string {
+	return Catalog.Format(msgs.locale, "storeErrSnapshotState", nil)
+}
+
+// StoreErrSnapshotReplace says "store: replacement failed; the current content is preserved at {path}"
+// in the language the app shows.
+func StoreErrSnapshotReplace(path string) string {
+	return In(i18n.Locale()).StoreErrSnapshotReplace(path)
+}
+
+// StoreErrSnapshotReplace says "store: replacement failed; the current content is preserved at {path}"
+// in the language of msgs.
+func (msgs Messages) StoreErrSnapshotReplace(path string) string {
+	return Catalog.Format(msgs.locale, "storeErrSnapshotReplace", map[string]any{"path": path})
+}
+
+// UiSnapshotHistory says "History snapshots"
+// in the language the app shows.
+func UiSnapshotHistory() string { return In(i18n.Locale()).UiSnapshotHistory() }
+
+// UiSnapshotHistory says "History snapshots"
+// in the language of msgs.
+func (msgs Messages) UiSnapshotHistory() string {
+	return Catalog.Format(msgs.locale, "uiSnapshotHistory", nil)
+}
+
+// UiSnapshotTitle says "History of {name}"
+// in the language the app shows.
+func UiSnapshotTitle(name string) string { return In(i18n.Locale()).UiSnapshotTitle(name) }
+
+// UiSnapshotTitle says "History of {name}"
+// in the language of msgs.
+func (msgs Messages) UiSnapshotTitle(name string) string {
+	return Catalog.Format(msgs.locale, "uiSnapshotTitle", map[string]any{"name": name})
+}
+
+// UiSnapshotEmpty says "No snapshots yet"
+// in the language the app shows.
+func UiSnapshotEmpty() string { return In(i18n.Locale()).UiSnapshotEmpty() }
+
+// UiSnapshotEmpty says "No snapshots yet"
+// in the language of msgs.
+func (msgs Messages) UiSnapshotEmpty() string {
+	return Catalog.Format(msgs.locale, "uiSnapshotEmpty", nil)
+}
+
+// UiSnapshotLoading says "Loading snapshots…"
+// in the language the app shows.
+func UiSnapshotLoading() string { return In(i18n.Locale()).UiSnapshotLoading() }
+
+// UiSnapshotLoading says "Loading snapshots…"
+// in the language of msgs.
+func (msgs Messages) UiSnapshotLoading() string {
+	return Catalog.Format(msgs.locale, "uiSnapshotLoading", nil)
+}
+
+// UiSnapshotChoose says "Select a snapshot to review its changes"
+// in the language the app shows.
+func UiSnapshotChoose() string { return In(i18n.Locale()).UiSnapshotChoose() }
+
+// UiSnapshotChoose says "Select a snapshot to review its changes"
+// in the language of msgs.
+func (msgs Messages) UiSnapshotChoose() string {
+	return Catalog.Format(msgs.locale, "uiSnapshotChoose", nil)
+}
+
+// UiSnapshotRestore says "Restore this snapshot"
+// in the language the app shows.
+func UiSnapshotRestore() string { return In(i18n.Locale()).UiSnapshotRestore() }
+
+// UiSnapshotRestore says "Restore this snapshot"
+// in the language of msgs.
+func (msgs Messages) UiSnapshotRestore() string {
+	return Catalog.Format(msgs.locale, "uiSnapshotRestore", nil)
+}
+
+// UiSnapshotConfirmTitle says "Restore snapshot"
+// in the language the app shows.
+func UiSnapshotConfirmTitle() string { return In(i18n.Locale()).UiSnapshotConfirmTitle() }
+
+// UiSnapshotConfirmTitle says "Restore snapshot"
+// in the language of msgs.
+func (msgs Messages) UiSnapshotConfirmTitle() string {
+	return Catalog.Format(msgs.locale, "uiSnapshotConfirmTitle", nil)
+}
+
+// UiSnapshotConfirm says "Replace the current content of {name} with this snapshot? The current version will be saved first."
+// in the language the app shows.
+func UiSnapshotConfirm(name string) string { return In(i18n.Locale()).UiSnapshotConfirm(name) }
+
+// UiSnapshotConfirm says "Replace the current content of {name} with this snapshot? The current version will be saved first."
+// in the language of msgs.
+func (msgs Messages) UiSnapshotConfirm(name string) string {
+	return Catalog.Format(msgs.locale, "uiSnapshotConfirm", map[string]any{"name": name})
+}
+
+// UiSnapshotRestoring says "Restoring snapshot…"
+// in the language the app shows.
+func UiSnapshotRestoring() string { return In(i18n.Locale()).UiSnapshotRestoring() }
+
+// UiSnapshotRestoring says "Restoring snapshot…"
+// in the language of msgs.
+func (msgs Messages) UiSnapshotRestoring() string {
+	return Catalog.Format(msgs.locale, "uiSnapshotRestoring", nil)
+}
+
+// UiSnapshotRestored says "Restored a snapshot of {name}"
+// in the language the app shows.
+func UiSnapshotRestored(name string) string { return In(i18n.Locale()).UiSnapshotRestored(name) }
+
+// UiSnapshotRestored says "Restored a snapshot of {name}"
+// in the language of msgs.
+func (msgs Messages) UiSnapshotRestored(name string) string {
+	return Catalog.Format(msgs.locale, "uiSnapshotRestored", map[string]any{"name": name})
+}
+
+// UiSnapshotNoChanges says "Content matches this snapshot"
+// in the language the app shows.
+func UiSnapshotNoChanges() string { return In(i18n.Locale()).UiSnapshotNoChanges() }
+
+// UiSnapshotNoChanges says "Content matches this snapshot"
+// in the language of msgs.
+func (msgs Messages) UiSnapshotNoChanges() string {
+	return Catalog.Format(msgs.locale, "uiSnapshotNoChanges", nil)
+}
+
+// UiSnapshotMetadataChanged says "Metadata will also be restored from this snapshot"
+// in the language the app shows.
+func UiSnapshotMetadataChanged() string { return In(i18n.Locale()).UiSnapshotMetadataChanged() }
+
+// UiSnapshotMetadataChanged says "Metadata will also be restored from this snapshot"
+// in the language of msgs.
+func (msgs Messages) UiSnapshotMetadataChanged() string {
+	return Catalog.Format(msgs.locale, "uiSnapshotMetadataChanged", nil)
+}
+
+// UiReviewApplySelected says "Apply selected ({count, number, ::group-off})"
+// in the language the app shows.
+func UiReviewApplySelected(count int) string { return In(i18n.Locale()).UiReviewApplySelected(count) }
+
+// UiReviewApplySelected says "Apply selected ({count, number, ::group-off})"
+// in the language of msgs.
+func (msgs Messages) UiReviewApplySelected(count int) string {
+	return Catalog.Format(msgs.locale, "uiReviewApplySelected", map[string]any{"count": count})
+}
+
+// UiReviewRetryFailed says "Retry failed updates"
+// in the language the app shows.
+func UiReviewRetryFailed() string { return In(i18n.Locale()).UiReviewRetryFailed() }
+
+// UiReviewRetryFailed says "Retry failed updates"
+// in the language of msgs.
+func (msgs Messages) UiReviewRetryFailed() string {
+	return Catalog.Format(msgs.locale, "uiReviewRetryFailed", nil)
+}
+
+// UiReviewUpdated says "Updated"
+// in the language the app shows.
+func UiReviewUpdated() string { return In(i18n.Locale()).UiReviewUpdated() }
+
+// UiReviewUpdated says "Updated"
+// in the language of msgs.
+func (msgs Messages) UiReviewUpdated() string {
+	return Catalog.Format(msgs.locale, "uiReviewUpdated", nil)
+}
+
+// UiReviewSelectSkill says "Select update for {name}"
+// in the language the app shows.
+func UiReviewSelectSkill(name string) string { return In(i18n.Locale()).UiReviewSelectSkill(name) }
+
+// UiReviewSelectSkill says "Select update for {name}"
+// in the language of msgs.
+func (msgs Messages) UiReviewSelectSkill(name string) string {
+	return Catalog.Format(msgs.locale, "uiReviewSelectSkill", map[string]any{"name": name})
+}
+
+// UiSnapshotDiffTruncated says "Preview truncated; restoration still uses the complete snapshot"
+// in the language the app shows.
+func UiSnapshotDiffTruncated() string { return In(i18n.Locale()).UiSnapshotDiffTruncated() }
+
+// UiSnapshotDiffTruncated says "Preview truncated; restoration still uses the complete snapshot"
+// in the language of msgs.
+func (msgs Messages) UiSnapshotDiffTruncated() string {
+	return Catalog.Format(msgs.locale, "uiSnapshotDiffTruncated", nil)
+}
+
+// UiSnapshotBinary says "Binary file; text preview is unavailable"
+// in the language the app shows.
+func UiSnapshotBinary() string { return In(i18n.Locale()).UiSnapshotBinary() }
+
+// UiSnapshotBinary says "Binary file; text preview is unavailable"
+// in the language of msgs.
+func (msgs Messages) UiSnapshotBinary() string {
+	return Catalog.Format(msgs.locale, "uiSnapshotBinary", nil)
+}

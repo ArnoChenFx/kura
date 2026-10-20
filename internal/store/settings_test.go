@@ -34,8 +34,8 @@ func TestLoadSettingsMissing(t *testing.T) {
 	if s == nil || s.BaseURL != "" || s.APIKey != "" || s.Model != "" || s.TargetLang != "" {
 		t.Fatalf("文件不存在时应返回零值设置，得到 %+v", s)
 	}
-	if s.Ready() {
-		t.Fatal("零值设置不应 Ready")
+	if !s.Ready() || s.EffectiveProvider() != TranslationGoogle {
+		t.Fatal("新用户应默认使用免密钥 Google 翻译")
 	}
 }
 
@@ -44,6 +44,7 @@ func TestLoadSettingsMissing(t *testing.T) {
 func TestSaveThenLoadRoundTrip(t *testing.T) {
 	c := newSettingsTestConfig(t)
 	in := &Settings{
+		Provider:   TranslationOpenAI,
 		BaseURL:    "https://api.example.com/v1",
 		APIKey:     "test-key-not-real", // 测试里只用明显的假 key
 		Model:      "gpt-4o-mini",
@@ -56,7 +57,7 @@ func TestSaveThenLoadRoundTrip(t *testing.T) {
 	if err != nil || !ok {
 		t.Fatalf("读回设置失败: ok=%v err=%v", ok, err)
 	}
-	if out.BaseURL != in.BaseURL || out.APIKey != in.APIKey ||
+	if out.Provider != in.Provider || out.BaseURL != in.BaseURL || out.APIKey != in.APIKey ||
 		out.Model != in.Model || out.TargetLang != in.TargetLang {
 		t.Fatalf("读回的设置与写入不一致:\n got %+v\nwant %+v", out, in)
 	}
@@ -165,15 +166,21 @@ func TestNormalizeTargetLang(t *testing.T) {
 	}
 }
 
-// TestSettingsReady 防回归：Ready 决定「翻译」按钮是否可用。三项缺一不可；
-// 空格不算填了（去空格后为空）。
+// TestSettingsReady 防回归：新用户默认免密钥；旧自定义配置仍要求三项齐全。
+// 显式免费服务不受保留的旧字段影响，未知服务不得自动回退。
 func TestSettingsReady(t *testing.T) {
 	cases := []struct {
 		name string
 		s    *Settings
 		want bool
 	}{
-		{"零值", &Settings{}, false},
+		{"空指针", nil, false},
+		{"零值", &Settings{}, true},
+		{"Google", &Settings{Provider: TranslationGoogle}, true},
+		{"Microsoft", &Settings{Provider: TranslationMicrosoft}, true},
+		{"Google 保留旧字段", &Settings{Provider: TranslationGoogle, BaseURL: "https://custom.invalid"}, true},
+		{"显式自定义未配置", &Settings{Provider: TranslationOpenAI}, false},
+		{"未知服务", &Settings{Provider: "unknown"}, false},
 		{"只填地址", &Settings{BaseURL: "https://api.example.com/v1"}, false},
 		{"缺模型", &Settings{BaseURL: "https://api.example.com/v1", APIKey: "test-key-not-real"}, false},
 		{"全填", &Settings{BaseURL: "https://api.example.com/v1", APIKey: "test-key-not-real", Model: "gpt-4o-mini"}, true},
@@ -182,6 +189,29 @@ func TestSettingsReady(t *testing.T) {
 	for _, tc := range cases {
 		if got := tc.s.Ready(); got != tc.want {
 			t.Fatalf("%s: Ready() = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}
+
+// TestSettingsLegacyProvider 保留旧配置发送目标，包括尚未填齐的配置；
+// 不能因为缺一项就把私有接口用户的文本改发到免费服务。
+func TestSettingsLegacyProvider(t *testing.T) {
+	cases := []struct {
+		s    Settings
+		want string
+	}{
+		{Settings{}, TranslationGoogle},
+		{Settings{TargetLang: "ja"}, TranslationGoogle},
+		{Settings{BaseURL: "https://custom.invalid"}, TranslationOpenAI},
+		{Settings{APIKey: "fake-key"}, TranslationOpenAI},
+		{Settings{Model: "local-model"}, TranslationOpenAI},
+		{Settings{BaseURL: " ", APIKey: "\t", Model: "\n"}, TranslationGoogle},
+		{Settings{Provider: TranslationMicrosoft, BaseURL: "https://custom.invalid"}, TranslationMicrosoft},
+		{Settings{Provider: "unknown", APIKey: "fake-key"}, "unknown"},
+	}
+	for _, tc := range cases {
+		if got := tc.s.EffectiveProvider(); got != tc.want {
+			t.Fatalf("Provider %q 的实际服务为 %q，预期 %q", tc.s.Provider, got, tc.want)
 		}
 	}
 }

@@ -10,12 +10,13 @@ A desktop manager for agent skills, built with [MyGo](https://github.com/egoist/
 
 ## What it does
 
-- **Several skill roots at once.** `~/.agents/skills` is the default and always first; any other folder can be added in the UI. Each root keeps its own disabled/trash/snapshot state, so same-named skills never interfere.
+- **Several skill roots at once.** `~/.agents/skills` is the default and always first; any other folder can be added in the UI. Each root keeps its own disabled/trash/snapshot state, so same-named skills never interfere. Switching roots preserves each root’s search, filters and browsing position.
 - **Installs skills** from a GitHub repository (`owner/repo` or a pasted URL, with optional subdirectory, ref and name) or a local folder. Repository skills are found automatically and several can be installed in one run; one failure does not stop the others. The default name comes from the `name` field of `SKILL.md`.
 - **Browses the skill market.** Explore skills.sh rankings, search loaded entries by skill name or repository, and install into the current root.
 - **Enables and disables by moving**, never copying and never a flag inside the skill: the folder travels between the root and `~/.kura/disabled/`. Removing sends it to `~/.kura/trash/` instead, where it can be restored; deleting it for good asks for confirmation and writes a content snapshot first.
-- **Checks for upstream changes by git object hash**, not clocks or file times, so an up-to-date skill downloads nothing. Skills from one repository share a single clone, and a locally edited skill is reported as locally modified, not "update available".
-- **Shows the full skill text and can translate it.** The detail column renders `SKILL.md` as Markdown, and its paragraphs can be translated into one global target language, fenced code blocks kept whole. Translations stay in memory: `SKILL.md` is never edited and nothing is written into the skill folder.
+- **Checks for upstream changes by git object hash**, not clocks or file times, so an up-to-date skill downloads nothing. Skills from one repository share a single clone, and local edits are clearly flagged. Select which skills to update, review individual results and retry only failed updates.
+- **Shows the full skill text and can translate it.** Google Translate works without an API key by default; experimental Microsoft Translator support and a custom OpenAI-compatible API are also selectable. Long translations show progress and can stop and resume without repeating completed sections. Free service availability depends on your region and the service; failed requests keep the original text, and you can switch services manually. Translations stay in memory and never modify `SKILL.md`.
+- **Reviews and restores history snapshots.** Open a skill’s history, inspect file differences and restore a selected version. The current version is saved before restoration.
 - **Speaks Chinese and English.** Messages live in MyGo's official ARB catalogs (`locales/`), so MyGo's own menus, file dialogs and controls follow the language too. The interface language follows the system on first launch (a `zh*` locale is Chinese, anything else is English) and can be pinned in the settings dialog; the CLI has `--lang` and `KURA_LANG`.
 - **Three-column window** (roots, cards, details). Column widths are draggable, roots can be reordered by dragging, skills show as a card grid or a list, and there are search plus All / Enabled / Disabled / Trash filters with counts. Context menus use the system's native menus.
 - **Updates itself** through the MyGo updater: the app menu has a check for updates. A background check runs about ten seconds after launch and then daily; a newer version only lights a dot on the update button and never opens a window by itself. A download is installed only after its Ed25519 signature has been verified.
@@ -56,7 +57,7 @@ Exit codes: `0` success, `1` operation failed, `2` usage error, `3` `doctor` fou
 | `~/.kura/config.json` | added roots, appearance (`theme`), skill layout (`view`) |
 | `~/.kura/disabled/`, `trash/<skill>/<stamp>/`, `snapshots/<skill>/<stamp>/` | disabled skills, removed ones (restorable), and snapshots taken before an update or a removal |
 | `~/.kura/roots/<id>/` | the same three folders for each added root; `<id>` is the first 12 hex digits of the SHA-256 of the normalised root path |
-| `~/.kura/settings.json` | translation API base URL, key and model, plus the global target language |
+| `~/.kura/settings.json` | translation service and target language, plus optional custom API URL, key and model |
 | `~/.agents/.skill-lock.json` | read-only input for `kura import-meta`; never rewritten |
 | `<skill>/.kura-meta.json` | per-skill metadata: source, commit and tree hash, timestamps, content hash |
 

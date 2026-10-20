@@ -725,6 +725,8 @@ func marketTranslateApp(t *testing.T, ready bool) (*App, market.Skill, *fakeTran
 	a.translate = tr.translate
 	if ready {
 		a.settings = trReadySettings()
+	} else {
+		a.settings = store.Settings{Provider: store.TranslationOpenAI}
 	}
 	sk := mkSkill("tdd", 9)
 	f.setDoc(sk.Source, sk.Name, docResp{doc: market.Document{

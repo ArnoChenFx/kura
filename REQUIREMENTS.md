@@ -92,6 +92,10 @@ Moving between volumes (for example a root on another drive than `~/.kura` on Wi
 - the name must be a single directory name (`ErrInvalidName`), and after resolving symlinks the deletion target must still be inside the trash directory. Otherwise nothing is deleted.
 - snapshots themselves are never deleted: "snapshot before any destructive operation" is the rule, and the snapshot of a purge stays for the record.
 
+### Historical snapshots
+
+The GUI lists a skill’s snapshots and offers a bounded per-file text diff. Restore targets the selected enabled or disabled copy in the original root. A preview binds the source and current content including metadata; changed content requires a new preview. Restoring first saves the current version, stages the complete historical copy and replaces it with rollback on failure. Invalid paths, symlinks, special files and invalid historical metadata are rejected. Snapshots without metadata remain valid for local skills.
+
 ## 5. Metadata: `.kura-meta.json`
 
 Written inside each managed skill folder, next to `SKILL.md`:
@@ -145,9 +149,10 @@ Translation exists to make skill text readable in the UI. It is **display only**
 
 - Settings live in `~/.kura/settings.json` (`baseUrl`, `apiKey`, `model`, `targetLang`), read and written only through `store.LoadSettings` / `SaveSettings`. The API key is stored **in plain text** with file permissions `0600`: the user's explicit choice for a local single-user app — no system credential manager, no encryption. The key must never appear in logs, error messages, test fixtures or any exported file.
 - There is one global target language. `store.NormalizeTargetLang` maps known inputs to canonical codes (`zh`→`zh-CN`, `en-US`, `ja`, `fr`, …); an unknown value is `ErrUnknownLang` and is **not** guessed. An empty value means `zh-CN`.
-- No request is made unless `Settings.Ready()` (base URL, key and model all set); otherwise the UI guides the user to the settings dialog and `ErrNotConfigured` is returned. The HTTP client is OpenAI-compatible (`/chat/completions`), standard library only, with the caller's timeout and cancellation; responses are capped (10 MB) and non-2xx bodies are truncated to 512 bytes in the error.
+- Translation starts only when the user enables translated text. `Settings.provider` selects `google` (the default for empty/new settings), `microsoft`, or `openai`. Free providers use public anonymous web interfaces and need no user key; OpenAI requires the base URL, key and model. Any legacy custom field keeps the OpenAI provider, even if incomplete. Corrupt or unknown settings never silently switch providers. Failure keeps the original text; changing services is explicit. No request is made unless `Settings.Ready()`; otherwise the UI guides the user to settings and `ErrNotConfigured` is returned. The HTTP client is OpenAI-compatible (`/chat/completions`), standard library only, with the caller's timeout and cancellation; responses are capped (10 MB) and non-2xx bodies are truncated to 512 bytes in the error.
 - `SKILL.md` is translated paragraph by paragraph: `SplitForTranslation` splits at blank lines and never inside a fenced code block (``` or ~~~, CommonMark rules — an indented code block is not a fence). The system prompt requires fenced code, front matter and identifiers to be kept verbatim.
 - **Translations live in memory only** (`internal/ui/translate.go`'s `translateState.items`, keys such as `card:<skill>:description`). Nothing is written into a skill folder: no `SKILL.md` edit, no `.kura-meta.json` change, no cache file on disk. The UI never goes blank: while a translation is missing it shows the original text.
+- Long-document chunking runs in the background after the cache check. Progress, stop and resume retain successful chunks only in memory; task tickets reject canceled or superseded results. The source read is bounded before caching or translation. Free providers protect code, links and Markdown syntax and reject damaged protected markers.
 - Changing the translation settings bumps `translateState.epoch` and cancels the context of in-flight requests; results that come back afterwards are discarded, never mixed with the new settings.
 
 ## 8. The window
@@ -160,6 +165,8 @@ Three columns:
 
 Requirements:
 
+- Each root has independent session-only search, filter, precise selected name/state and list/grid scroll state. Local search also matches repository and local source paths.
+- The batch update review offers per-skill checkboxes; locally modified skills start unchecked. Application retains individual outcomes and retries only selected failures. Concurrent writes to the same skill are prevented.
 - Skills are sorted by name, case-insensitively; disabled skills are mixed in rather than pushed to the bottom, because state is expressed by the card's switch and tags.
 - The selection is tracked **by skill name** (the grid uses an index only as a view detail). Hiding the selected skill with a filter leaves the detail column as it is.
 - Column widths are draggable (left 168–420, detail 260–560 DIP, middle at least 300). When the window is too narrow the two side columns give way together without changing the user's preference, and the dragged widths come back when the window grows.
