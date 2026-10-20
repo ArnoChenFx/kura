@@ -3,7 +3,6 @@ package ui
 import (
 	"bytes"
 	"image"
-	"math"
 	"strconv"
 	"strings"
 	"testing"
@@ -125,9 +124,8 @@ func TestCardLongDescriptionDoesNotOverlapStatus(t *testing.T) {
 	}
 }
 
-// 直接采样生产分段控件的底边，验证指示条真正滑过中间位置，同时不串到
-// 另一个轨道。减少动效时应直接落位，鼠标与方向键仍使用原生选择语义。
-func TestSegmentIndicatorMovesAndKeepsTracksIndependent(t *testing.T) {
+// 分段控件保留原生点击与方向键选择；两组选择互相独立，动效结束后停止重绘。
+func TestFilterTabsKeepSelectionIndependent(t *testing.T) {
 	for _, reduced := range []bool{false, true} {
 		t.Run(strconv.FormatBool(reduced), func(t *testing.T) {
 			first, second := 0, 0
@@ -140,53 +138,25 @@ func TestSegmentIndicatorMovesAndKeepsTracksIndependent(t *testing.T) {
 			}, 400, 160)
 			tt.SetPreferences(myui.Preferences{ReduceMotion: reduced})
 			tt.Frame()
-			center := func(label string) float64 {
-				t.Helper()
-				r, ok := tt.Find(label)
-				if !ok {
-					t.Fatalf("找不到分段 %q", label)
-				}
-				// 深色底边的亮像素只有银色指示条，文字位于上方。
-				sum, n := 0, 0
-				for x := 20; x < 380; x++ {
-					if col := tt.Image().RGBAAt(x, int(r.Y+r.H-1)); col.R > 120 {
-						sum += x
-						n++
-					}
-				}
-				if n == 0 {
-					t.Fatalf("分段 %q 的底边没有指示条", label)
-				}
-				return float64(sum) / float64(n)
+			target, ok := tt.Find("Disabled")
+			if !ok {
+				t.Fatal("找不到 Disabled 分段")
 			}
-			start, other := center("All"), center("Grid")
-			target, _ := tt.Find("Disabled")
-			want := float64(target.X + target.W/2)
-			first = 2
-			tt.Frame()
-			wantStart := start
-			if reduced {
-				wantStart = want
-			}
-			if got := center("All"); math.Abs(got-wantStart) > 2 {
-				t.Fatalf("切换首帧位置不符：want=%v got=%v", wantStart, got)
-			}
-			tt.Advance(interactionMotion.Duration / 3)
-			if got := center("All"); !reduced && (got <= start+2 || got >= want-2) {
-				t.Fatalf("指示条应经过中间位置：start=%v got=%v want=%v", start, got, want)
-			}
-			tt.Advance(time.Second)
-			if got := center("All"); math.Abs(got-want) > 2 {
-				t.Fatalf("指示条未落到新分段：got=%v want=%v", got, want)
-			}
-			if got := center("Grid"); math.Abs(got-other) > 1 || tt.FramePending() {
-				t.Fatalf("另一轨道移动或动画没有结束：before=%v after=%v pending=%v", other, got, tt.FramePending())
-			}
-			// 点击指示条本身仍应穿透到分段。
 			tt.ClickAt(target.X+target.W/2, target.Y+target.H-1)
+			if first != 2 || second != 0 {
+				t.Fatalf("点击分段底边未选中目标：first=%d second=%d", first, second)
+			}
 			tt.Key(0, myui.KeyLeft)
 			if first != 1 || second != 0 {
-				t.Fatalf("指示条影响了键盘选择：first=%d second=%d", first, second)
+				t.Fatalf("分段键盘选择错误：first=%d second=%d", first, second)
+			}
+			tt.Click("List")
+			if first != 1 || second != 1 {
+				t.Fatalf("两组分段选择互相影响：first=%d second=%d", first, second)
+			}
+			tt.Advance(time.Second)
+			if tt.FramePending() {
+				t.Fatal("分段动效结束后仍有未完成帧")
 			}
 		})
 	}

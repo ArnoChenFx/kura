@@ -426,7 +426,6 @@ func (a *App) viewThemeSwitch(c *myui.Context) {
 				Padding(t.Space(1.25), t.Space(2)).Radius(t.Radius - 2).TextColor(t.TextMuted)
 			segmentSurface(b, t, i == sel)
 			b.Children(func() {
-				segmentIndicator(c, track.ID(), i == sel)
 				myui.Icon(c, m.icon).FontSize(t.FontSize + 1)
 			})
 		}
@@ -629,7 +628,6 @@ func (a *App) viewModeSwitch(c *myui.Context) {
 				Padding(t.Space(1.5), t.Space(2)).Radius(t.Radius - 2).TextColor(t.TextMuted)
 			segmentSurface(b, t, i == sel)
 			b.Children(func() {
-				segmentIndicator(c, track.ID(), i == sel)
 				myui.Icon(c, m.icon).FontSize(t.FontSize + 1)
 			})
 		}
