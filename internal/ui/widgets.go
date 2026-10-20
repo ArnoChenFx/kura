@@ -270,6 +270,7 @@ func segmentSurface(e myui.Element, t *myui.Theme, selected bool) {
 func filterTabs(c *myui.Context, selected *int, labels ...string) myui.Element {
 	t := c.Theme()
 	parts := myui.SegmentedBase(c, selected, len(labels))
+	track := parts.Track.ID()
 	if !t.Dark {
 		parts.Track.Border(1, t.Border.Alpha(0.55))
 	}
@@ -278,6 +279,7 @@ func filterTabs(c *myui.Context, selected *int, labels ...string) myui.Element {
 			b := parts.Segment(i).Label(label).Padding(t.Space(1.5), t.Space(2)).Radius(t.Radius - 3)
 			segmentSurface(b, t, i == *selected)
 			b.Children(func() {
+				segmentIndicator(c, track, i == *selected)
 				countMotion(c, myui.Text(c, label).SingleLine().FontSize(t.FontSize-1))
 			})
 		}

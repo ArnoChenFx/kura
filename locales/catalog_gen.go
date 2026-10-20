@@ -6667,3 +6667,73 @@ func UiViewList() string { return In(i18n.Locale()).UiViewList() }
 func (msgs Messages) UiViewList() string {
 	return Catalog.Format(msgs.locale, "uiViewList", nil)
 }
+
+// UiActionCancelCheck says "Cancel check"
+// in the language the app shows.
+func UiActionCancelCheck() string { return In(i18n.Locale()).UiActionCancelCheck() }
+
+// UiActionCancelCheck says "Cancel check"
+// in the language of msgs.
+func (msgs Messages) UiActionCancelCheck() string {
+	return Catalog.Format(msgs.locale, "uiActionCancelCheck", nil)
+}
+
+// UiStatusCheckCancelled says "Update check cancelled"
+// in the language the app shows.
+func UiStatusCheckCancelled() string { return In(i18n.Locale()).UiStatusCheckCancelled() }
+
+// UiStatusCheckCancelled says "Update check cancelled"
+// in the language of msgs.
+func (msgs Messages) UiStatusCheckCancelled() string {
+	return Catalog.Format(msgs.locale, "uiStatusCheckCancelled", nil)
+}
+
+// UiInstallPhaseDownload says "Downloading skill files…"
+// in the language the app shows.
+func UiInstallPhaseDownload() string { return In(i18n.Locale()).UiInstallPhaseDownload() }
+
+// UiInstallPhaseDownload says "Downloading skill files…"
+// in the language of msgs.
+func (msgs Messages) UiInstallPhaseDownload() string {
+	return Catalog.Format(msgs.locale, "uiInstallPhaseDownload", nil)
+}
+
+// UiInstallPhaseInspect says "Reading skill information…"
+// in the language the app shows.
+func UiInstallPhaseInspect() string { return In(i18n.Locale()).UiInstallPhaseInspect() }
+
+// UiInstallPhaseInspect says "Reading skill information…"
+// in the language of msgs.
+func (msgs Messages) UiInstallPhaseInspect() string {
+	return Catalog.Format(msgs.locale, "uiInstallPhaseInspect", nil)
+}
+
+// UiInstallPhaseWrite says "Installing skill files…"
+// in the language the app shows.
+func UiInstallPhaseWrite() string { return In(i18n.Locale()).UiInstallPhaseWrite() }
+
+// UiInstallPhaseWrite says "Installing skill files…"
+// in the language of msgs.
+func (msgs Messages) UiInstallPhaseWrite() string {
+	return Catalog.Format(msgs.locale, "uiInstallPhaseWrite", nil)
+}
+
+// UiMarketSearchScope says "Search loaded skills only ({count, number, ::group-off})"
+// in the language the app shows.
+func UiMarketSearchScope(count int) string { return In(i18n.Locale()).UiMarketSearchScope(count) }
+
+// UiMarketSearchScope says "Search loaded skills only ({count, number, ::group-off})"
+// in the language of msgs.
+func (msgs Messages) UiMarketSearchScope(count int) string {
+	return Catalog.Format(msgs.locale, "uiMarketSearchScope", map[string]any{"count": count})
+}
+
+// UiMarketSearchEmpty says "No matching skills in the loaded results"
+// in the language the app shows.
+func UiMarketSearchEmpty() string { return In(i18n.Locale()).UiMarketSearchEmpty() }
+
+// UiMarketSearchEmpty says "No matching skills in the loaded results"
+// in the language of msgs.
+func (msgs Messages) UiMarketSearchEmpty() string {
+	return Catalog.Format(msgs.locale, "uiMarketSearchEmpty", nil)
+}

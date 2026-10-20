@@ -6,13 +6,14 @@ package ui
 //  1. 详情面板「检查更新」或工具栏「全部检查」→ PreviewUpdate 在后台运行；
 //  2. 单技能结果进入 a.review（Modal 打开，每行一个变更文件 + Apply/取消），
 //     失败进状态行，无变化也在状态行提示；
-//  3. 「全部检查」逐个技能串行预览，汇总进同一个 Modal（每个技能一段），
-//     Apply 逐个应用有变化的技能。
+//  3. 「全部检查」按仓库共用预览，汇总进同一个 Modal（每个技能一段），
+//     Apply 批量应用有变化的技能。
 //
 // 线程约定沿用 app.go：App 字段只在 UI 线程读写；磁盘 I/O 走 spawn，
 // 结果经 publish 回 UI 线程；busy 只标记变更操作，检查/预览不置 busy。
 
 import (
+	"context"
 	"sort"
 	"strings"
 
@@ -49,6 +50,46 @@ func (a *App) hasCheckTarget() bool {
 	return a.checkingAll || a.checking != "" || a.review.applyBusy
 }
 
+// cancelCheck 在切目录或主动取消时立即释放检查状态，旧回调由序号挡住。
+// 这里只取消预览；已经开始的替换写入仍由快照与原子替换路径完整执行。
+func (a *App) cancelCheck() {
+	if a.checkCancel != nil {
+		a.checkCancel()
+		a.checkCancel = nil
+	}
+	a.checkSeq++
+	a.checking, a.checkingAll = "", false
+}
+
+// CancelCheck 取消当前的技能更新检查，不关闭已完成的评审结果。
+func (a *App) CancelCheck() {
+	if a.checking == "" && !a.checkingAll {
+		return
+	}
+	a.cancelCheck()
+	a.status, a.statusErr = locales.UiStatusCheckCancelled(), false
+}
+
+func (a *App) beginCheck() (context.Context, uint64) {
+	a.checkSeq++
+	ctx, cancel := context.WithCancel(context.Background())
+	a.checkCancel = cancel
+	return ctx, a.checkSeq
+}
+
+// finishCheck 只能清理自己那次任务；旧任务不能清掉新检查的忙碌标记。
+func (a *App) finishCheck(gen int, seq uint64) bool {
+	if seq != a.checkSeq || gen != a.gen {
+		return false
+	}
+	if a.checkCancel != nil {
+		a.checkCancel()
+		a.checkCancel = nil
+	}
+	a.checking, a.checkingAll = "", false
+	return true
+}
+
 // CheckAsync 检查单个技能的更新（后台执行 PreviewUpdate）。完成后：
 // 有变化 → 打开评审面板；无变化 → 状态行提示；失败 → 状态行报错。
 func (a *App) CheckAsync(name string) {
@@ -56,13 +97,13 @@ func (a *App) CheckAsync(name string) {
 		return
 	}
 	a.checking = name
+	ctx, seq := a.beginCheck()
 	a.status, a.statusErr = locales.UiStatusCheckingUpdate(name), false
 	cfg, gen := a.cfg, a.gen
 	a.spawn(func() {
-		p, err := cfg.PreviewUpdate(name)
+		p, err := cfg.PreviewUpdateContext(ctx, name)
 		a.publish(func() {
-			a.checking = ""
-			if gen != a.gen {
+			if !a.finishCheck(gen, seq) {
 				return // 期间切换了目录，结果作废
 			}
 			if err != nil {
@@ -78,7 +119,7 @@ func (a *App) CheckAsync(name string) {
 	})
 }
 
-// CheckAllAsync 依次检查根目录里全部 enabled 技能（后台串行预览），
+// CheckAllAsync 检查根目录里全部 enabled 技能（后台按仓库批量预览），
 // 完成后打开汇总评审面板。disabled/trashed 技能没有可更新的上游语义
 // （Update 只作用于根目录技能），不参与检查。
 func (a *App) CheckAllAsync() {
@@ -86,24 +127,24 @@ func (a *App) CheckAllAsync() {
 		return
 	}
 	a.checkingAll = true
+	ctx, seq := a.beginCheck()
 	a.status, a.statusErr = locales.UiStatusCheckingAll(), false
 	cfg, gen := a.cfg, a.gen
 	a.spawn(func() {
-		// 只扫根目录；扫描失败等价于没有可检查的技能。
+		if ctx.Err() != nil {
+			return
+		}
+		// 只扫根目录；扫描失败明确报告，不当作「没有更新」。
 		skills, err := cfg.Scan()
 		entries := make([]skillReviewEntry, 0, len(skills))
-		if err != nil {
-			for _, s := range skills {
-				entries = append(entries, skillReviewEntry{skill: s.Name, err: locales.UiReviewScanFailed(err.Error())})
-			}
-		} else {
+		if err == nil {
 			names := make([]string, len(skills))
 			for i, s := range skills {
 				names[i] = s.Name
 			}
 			// 批量检查：同一仓库的技能共用一次 ls-remote / clone，上游没变的
 			// 技能不下载任何文件。
-			for _, r := range cfg.PreviewUpdates(names) {
+			for _, r := range cfg.PreviewUpdatesContext(ctx, names) {
 				if r.Err != nil {
 					entries = append(entries, skillReviewEntry{skill: r.Name, err: r.Err.Error()})
 					continue
@@ -113,9 +154,12 @@ func (a *App) CheckAllAsync() {
 		}
 		sort.Slice(entries, func(i, j int) bool { return entries[i].skill < entries[j].skill })
 		a.publish(func() {
-			a.checkingAll = false
-			if gen != a.gen {
+			if !a.finishCheck(gen, seq) {
 				return // 期间切换了目录，结果作废
+			}
+			if err != nil {
+				a.status, a.statusErr = locales.UiReviewScanFailed(err.Error()), true
+				return
 			}
 			a.review = reviewState{open: true, cfg: cfg, all: true, entries: entries}
 			for _, e := range entries {
@@ -170,6 +214,9 @@ func (a *App) ApplyAsync() {
 		}
 		skills, scanErr := cfg.ScanAll()
 		a.publish(func() {
+			if gen != a.gen {
+				return // 写入照常完成，旧评审不能关闭新目录的评审面板。
+			}
 			r.applyBusy = false
 			r.open = false // 更新完成后关闭评审面板
 			if gen == a.gen {

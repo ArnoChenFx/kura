@@ -105,7 +105,7 @@ func (a *App) View(c *myui.Context) {
 				a.viewFilterBar(c)
 				var separator, gap float32
 				if !c.Theme().Dark {
-					separator, gap = 1, c.Theme().Space(4)
+					separator, gap = 1, c.Theme().Space(2)
 				}
 				// 白色工具区与银灰画布留出间距；深色保留零高节点，
 				// 避免主题切换改变后续列表的身份、丢失滚动位置。
@@ -265,7 +265,7 @@ func (a *App) viewRoots(c *myui.Context) {
 	myui.Column(c).Width(a.rootsEff).Shrink(0).FillHeight().Background(a.pal.sidebar).Children(func() {
 		myui.Text(c, locales.UiRootsTitle()).FontSize(t.FontSize-2).FontWeight(600).TextColor(t.TextMuted).
 			Padding(t.Space(6), t.Space(5), t.Space(3), t.Space(5))
-		myui.Scroll(c).Grow(1).FillWidth().Children(func() {
+		smoothScroll(myui.Scroll(c)).Grow(1).FillWidth().Children(func() {
 			myui.Column(c).FillWidth().Padding(0, t.Space(3)).Gap(t.Space(1.5)).Children(func() {
 				for i, root := range a.lib.Roots {
 					a.rootItem(c, root, i == 0)
@@ -425,7 +425,10 @@ func (a *App) viewThemeSwitch(c *myui.Context) {
 			b := seg.Segment(i).Label(m.label()).Tooltip(m.label()).
 				Padding(t.Space(1.25), t.Space(2)).Radius(t.Radius - 2).TextColor(t.TextMuted)
 			segmentSurface(b, t, i == sel)
-			b.Children(func() { myui.Icon(c, m.icon).FontSize(t.FontSize + 1) })
+			b.Children(func() {
+				segmentIndicator(c, track.ID(), i == sel)
+				myui.Icon(c, m.icon).FontSize(t.FontSize + 1)
+			})
 		}
 	})
 	if track.Changed() {
@@ -525,20 +528,34 @@ func rootLabel(root string) string {
 	return parent + "/" + base
 }
 
-// viewMainHeader 是中栏头部：当前目录名与完整路径；右侧是主操作「安装
-// 技能」与作用于整个目录的图标按钮（刷新、全部检查、导入元数据或从列表移除）。
+// viewMainHeader 把目录标题和操作收在同一行，完整路径保留在标题的悬停
+// 提示里。窄窗口允许操作组整组换行，不压缩按钮或隐藏已有动作。
 func (a *App) viewMainHeader(c *myui.Context) {
 	t := c.Theme()
 	isDefault := a.cfg.Root == a.lib.Default()
-	myui.Column(c).FillWidth().Shrink(0).Padding(t.Space(5), t.Space(5), t.Space(2)).
-		Background(a.pal.header).Gap(t.Space(3)).Children(func() {
-		myui.Row(c).FillWidth().Gap(t.Space(3)).AlignItems(myui.Center).Children(func() {
-			myui.Column(c).Grow(1).MinWidth(0).Gap(t.Space(1)).Children(func() {
-				myui.Text(c, locales.UiLibraryTitle()).FontSize(t.FontSize - 2).FontWeight(600).TextColor(t.TextMuted)
-				myui.Text(c, rootLabel(a.cfg.Root)).FontWeight(600).FontSize(t.FontSize + 10).SingleLine()
-			})
-			ib := myui.PrimaryButton(c, "").Label(locales.UiActionInstall()).Shrink(0).
-				Padding(t.Space(2.5), t.Space(3.5))
+	myui.Row(c.Key("main-header")).FillWidth().Shrink(0).Wrap().
+		Padding(t.Space(3), t.Space(5), t.Space(1), t.Space(5)).
+		Background(a.pal.header).Gap(t.Space(2)).AlignItems(myui.Center).Children(func() {
+		myui.Text(c, rootLabel(a.cfg.Root)).FontWeight(600).FontSize(t.FontSize + 4).
+			SingleLine().Tooltip(a.cfg.Root).Grow(1).Basis(120).MinWidth(0)
+		myui.Row(c).Shrink(0).Gap(t.Space(1)).AlignItems(myui.Center).Children(func() {
+			if a.scanning {
+				myui.Spinner(c)
+			}
+			ghostButton(c.Key("refresh"), iconRefresh, locales.UiActionRefresh(), a.scanning, a.ReloadAsync)
+			if a.checkingAll || a.checking != "" {
+				ghostButton(c.Key("cancel-check"), iconClose, locales.UiActionCancelCheck(), false, a.CancelCheck)
+			} else {
+				ghostButton(c.Key("check-all"), iconCheckAll, locales.UiActionCheckAll(), a.hasCheckTarget(), a.CheckAllAsync)
+			}
+			if isDefault {
+				ghostButton(c.Key("root-action"), iconImport, locales.UiActionImportMeta(), false, a.ImportAsync)
+			} else {
+				ghostButton(c.Key("root-action"), iconUnlink, locales.UiActionRemoveRoot(), false, func() { a.RemoveRootAsync(a.cfg.Root) })
+			}
+			ghostButton(c.Key("market"), iconGlobe, locales.UiActionMarket(), false, a.OpenMarket)
+			ib := myui.PrimaryButton(c.Key("install"), "").Label(locales.UiActionInstall()).Shrink(0).
+				Padding(t.Space(2), t.Space(3))
 			buttonMotion(c, ib, true)
 			ib.Children(func() {
 				myui.Icon(c, iconPlus).FontSize(t.FontSize)
@@ -548,46 +565,26 @@ func (a *App) viewMainHeader(c *myui.Context) {
 				a.OpenInstall()
 			}
 		})
-		// 路径与辅助操作独占第二行，最窄中栏仍能完整显示主操作。
-		myui.Row(c).FillWidth().Wrap().Gap(t.Space(2)).AlignItems(myui.Center).Children(func() {
-			myui.Row(c).Grow(1).Basis(160).MinWidth(0).Gap(t.Space(1.5)).AlignItems(myui.Center).Children(func() {
-				myui.Icon(c, iconFolder).TextColor(t.TextMuted).FontSize(t.FontSize - 1)
-				myui.Text(c, a.cfg.Root).SingleLine().MinWidth(0).Grow(1).
-					Tooltip(a.cfg.Root).FontSize(t.FontSize - 2).TextColor(t.TextMuted)
-			})
-			myui.Row(c).Shrink(0).AlignItems(myui.Center).Gap(t.Space(0.5)).
-				Padding(2).Radius(t.Radius).Background(a.pal.panel).Border(1, a.pal.line).Children(func() {
-				if a.scanning || a.checkingAll || a.checking != "" {
-					myui.Spinner(c)
-				}
-				ghostButton(c, iconRefresh, locales.UiActionRefresh(), a.scanning, a.ReloadAsync)
-				ghostButton(c, iconCheckAll, locales.UiActionCheckAll(), a.checkingAll || a.checking != "", a.CheckAllAsync)
-				if isDefault {
-					ghostButton(c, iconImport, locales.UiActionImportMeta(), false, a.ImportAsync)
-				} else {
-					ghostButton(c, iconUnlink, locales.UiActionRemoveRoot(), false, func() { a.RemoveRootAsync(a.cfg.Root) })
-				}
-				ghostButton(c, iconGlobe, locales.UiActionMarket(), false, a.OpenMarket)
-			})
-		})
 	})
 }
 
-// viewFilterBar 是搜索框 + 状态筛选（带数量）。窄的时候筛选换到搜索框
-// 下一行（Wrap），而不是互相挤压。
+// viewFilterBar 把排列开关与搜索框放在同组，状态筛选可整组换到下一行。
+// 最窄中栏也只需要两行，不会为排列按钮再占一整行；缩放时控件身份不变。
 func (a *App) viewFilterBar(c *myui.Context) {
 	t := c.Theme()
 	en, dis, trash := a.counts()
-	myui.Row(c).FillWidth().Wrap().Padding(t.Space(2), t.Space(5), t.Space(3), t.Space(5)).Gap(t.Space(2)).
-		Background(a.pal.header).AlignItems(myui.Center).Children(func() {
-		searchBox(c, &a.query, a.pal.card).Grow(1).Basis(t.Space(50)).MaxWidth(t.Space(80))
-		myui.Spacer(c)
-		filterTabs(c, &a.filter,
+	myui.Row(c.Key("filter-bar")).FillWidth().Wrap().
+		Padding(t.Space(1), t.Space(5), t.Space(3), t.Space(5)).Gap(t.Space(2)).
+		Background(a.pal.header).Justify(myui.SpaceBetween).AlignItems(myui.Center).Children(func() {
+		myui.Row(c.Key("search-controls")).Grow(1).Basis(240).MaxWidth(440).MinWidth(0).
+			Gap(t.Space(2)).AlignItems(myui.Center).Children(func() {
+			searchBox(c.Key("search"), &a.query, a.pal.card).Grow(1).MinWidth(0)
+			a.viewModeSwitch(c.Key("view-mode"))
+		})
+		filterTabs(c.Key("state-filter"), &a.filter,
 			locales.UiFilterAll(en+dis), locales.UiFilterEnabled(en),
 			locales.UiFilterDisabled(dis), locales.UiFilterTrashed(trash)).
-			Shrink(0)
-		myui.Box(c).Width(t.Space(1))
-		a.viewModeSwitch(c)
+			Shrink(1).MinWidth(0).MaxWidthPercent(100).Wrap()
 	})
 }
 
@@ -612,7 +609,7 @@ func viewIndex(mode string) int {
 	return 0
 }
 
-// viewModeSwitch 是筛选栏右端的排列开关：两个图标分段（卡片网格 / 列表），
+// viewModeSwitch 是搜索框旁的排列开关：两个图标分段（卡片网格 / 列表），
 // 选中的分段浮起，写法同 viewThemeSwitch。分段的点击在构建结束或查询响应时
 // 才写进 sel，所以靠 Changed 在同一次构建里取到新选择再交给 SetViewAsync
 // （幂等）；sel 每次构建都从 viewMode 重新推出。Shrink(0)：窄窗口里筛选栏
@@ -631,7 +628,10 @@ func (a *App) viewModeSwitch(c *myui.Context) {
 			b := seg.Segment(i).Label(m.label()).Tooltip(m.label()).
 				Padding(t.Space(1.5), t.Space(2)).Radius(t.Radius - 2).TextColor(t.TextMuted)
 			segmentSurface(b, t, i == sel)
-			b.Children(func() { myui.Icon(c, m.icon).FontSize(t.FontSize + 1) })
+			b.Children(func() {
+				segmentIndicator(c, track.ID(), i == sel)
+				myui.Icon(c, m.icon).FontSize(t.FontSize + 1)
+			})
 		}
 	})
 	if track.Changed() {
@@ -663,28 +663,31 @@ func (a *App) viewSkills(c *myui.Context, rows []*store.Skill) {
 	a.viewGrid(c, rows)
 }
 
-// viewList 是两行列表：每个技能一行（viewRow），整体可滚动。选中直接以
-// selName 为准，不引入网格的下标选中状态。没有技能时复用网格的空态。
+// viewList 只构建可见的技能与少量缓冲行，由原生 List 管理可变行高与滚动
+// 锚点。技能身份包含状态，同名的启用/停用副本不共用焦点或行内控件。
+// 行按钮继续负责选择、右键和开关，不再给 List 绑定第二份选择状态。
 func (a *App) viewList(c *myui.Context, rows []*store.Skill) {
 	if len(rows) == 0 {
 		a.viewGridEmpty(c)
 		return
 	}
 	t := c.Theme()
-	myui.Scroll(c).Grow(1).FillWidth().Children(func() {
-		myui.Column(c).FillWidth().Gap(t.Space(1.5)).
-			Padding(0, t.Space(5), t.Space(3), t.Space(5)).Children(func() {
-			for _, s := range rows {
-				a.viewRow(c, s, a.isSelected(s))
-			}
-		})
-	})
+	smoothScroll(myui.List(c.Key("local-skills"), &a.list, len(rows)).
+		Grow(1).FillWidth().MinHeight(0).Gap(t.Space(1.5)).
+		Padding(0, t.Space(5), t.Space(3), t.Space(5)).
+		ItemKey(func(i int) any { return skillKey(rows[i]) }).
+		Rows(func(row myui.ListRow) {
+			s := rows[row.Index]
+			a.viewRow(row.Context, s, a.isSelected(s))
+		}))
 }
 
-// viewRow 是列表里的一个技能，占两行：
+// viewRow 是列表里的一个技能：头像、名称与描述占主区，右侧操作固定宽度；
+// 来源与状态放在下方的可换行信息区，窄窗口不会把开关挤出行边界。
 //
-//	[头像] 名字 · 来源 …… [标签] [开关 / 恢复 / 转圈]
+//	[头像] 名字                     [开关 / 恢复 / 转圈]
 //	       描述（单行，超出省略）
+//	       来源                    [状态标签，可换行]
 //
 // 行为与卡片一致：左键点击选中、右键只弹同一份菜单（不改选中）；停用与回收站的名字
 // 变淡，回收站加删除线并把开关换成「恢复」。行自己画选中与悬停（同一圈边框）。
@@ -699,62 +702,61 @@ func (a *App) viewRow(c *myui.Context, s *store.Skill, selected bool) {
 	// s 为准，不改选中。
 	row.ContextMenu(func(m *myui.Menu) { a.cardMenu(c, m, s) })
 	row.Children(func() {
-		myui.Column(c).Grow(1).MinWidth(0).Gap(t.Space(1.5)).Children(func() {
-			// 第 1 行：头像、名字、来源、标签 + 右侧控件。
-			myui.Row(c).FillWidth().Gap(t.Space(3)).AlignItems(myui.Center).Children(func() {
-				avatar(c, a.pal, s.Name, t.Space(7), dim)
-				name := myui.Text(c, s.Name).SingleLine().FontWeight(600).MinWidth(0)
-				if dim {
-					name.TextColor(t.TextMuted)
-				}
-				if s.State == store.StateTrashed {
-					name.Strikethrough()
-				}
-				myui.Row(c).Grow(1).MinWidth(0).Gap(t.Space(1)).AlignItems(myui.Center).Children(func() {
-					myui.Icon(c, sourceIcon(s)).TextColor(t.TextMuted).FontSize(t.FontSize - 2).Shrink(0)
-					myui.Text(c, cardSource(s)).SingleLine().MinWidth(0).
-						FontSize(t.FontSize - 2).TextColor(t.TextMuted)
-				})
-				// 标签放在控件左侧，不挤压名字：只在有话要说时出现。
-				if a.updates[s.Name] {
-					pill(c, locales.UiPillHasUpdate(), t.Accent)
-				}
-				switch s.State {
-				case store.StateDisabled:
-					pill(c, locales.UiStateDisabled(), t.Warning)
-				case store.StateTrashed:
-					pill(c, locales.UiStateTrashed(), t.Danger)
-				}
-				if s.MetaErr != "" {
-					pill(c, locales.UiPillBadMeta(), t.Danger)
-				} else if !s.HasSKILLMD && s.State != store.StateTrashed {
-					pill(c, locales.UiPillNoSkillMD(), t.Warning)
-				}
-				switch {
-				case busy:
-					myui.Spinner(c)
-				case s.State == store.StateTrashed:
-					ghostButton(c, iconRestore, locales.UiActionRestore(), false, func() { a.RestoreAsync(s.Name) })
-				default:
-					// 同卡片：Changed 返回 true 的这次构建里，on 已是目标状态。
-					on := s.State == store.StateEnabled
-					sw := kuraSwitch(c, &on, a.pal.toggle).Label(locales.UiCardSwitchLabel(s.Name))
-					if sw.Changed() {
-						a.ToggleAsync(s.Name, on)
+		myui.Column(c).Grow(1).MinWidth(0).Gap(t.Space(2)).Children(func() {
+			myui.Row(c).FillWidth().Gap(t.Space(3)).AlignItems(myui.Start).Children(func() {
+				avatar(c, a.pal, s.Name, t.Space(9), dim)
+				myui.Column(c).Grow(1).MinWidth(0).Gap(t.Space(1)).Children(func() {
+					name := myui.Text(c, s.Name).SingleLine().FontWeight(600).Tooltip(s.Name)
+					if dim {
+						name.TextColor(t.TextMuted)
 					}
-				}
+					if s.State == store.StateTrashed {
+						name.Strikethrough()
+					}
+					desc, color := a.descText(translateCardPrefix, s), t.TextMuted
+					if desc == "" {
+						desc, color = locales.UiCardNoDescription(), t.TextMuted.Alpha(0.6)
+					}
+					myui.Text(c, desc).SingleLine().FontSize(t.FontSize - 1).TextColor(color)
+				})
+				myui.Box(c).Width(t.Space(9)).Height(t.Space(9)).Shrink(0).Center().Children(func() {
+					switch {
+					case busy:
+						myui.Spinner(c)
+					case s.State == store.StateTrashed:
+						ghostButton(c, iconRestore, locales.UiActionRestore(), false, func() { a.RestoreAsync(s.Name) })
+					default:
+						on := s.State == store.StateEnabled
+						sw := kuraSwitch(c, &on, a.pal.toggle).Label(locales.UiCardSwitchLabel(s.Name))
+						if sw.Changed() {
+							a.ToggleAsync(s.Name, on)
+						}
+					}
+				})
 			})
-			// 第 2 行：描述，单行省略；左缩进与名字对齐（头像宽 + 间距）。
-			desc, color := a.descText(translateCardPrefix, s), t.TextMuted
-			if desc == "" {
-				desc, color = locales.UiCardNoDescription(), t.TextMuted.Alpha(0.6)
-			}
-			// 缩进用占位盒子而不是外边距：FillWidth 加外边距会比父容器宽出缩进，
-			// 省略号就画到行边框之外。
 			myui.Row(c).FillWidth().Children(func() {
-				myui.Box(c).Width(t.Space(10)).Shrink(0)
-				myui.Text(c, desc).SingleLine().FontSize(t.FontSize - 1).TextColor(color).
-					Grow(1).MinWidth(0)
+				myui.Box(c).Width(t.Space(12)).Shrink(0)
+				myui.Row(c).Grow(1).MinWidth(0).Wrap().Gap(t.Space(1.5)).AlignItems(myui.Center).Children(func() {
+					myui.Row(c).Grow(1).Basis(140).MinWidth(0).Gap(t.Space(1)).AlignItems(myui.Center).Children(func() {
+						myui.Icon(c, sourceIcon(s)).TextColor(t.TextMuted).FontSize(t.FontSize - 2).Shrink(0)
+						myui.Text(c, cardSource(s)).SingleLine().Grow(1).MinWidth(0).
+							FontSize(t.FontSize - 2).TextColor(t.TextMuted).Tooltip(cardSource(s))
+					})
+					if a.updates[s.Name] {
+						pill(c, locales.UiPillHasUpdate(), t.Accent)
+					}
+					switch s.State {
+					case store.StateDisabled:
+						pill(c, locales.UiStateDisabled(), t.Warning)
+					case store.StateTrashed:
+						pill(c, locales.UiStateTrashed(), t.Danger)
+					}
+					if s.MetaErr != "" {
+						pill(c, locales.UiPillBadMeta(), t.Danger)
+					} else if !s.HasSKILLMD && s.State != store.StateTrashed {
+						pill(c, locales.UiPillNoSkillMD(), t.Warning)
+					}
+				})
 			})
 		})
 	})
@@ -776,11 +778,11 @@ func (a *App) viewGrid(c *myui.Context, rows []*store.Skill) {
 	// 主题，建完再切回 cell 主题：下一个单元格在这之后构建，读的是 c 此刻的
 	// 主题。
 	c.SetTheme(a.skin.cell)
-	myui.GridView(c, &a.grid, len(rows), cardMinWidth, cardHeight, func(i int) {
+	smoothScroll(myui.GridView(c, &a.grid, len(rows), cardMinWidth, cardHeight, func(i int) {
 		c.SetTheme(t)
 		a.viewCard(c, rows[i], i == a.selIdx)
 		c.SetTheme(a.skin.cell)
-	}).Grow(1).FillWidth().Padding(0, t.Space(4), t.Space(2), t.Space(4))
+	})).Grow(1).FillWidth().Padding(0, t.Space(4), t.Space(2), t.Space(4))
 	c.SetTheme(t)
 }
 
@@ -971,9 +973,9 @@ func (a *App) viewDetail(c *myui.Context, s *store.Skill) {
 		a.detailTab = 0
 	}
 	panel := myui.Column(c.Key("detail-pane")).Width(a.detailEff).Shrink(0).FillHeight().Background(a.pal.panel)
-	enterMotion(c, panel)
+	detailMotion(c, panel)
 	panel.Children(func() {
-		myui.Scroll(c).Grow(1).FillWidth().Children(func() {
+		smoothScroll(myui.Scroll(c)).Grow(1).FillWidth().Children(func() {
 			myui.Column(c).FillWidth().Padding(t.Space(5), t.Space(5)).Gap(t.Space(4)).Children(func() {
 				myui.Row(c).FillWidth().Gap(t.Space(3)).AlignItems(myui.Start).Children(func() {
 					avatar(c, a.pal, s.Name, t.Space(12), s.State != store.StateEnabled)
@@ -1298,13 +1300,19 @@ func (a *App) viewDetailActions(c *myui.Context, s *store.Skill, busy bool) {
 		switch s.State {
 		case store.StateEnabled:
 			// 检查更新：预览上游差异，弹出评审面板（不直接改盘）。
-			ub := myui.PrimaryButton(c, "").Label(locales.UiDetailCheckLabel()).Disabled(a.hasCheckTarget())
-			ub.Children(func() {
-				myui.Icon(c, iconUpdate)
-				myui.Text(c, locales.UiActionCheckUpdate())
-			})
-			if ub.Clicked() {
-				a.CheckAsync(s.Name)
+			if a.checkingAll || a.checking == s.Name {
+				if myui.Button(c, locales.UiActionCancelCheck()).Clicked() {
+					a.CancelCheck()
+				}
+			} else {
+				ub := myui.PrimaryButton(c, "").Label(locales.UiDetailCheckLabel()).Disabled(a.hasCheckTarget())
+				ub.Children(func() {
+					myui.Icon(c, iconUpdate)
+					myui.Text(c, locales.UiActionCheckUpdate())
+				})
+				if ub.Clicked() {
+					a.CheckAsync(s.Name)
+				}
 			}
 			if myui.Button(c, locales.UiMenuDisable()).Clicked() {
 				a.ToggleAsync(s.Name, false)
@@ -1388,7 +1396,7 @@ func (a *App) viewReviewModal(c *myui.Context) {
 				if len(r.entries) == 0 {
 					myui.Text(c, locales.UiReviewNothingToCheck()).TextColor(t.TextMuted)
 				}
-				myui.Scroll(c).Grow(1).Height(340).Children(func() {
+				smoothScroll(myui.Scroll(c)).Grow(1).Height(340).Children(func() {
 					myui.Column(c).FillWidth().Gap(10).Children(func() {
 						for _, e := range r.entries {
 							a.viewReviewEntry(c, e)
@@ -1425,7 +1433,7 @@ func (a *App) viewReviewModal(c *myui.Context) {
 					}
 					myui.Text(c, msg).TextColor(t.Warning)
 				}
-				myui.Scroll(c).Grow(1).Height(320).Children(func() {
+				smoothScroll(myui.Scroll(c)).Grow(1).Height(320).Children(func() {
 					myui.Column(c).FillWidth().Gap(2).Children(func() {
 						for _, f := range p.Files {
 							a.viewDiffRow(c, f)

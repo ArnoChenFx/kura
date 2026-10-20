@@ -281,6 +281,46 @@ func TestMarketInstallStaleRootDropsSelection(t *testing.T) {
 	}
 }
 
+// TestMarketInstallReportsPhases 验证阶段通过发布队列显示，切换目录后不会覆盖新目录状态。
+func TestMarketInstallReportsPhases(t *testing.T) {
+	for _, stale := range []bool{false, true} {
+		name := "current-root"
+		if stale {
+			name = "changed-root"
+		}
+		t.Run(name, func(t *testing.T) {
+			a, _, _ := installMarketApp(t)
+			seedMarketRepo(t, "owner/phases", "skills/tdd")
+			a.flush()
+			a.InstallMarketSkillAsync(market.Skill{Source: "owner/phases", Name: "tdd"})
+			pending := a.pending
+			a.pending = nil
+			if len(pending) != 6 {
+				t.Fatalf("下载、解析、下载正文、核对内容、写入与完成应分别发布：%d", len(pending))
+			}
+			if stale {
+				a.gen++
+				a.status = "new-root-status"
+			}
+			want := []store.InstallPhase{store.InstallDownload, store.InstallInspect, store.InstallDownload, store.InstallInspect, store.InstallWrite}
+			for i, phase := range want {
+				pending[i]()
+				if stale {
+					if a.status != "new-root-status" {
+						t.Fatalf("旧目录阶段不应覆盖状态：%q", a.status)
+					}
+				} else if a.status != installPhaseLabel(phase) || a.market.installing == "" || a.statusErr {
+					t.Fatalf("阶段 %s 应保持安装中并显示对应文案：status=%q installing=%q", phase, a.status, a.market.installing)
+				}
+			}
+			pending[len(pending)-1]()
+			if a.market.installing != "" {
+				t.Fatal("完成后应解除安装状态")
+			}
+		})
+	}
+}
+
 // TestMarketDetailLoadsDocumentOnce 验证详情页读快照：第一次打开读一次，之后用缓存；
 // 描述、文件与 SKILL.md 原文都记下来。
 func TestMarketDetailLoadsDocumentOnce(t *testing.T) {
@@ -575,6 +615,11 @@ func TestRenderMarketShot(t *testing.T) {
 	tt.SetDark(false)
 	saveFrame(t, tt, filepath.Join(out, "market-grid-narrow.png"))
 	tt.SetSize(1140, 760)
+	typeMarketSearch(t, a, tt, "best-practices")
+	saveFrame(t, tt, filepath.Join(out, "market-search.png"))
+	typeMarketSearch(t, a, tt, "not-in-loaded-skills")
+	saveFrame(t, tt, filepath.Join(out, "market-search-empty.png"))
+	click(t, a, tt, locales.UiSearchClear())
 
 	click(t, a, tt, locales.UiViewList())
 	saveFrame(t, tt, filepath.Join(out, "market-list.png"))

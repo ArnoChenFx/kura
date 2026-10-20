@@ -42,8 +42,10 @@ type installState struct {
 	local   string // 本地技能文件夹
 	name    string // 安装后的名字（可选）
 	busy    bool   // 正在安装
-	picking bool   // 正在选择本地文件夹
-	err     string // 上一次安装失败的原因（批量安装时是逐项失败的明细）
+	phase   store.InstallPhase
+	task    *installTask // 每次任务单独分配，阻止延迟阶段覆盖后续任务
+	picking bool         // 正在选择本地文件夹
+	err     string       // 上一次安装失败的原因（批量安装时是逐项失败的明细）
 	// cands 是多候选仓库里待选的技能（相对仓库根的 slash 路径，已排序，
 	// 默认全不选）。由安装时的自动发现填入：用户只给了 owner/repo 且仓库
 	// 里有多个技能时弹窗保持打开、列出候选；勾选后点主按钮一次装完
@@ -54,6 +56,46 @@ type installState struct {
 	// 仓库或分支后旧候选必须失效（见 candsLive），否则会拿旧仓库的路径
 	// 去装新仓库，界面上的列表与实际目标脱钩。
 	candRepo, candRef string
+}
+
+type installTask struct{ gen int }
+
+func installPhaseLabel(phase store.InstallPhase) string {
+	switch phase {
+	case store.InstallDownload:
+		return locales.UiInstallPhaseDownload()
+	case store.InstallInspect:
+		return locales.UiInstallPhaseInspect()
+	case store.InstallWrite:
+		return locales.UiInstallPhaseWrite()
+	default:
+		return locales.UiStatusInstalling()
+	}
+}
+
+// beginInstallTask 只在主线程读写模型；回调捕获任务身份后异步发布阶段。
+func (a *App) beginInstallTask(phase store.InstallPhase) (*installTask, store.InstallProgress) {
+	task := &installTask{gen: a.gen}
+	a.install.task, a.install.phase = task, phase
+	a.install.busy, a.install.err = true, ""
+	a.status, a.statusErr = installPhaseLabel(phase), false
+	return task, func(next store.InstallPhase) {
+		a.publish(func() {
+			if a.install.task != task || !a.install.busy || task.gen != a.gen {
+				return
+			}
+			a.install.phase = next
+			a.status, a.statusErr = installPhaseLabel(next), false
+		})
+	}
+}
+
+func (a *App) finishInstallTask(task *installTask) bool {
+	if a.install.task != task {
+		return false
+	}
+	a.install.busy, a.install.phase, a.install.task = false, "", nil
+	return task.gen == a.gen
 }
 
 // OpenInstall 打开安装弹窗；保留上次填写的内容，清掉旧的错误。
@@ -285,14 +327,19 @@ func (a *App) InstallAsync() {
 // 用户中途切换目录后，旧结果不再覆盖新目录的列表（见 reload）。
 func startInstall(a *App, opts *store.AddOptions) {
 	s := &a.install
-	s.busy, s.err = true, ""
+	phase := store.InstallDownload
+	if opts.LocalPath != "" {
+		phase = store.InstallInspect
+	}
+	task, progress := a.beginInstallTask(phase)
 	cfg, gen := a.cfg, a.gen
-	a.status, a.statusErr = locales.UiStatusInstalling(), false
 	a.spawn(func() {
-		res, err := cfg.Add(opts)
+		res, err := cfg.AddWithProgress(opts, progress)
 		skills, scanErr := cfg.ScanAll()
 		a.publish(func() {
-			s.busy = false
+			if !a.finishInstallTask(task) {
+				return
+			}
 			if err != nil {
 				// 多候选：弹窗保持打开，列出候选让用户挑；其余错误只报原因。
 				var ce *store.CandidatesError
@@ -352,14 +399,15 @@ func (a *App) InstallSelectedAsync() {
 	if v := strings.Trim(strings.TrimSpace(s.ref), "/"); v != "" {
 		ref = v
 	}
-	s.busy, s.err = true, ""
+	task, progress := a.beginInstallTask(store.InstallDownload)
 	cfg, gen := a.cfg, a.gen
-	a.status, a.statusErr = locales.UiStatusInstalling(), false
 	a.spawn(func() {
-		results := cfg.AddMany(repo, ref, specs)
+		results := cfg.AddManyWithProgress(repo, ref, specs, progress)
 		skills, scanErr := cfg.ScanAll()
 		a.publish(func() {
-			s.busy = false
+			if !a.finishInstallTask(task) {
+				return
+			}
 			var okCount, failCount int
 			var lastID string
 			var failed []string
@@ -422,14 +470,12 @@ func (a *App) DiscoverInstallCandidatesAsync() {
 	// 发现只读，不落盘，clone 与清理复用 resolveGitHub 的路径。
 	opts := s.installOptions()
 	repo, ref := opts.Repo, opts.Ref
-	cfg, gen := a.cfg, a.gen
-	s.busy, s.err = true, ""
-	a.status, a.statusErr = locales.UiStatusDiscovering(), false
+	cfg := a.cfg
+	task, progress := a.beginInstallTask(store.InstallDownload)
 	a.spawn(func() {
-		cands, err := cfg.DiscoverRepoSkills(repo, ref)
+		cands, err := cfg.DiscoverRepoSkillsWithProgress(repo, ref, progress)
 		a.publish(func() {
-			s.busy = false
-			if gen != a.gen {
+			if !a.finishInstallTask(task) {
 				return // 用户已切换目录，丢弃过期结果
 			}
 			// 这次发现只对「发起时的表单」有效：期间用户改了仓库或分支，结果整份
@@ -568,7 +614,7 @@ func (a *App) viewInstallModal(c *myui.Context) {
 			myui.Row(c).FillWidth().Gap(t.Space(2)).AlignItems(myui.Center).Children(func() {
 				if s.busy {
 					myui.Spinner(c)
-					myui.Text(c, locales.UiStatusInstalling()).TextColor(t.TextMuted)
+					myui.Text(c, installPhaseLabel(s.phase)).TextColor(t.TextMuted)
 				}
 				myui.Spacer(c)
 				if myui.Button(c, locales.UiCommonCancel()).Disabled(s.busy).Clicked() {
@@ -608,7 +654,7 @@ func (a *App) viewInstallCandidates(c *myui.Context) {
 				c.Invalidate()
 			}
 		})
-		myui.Scroll(c).FillWidth().Height(float32(rows) * t.Space(5)).Children(func() {
+		smoothScroll(myui.Scroll(c).Key("install-candidates")).FillWidth().Height(float32(rows) * t.Space(5)).Children(func() {
 			myui.Column(c).FillWidth().Gap(t.Space(0.5)).Children(func() {
 				for i := range s.cands {
 					// 直接绑应用状态（a.install.cands[i].on）：复选框的输入

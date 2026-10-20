@@ -545,9 +545,9 @@ func TestHeaderCountsAndDetailOnSelect(t *testing.T) {
 	a.settle()
 	tt.Frame()
 
-	// 头部：完整路径；筛选栏：全部 2（启用 1 + 停用 1）、回收站 0。
-	if !tt.HasText(cfg.Root) {
-		t.Errorf("头部应显示目录路径，文本 %v", tt.Texts())
+	// 紧凑头部：目录名称，完整路径在悬停提示；筛选栏仍显示各状态数量。
+	if countText(tt, rootLabel(cfg.Root)) != 3 {
+		t.Errorf("侧栏与头部应显示当前目录名称，文本 %v", tt.Texts())
 	}
 	for _, want := range []string{"全部 2", "启用 1", "停用 1", "回收站 0"} {
 		if _, ok := tt.Find(want); !ok {

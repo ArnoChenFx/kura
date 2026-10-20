@@ -51,7 +51,12 @@ var ErrGitTimeout = i18n.NewError("storeErrGitTimeout", func() string { return l
 // gitOutput 在 dir 下执行 git（dir 为空时用当前目录），stdin 非空时作为标准
 // 输入，返回原样的 stdout。失败时错误里带上 stderr；超时返回 ErrGitTimeout。
 func gitOutput(timeout time.Duration, dir, stdin string, args ...string) (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	return gitOutputContext(context.Background(), timeout, dir, stdin, args...)
+}
+
+// gitOutputContext 允许只读检查中止正在运行的 git；原有入口仍保留独立超时。
+func gitOutputContext(parent context.Context, timeout time.Duration, dir, stdin string, args ...string) (string, error) {
+	ctx, cancel := context.WithTimeout(parent, timeout)
 	defer cancel()
 	// gitCommandContext 是各平台启动 git 的唯一入口（Windows 上负责不弹黑窗）。
 	cmd := gitCommandContext(ctx, append(append([]string{}, stallArgs...), args...)...)
@@ -67,6 +72,9 @@ func gitOutput(timeout time.Duration, dir, stdin string, args ...string) (string
 	var stderr strings.Builder
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
+	if parent.Err() != nil {
+		return "", parent.Err()
+	}
 	if ctx.Err() == context.DeadlineExceeded {
 		return "", sentinelErr(ErrGitTimeout, "storeErrGitTimeoutAfter", func() string { return locales.StoreErrGitTimeoutAfter(gitVerb(args), timeout.String()) })
 	}
@@ -79,7 +87,11 @@ func gitOutput(timeout time.Duration, dir, stdin string, args ...string) (string
 
 // runGit 同 gitOutput，但不带标准输入，并去掉 stdout 的首尾空白。
 func runGit(timeout time.Duration, dir string, args ...string) (string, error) {
-	out, err := gitOutput(timeout, dir, "", args...)
+	return runGitContext(context.Background(), timeout, dir, args...)
+}
+
+func runGitContext(ctx context.Context, timeout time.Duration, dir string, args ...string) (string, error) {
+	out, err := gitOutputContext(ctx, timeout, dir, "", args...)
 	return strings.TrimSpace(out), err
 }
 
@@ -114,6 +126,10 @@ func newRepoKey(url, ref string) repoKey {
 // ref 为空时取远端默认分支（HEAD）。ref 同时是分支和标签时与 git clone
 // --branch 一致，分支优先；附注标签取剥离后的 commit。
 func remoteHead(url, ref string) (string, error) {
+	return remoteHeadContext(context.Background(), url, ref)
+}
+
+func remoteHeadContext(ctx context.Context, url, ref string) (string, error) {
 	args := []string{"ls-remote", url}
 	if ref == "" {
 		args = append(args, "HEAD")
@@ -121,7 +137,7 @@ func remoteHead(url, ref string) (string, error) {
 		// 附注标签的剥离行是 refs/tags/<ref>^{}，要单独列出模式才会输出。
 		args = append(args, ref, ref+"^{}")
 	}
-	out, err := runGit(lsRemoteTimeout, "", args...)
+	out, err := runGitContext(ctx, lsRemoteTimeout, "", args...)
 	if err != nil {
 		return "", err
 	}
@@ -152,11 +168,19 @@ func remoteHead(url, ref string) (string, error) {
 type upstream struct {
 	dir    string // clone 所在临时目录（仓库根）
 	Commit string // clone 到的 commit
+	ctx    context.Context
 }
 
 // cloneUpstream 浅 clone url（可选 ref）到临时目录：只取 commit 与树，
 // 不取文件内容、不检出工作区。失败时不留下临时目录。
 func cloneUpstream(url, ref string) (*upstream, error) {
+	return cloneUpstreamContext(context.Background(), url, ref)
+}
+
+func cloneUpstreamContext(ctx context.Context, url, ref string) (*upstream, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if cloneHook != nil {
 		cloneHook(url)
 	}
@@ -169,12 +193,12 @@ func cloneUpstream(url, ref string) (*upstream, error) {
 		args = append(args, "--branch", ref)
 	}
 	args = append(args, url, tmp)
-	if _, err := runGit(cloneTimeout, "", args...); err != nil {
+	if _, err := runGitContext(ctx, cloneTimeout, "", args...); err != nil {
 		os.RemoveAll(tmp)
 		return nil, err
 	}
-	u := &upstream{dir: tmp}
-	if u.Commit, err = runGit(lsRemoteTimeout, tmp, "rev-parse", "HEAD"); err != nil {
+	u := &upstream{dir: tmp, ctx: ctx}
+	if u.Commit, err = runGitContext(ctx, lsRemoteTimeout, tmp, "rev-parse", "HEAD"); err != nil {
 		u.Close()
 		return nil, err
 	}
@@ -220,7 +244,7 @@ func (u *upstream) Trees(subPaths []string) (map[string]treeResult, error) {
 	}
 	// cat-file --batch-check 每行输入一个对象说明，输出「<sha> <类型> <大小>」，
 	// 对象不存在时输出「<说明> missing」。树对象在部分 clone 里都在本地。
-	out, err := gitOutput(lsRemoteTimeout, u.dir, strings.Join(specs, "\n")+"\n", "cat-file", "--batch-check")
+	out, err := gitOutputContext(u.context(), lsRemoteTimeout, u.dir, strings.Join(specs, "\n")+"\n", "cat-file", "--batch-check")
 	if err != nil {
 		return nil, err
 	}
@@ -281,6 +305,9 @@ func (u *upstream) CheckoutDiscovery() error { return u.applySparse(discoverySpa
 // 关闭稀疏检出不能只改配置（跳过标记会留在索引里），要整个仓库就写 /*。
 // 显式关掉 cone 模式：这里写的是逐条路径，不是 cone 的目录集合。
 func (u *upstream) applySparse(patterns string) error {
+	if err := u.context().Err(); err != nil {
+		return err
+	}
 	info := filepath.Join(u.dir, ".git", "info")
 	if err := os.MkdirAll(info, 0o755); err != nil {
 		return i18n.Wrapf(err, "storeErrSparseCheckout", func() string { return locales.StoreErrSparseCheckout() })
@@ -289,12 +316,20 @@ func (u *upstream) applySparse(patterns string) error {
 		return i18n.Wrapf(err, "storeErrSparseCheckout", func() string { return locales.StoreErrSparseCheckout() })
 	}
 	for _, kv := range [][2]string{{"core.sparseCheckout", "true"}, {"core.sparseCheckoutCone", "false"}} {
-		if _, err := runGit(lsRemoteTimeout, u.dir, "config", kv[0], kv[1]); err != nil {
+		if _, err := runGitContext(u.context(), lsRemoteTimeout, u.dir, "config", kv[0], kv[1]); err != nil {
 			return err
 		}
 	}
-	_, err := runGit(checkoutTimeout, u.dir, "read-tree", "-mu", "HEAD")
+	_, err := runGitContext(u.context(), checkoutTimeout, u.dir, "read-tree", "-mu", "HEAD")
 	return err
+}
+
+// context 兼容测试里直接构造的 upstream 零值。
+func (u *upstream) context() context.Context {
+	if u.ctx != nil {
+		return u.ctx
+	}
+	return context.Background()
 }
 
 // Dir 返回检出后 subPath 在本机的目录。

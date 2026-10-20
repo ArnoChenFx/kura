@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"io"
@@ -17,8 +18,16 @@ import (
 // 空目录返回有意义的哈希（仍可稳定复现）。
 // 返回值形如 "sha256:hex"，与 REQUIREMENTS.md 的 contentHash 格式一致。
 func HashDir(dir string) (string, error) {
+	return hashDirContext(context.Background(), dir)
+}
+
+// hashDirContext 让只读检查能在目录项与文件之间响应取消。
+func hashDirContext(ctx context.Context, dir string) (string, error) {
 	var paths []string
 	err := filepath.WalkDir(dir, func(p string, d os.DirEntry, err error) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if err != nil {
 			return err
 		}
@@ -42,6 +51,9 @@ func HashDir(dir string) (string, error) {
 	sort.Strings(paths)
 	h := sha256.New()
 	for _, rel := range paths {
+		if err := ctx.Err(); err != nil {
+			return "", err
+		}
 		io.WriteString(h, rel)
 		h.Write([]byte{0})
 		data, err := os.ReadFile(filepath.Join(dir, rel))

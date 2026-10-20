@@ -16,6 +16,25 @@ const (
 	SourceGitHub = "github"
 )
 
+// InstallPhase 是真实执行阶段，不代表百分比；下载可能在技能发现后再次发生。
+type InstallPhase string
+
+const (
+	InstallDownload InstallPhase = "download"
+	InstallInspect  InstallPhase = "inspect"
+	InstallWrite    InstallPhase = "write"
+)
+
+// InstallProgress 在调用方所在的执行线程同步通知，UI 必须发布回主线程。
+// 回调只报告阶段，不能中断安装写入。
+type InstallProgress func(InstallPhase)
+
+func (p InstallProgress) report(phase InstallPhase) {
+	if p != nil {
+		p(phase)
+	}
+}
+
 // AddOptions 是 Add 的来源描述：LocalPath 与 Repo 二选一。
 type AddOptions struct {
 	// LocalPath 是本地技能目录（内含 SKILL.md 的目录本身）。
@@ -57,6 +76,11 @@ func (o *AddOptions) validate() error {
 // Add 把一个技能安装进根目录：从本地目录或 GitHub 仓库。安装时会写入
 // .kura-meta.json（记录来源、安装时间与内容哈希）。已存在同名技能时报错。
 func (c *Config) Add(opts *AddOptions) (*Result, error) {
+	return c.AddWithProgress(opts, nil)
+}
+
+// AddWithProgress 保留 Add 的安装语义，并在下载、解析与落盘前报告阶段。
+func (c *Config) AddWithProgress(opts *AddOptions, progress InstallProgress) (*Result, error) {
 	if opts == nil {
 		return nil, i18n.NewError("storeErrAddOptionsNil", func() string { return locales.StoreErrAddOptionsNil() })
 	}
@@ -71,11 +95,13 @@ func (c *Config) Add(opts *AddOptions) (*Result, error) {
 	var err error
 	name := opts.Name
 	if opts.LocalPath != "" {
+		progress.report(InstallInspect)
 		srcDir, src, err = c.resolveLocal(opts)
 		if err != nil {
 			return nil, err
 		}
 	} else {
+		progress.report(InstallDownload)
 		var u *upstream
 		u, src, err = c.resolveGitHub(opts)
 		if err != nil {
@@ -83,6 +109,7 @@ func (c *Config) Add(opts *AddOptions) (*Result, error) {
 		}
 		defer u.Close()
 		srcDir = u.Dir(src.SubPath)
+		progress.report(InstallInspect)
 		// GitHub 来源且未显式指定子目录：先发现仓库内的技能再决定装什么。
 		// 显式给了 SubPath 时跳过（用户指定的子目录一律照装，不自作主张）。
 		if opts.SubPath == "" {
@@ -93,9 +120,11 @@ func (c *Config) Add(opts *AddOptions) (*Result, error) {
 			srcDir = dir
 			src.SubPath = sub
 			// 选定技能后才检出它的文件，并记下子目录树哈希。
+			progress.report(InstallDownload)
 			if err := c.checkoutSkill(u, &src); err != nil {
 				return nil, err
 			}
+			progress.report(InstallInspect)
 		}
 		// 仓库根本身是技能（自动发现出来，或用户显式写 "."，resolveGitHub 已把
 		// 它归一化成空串）：临时目录名是随机的（kura-upstream-NNN），不能当
@@ -105,7 +134,7 @@ func (c *Config) Add(opts *AddOptions) (*Result, error) {
 			name = repoName(opts.Repo)
 		}
 	}
-	return c.installDir(srcDir, src, name)
+	return c.installDir(srcDir, src, name, progress)
 }
 
 // discoverForAdd 在 clone 好的仓库 tmp 里决定要安装的技能目录，返回
@@ -207,7 +236,7 @@ func (c *Config) checkoutSkill(u *upstream, src *Source) error {
 // 技能名优先用 nameOverride（AddOptions.Name，UI 的「安装名称」/CLI 的
 // --name），否则取技能自己声明的名字（见 skillDirName）；重名或名字
 // 非法时报错。元数据里的来源始终是真实来源（srcDir/src），与改名无关。
-func (c *Config) installDir(srcDir string, src Source, nameOverride string) (*Result, error) {
+func (c *Config) installDir(srcDir string, src Source, nameOverride string, progress InstallProgress) (*Result, error) {
 	name := nameOverride
 	if name == "" {
 		name = skillDirName(srcDir, filepath.Base(srcDir))
@@ -224,6 +253,7 @@ func (c *Config) installDir(srcDir string, src Source, nameOverride string) (*Re
 	}
 	// GitHub 来源的仓库根技能目录里带着 clone 的 .git，不能装进技能根目录，
 	// 复制时就跳过它。
+	progress.report(InstallWrite)
 	if err := copyTree(srcDir, dst, src.Type == SourceGitHub); err != nil {
 		return nil, i18n.Wrapf(err, "storeErrInstallSkill", func() string { return locales.StoreErrInstallSkill(name) })
 	}
@@ -356,6 +386,11 @@ type AddResult struct {
 // 错误文案都不变；AddMany 只做批量，要求调用方给出明确的子目录列表，
 // 不做自动发现，也不会返回 *CandidatesError。
 func (c *Config) AddMany(repo, ref string, specs []AddSpec) []AddResult {
+	return c.AddManyWithProgress(repo, ref, specs, nil)
+}
+
+// AddManyWithProgress 共用一次下载，阶段回调不改变逐项安装与失败隔离语义。
+func (c *Config) AddManyWithProgress(repo, ref string, specs []AddSpec, progress InstallProgress) []AddResult {
 	out := make([]AddResult, len(specs))
 	for i, spec := range specs {
 		out[i].SubPath = spec.SubPath
@@ -390,6 +425,7 @@ func (c *Config) AddMany(repo, ref string, specs []AddSpec) []AddResult {
 		return out
 	}
 	url := githubURL(repo)
+	progress.report(InstallDownload)
 	u, err := cloneUpstream(url, ref)
 	if err != nil {
 		failItems(out, items, err)
@@ -420,6 +456,7 @@ func (c *Config) AddMany(repo, ref string, specs []AddSpec) []AddResult {
 		return out
 	}
 	for _, it := range todo {
+		progress.report(InstallInspect)
 		src := Source{
 			Type: SourceGitHub, URL: url, Ref: ref, SubPath: it.sub,
 			Commit: u.Commit, Tree: trees[it.sub].Tree,
@@ -432,7 +469,7 @@ func (c *Config) AddMany(repo, ref string, specs []AddSpec) []AddResult {
 				name = repoName(repo)
 			}
 		}
-		res, err := c.installDir(u.Dir(it.sub), src, name)
+		res, err := c.installDir(u.Dir(it.sub), src, name, progress)
 		if err != nil {
 			out[it.index].Err = i18n.Wrapf(err, "storeErrInstallSkill", func() string { return locales.StoreErrInstallSkill(subLabel(it.sub)) })
 			continue

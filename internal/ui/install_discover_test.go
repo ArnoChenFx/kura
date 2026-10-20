@@ -340,7 +340,7 @@ func TestInstallSelectedShowsBusyWhileInstalling(t *testing.T) {
 	if !a.install.busy || a.install.canInstall() {
 		t.Errorf("安装期间应处于忙碌且主按钮不可用：busy=%v canInstall=%v", a.install.busy, a.install.canInstall())
 	}
-	if a.status != "正在安装…" || !tt.HasText("正在安装…") {
+	if a.status != "正在下载技能文件…" || !tt.HasText("正在下载技能文件…") {
 		t.Errorf("安装期间应显示进行中的文案：status=%q 文本 %v", a.status, tt.Texts())
 	}
 	if len(held) != 1 {

@@ -61,3 +61,35 @@ func countMotion(c *myui.Context, e myui.Element) {
 		e.ContentTransition(myui.ContentTransition{Numeric: true, Animation: &contentMotion})
 	}
 }
+
+// segmentMatch 按轨道身份隔离指示条，避免筛选、外观和排列开关互相串动。
+type segmentMatch struct{ track uint64 }
+
+// segmentIndicator 沿选中分段的底边滑动，不参与布局或命中测试，也不会盖住
+// 相邻分段的文字。位置交给 MyGo 匹配上一帧的指示条，不保存短命的元素。
+func segmentIndicator(c *myui.Context, track uint64, selected bool) {
+	if !selected {
+		return
+	}
+	marker := myui.Box(c.Key("segment-indicator")).Absolute().
+		Left(6).Right(6).Bottom(0).Height(2).Radius(1).
+		Background(c.Theme().Accent.Alpha(0.65)).PassThrough()
+	if !c.Preferences().ReduceMotion {
+		marker.Transition(myui.ElementTransition{
+			Animation: &interactionMotion,
+			Match:     segmentMatch{track},
+		})
+	}
+}
+
+// detailMotion 从右侧短距离进入，与详情栏的空间位置一致；不改变三栏宽度，
+// 拖动分割线仍然跟手，关闭详情也不保留会遮挡内容的退出残影。
+func detailMotion(c *myui.Context, panel myui.Element) {
+	if !c.Preferences().ReduceMotion {
+		panel.Transition(myui.ElementTransition{
+			Animation: &contentMotion,
+			Colors:    true,
+			Enter:     &myui.Motion{X: 16},
+		})
+	}
+}
