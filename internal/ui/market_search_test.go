@@ -190,19 +190,14 @@ func TestMarketSearchAndBoardSwitchInterruptWheelGlide(t *testing.T) {
 					}
 					f.set(market.ViewAllTime, 0, okPage(false, skills...))
 					f.set(market.ViewHot, 0, okPage(false, hot...))
-					var wheel *wheelScroll
+					var viewport myui.Rect
 					tt := myui.NewTester(func(c *myui.Context) {
 						a.View(c)
-						if a.market.screen != marketList {
-							return
-						}
 						handle := a.market.list.Handle
 						if mode == store.ViewGrid {
 							handle = a.market.grid.Handle
 						}
-						if e := c.Resolve(handle); e.Valid() {
-							wheel = myui.Local(e, "kura-wheel-scroll", func() wheelScroll { return wheelScroll{} })
-						}
+						viewport = handle.Bounds(c)
 					}, 980, 640)
 					tt.SetPreferences(myui.Preferences{ReduceMotion: false})
 					refresh(a, tt)
@@ -221,15 +216,23 @@ func TestMarketSearchAndBoardSwitchInterruptWheelGlide(t *testing.T) {
 					if !ok {
 						t.Fatal("前置条件：总榜应从首项开始")
 					}
-					tt.Scroll(first.X+first.W/2, first.Y+first.H/2, 0, 2000)
+					// 在滚动区右侧留白处滚动，避免卡片自身的悬停抬升干扰位置断言。
+					if viewport.W <= 0 || viewport.H <= 0 {
+						t.Fatal("前置条件：榜单滚动区必须可见")
+					}
+					tt.Wheel(viewport.X+viewport.W-4, viewport.Y+viewport.H/2, 0, 100)
 					if delay > 0 {
 						tt.Advance(delay)
 					}
-					if wheel == nil || !wheel.scroll.Scrolling() {
+					if !tt.FramePending() {
 						t.Fatal("前置条件：必须在真实滚轮动画未完成时操作")
 					}
-					if delay > 0 && (wheel.scroll.Y <= 0 || wheel.scroll.Y >= wheel.target) {
-						t.Fatalf("前置条件：应处于滚动中间帧：y=%g target=%g", wheel.scroll.Y, wheel.target)
+					if delay > 0 {
+						moving, found := tt.Find("skill-000")
+						distance := first.Y - moving.Y
+						if !found || distance <= 0 || distance >= 100 {
+							t.Fatalf("前置条件：应处于滚动中间帧：found=%v distance=%g", found, distance)
+						}
 					}
 
 					wantName, wantY := "skill-000", first.Y
@@ -251,9 +254,6 @@ func TestMarketSearchAndBoardSwitchInterruptWheelGlide(t *testing.T) {
 					checkTop("操作后立即")
 					tt.Advance(200 * time.Millisecond)
 					checkTop("旧动画原定结束后")
-					if wheel.scroll.Scrolling() {
-						t.Fatal("重置位置后不应留下旧滚轮动画")
-					}
 				})
 			}
 		}

@@ -93,14 +93,13 @@ type marketDoc struct {
 
 // marketState 是技能市场的状态。
 type marketState struct {
-	screen      marketScreen
-	view        int                          // 分段下标，指向 marketViews
-	boards      map[market.View]*marketBoard // 每个榜单各自读到的内容
-	list        myui.ListState               // 列表页虚拟列表的位置（只在 UI 线程读写）
-	grid        myui.ListState               // 卡片网格的虚拟行位置（与列表分开记）
-	scrollReset uint64                       // 显式跳转时同时取消尚未完成的滚轮动画
-	query       string                       // 各榜单共用搜索词；不会传给远端接口
-	search      string                       // 上一次构建已应用的搜索词，用于重置滚动位置
+	screen marketScreen
+	view   int                          // 分段下标，指向 marketViews
+	boards map[market.View]*marketBoard // 每个榜单各自读到的内容
+	list   myui.ListState               // 列表页虚拟列表的位置（只在 UI 线程读写）
+	grid   myui.ListState               // 卡片网格的虚拟行位置（与列表分开记）
+	query  string                       // 各榜单共用搜索词；不会传给远端接口
+	search string                       // 上一次构建已应用的搜索词，用于重置滚动位置
 	// installing 是正在安装的技能（marketKey），空为无；同一时间只装一个。
 	installing string
 	err        string // 最近一次安装失败的原因（列表页底部）
@@ -110,7 +109,6 @@ type marketState struct {
 
 // resetScroll 让新的榜单或搜索结果从顶部开始，两种排列保持一致。
 func (m *marketState) resetScroll() {
-	m.scrollReset++
 	m.list.ScrollTo(0, myui.Start)
 	m.grid.ScrollTo(0, myui.Start)
 }
@@ -433,7 +431,7 @@ func (a *App) viewMarketList(c *myui.Context) {
 		myui.Row(c).FillWidth().Padding(0, pad).Gap(t.Space(2)).AlignItems(myui.Center).Children(func() {
 			a.viewMarketStatus(c)
 			if b.loading && b.loaded {
-				myui.Spinner(c)
+				loadingIndicator(c, locales.UiMarketLoading())
 			}
 			if b.loaded && b.hasMore {
 				more := myui.Button(c, locales.UiMarketLoadMore()).Disabled(b.loading)
@@ -479,7 +477,7 @@ func (a *App) viewMarketBoard(c *myui.Context, v market.View, b *marketBoard) {
 		})
 	case b.err == "":
 		myui.Row(c).Grow(1).Basis(0).MinHeight(0).FillWidth().Gap(t.Space(2)).AlignItems(myui.Center).Justify(myui.Center).Children(func() {
-			myui.Spinner(c)
+			loadingIndicator(c, locales.UiMarketLoading())
 			myui.Text(c, locales.UiMarketLoading()).TextColor(t.TextMuted)
 		})
 	}
@@ -538,7 +536,7 @@ func (a *App) viewMarketDetail(c *myui.Context) {
 		myui.Row(c).FillWidth().Padding(0, pad).AlignItems(myui.Center).Children(func() {
 			marketBackButton(c, locales.UiMarketBackToBoard(), a.CloseMarketDetail)
 		})
-		smoothScroll(myui.Scroll(c.Key("market-detail-scroll")).Grow(1).MinHeight(0).FillWidth().Children(func() {
+		myui.Scroll(c.Key("market-detail-scroll")).Grow(1).MinHeight(0).FillWidth().Children(func() {
 			myui.Column(c).FillWidth().Padding(0, pad, t.Space(4)).Gap(t.Space(4)).Children(func() {
 				a.viewMarketDetailHead(c, sk)
 				a.viewTranslateBar(c)
@@ -571,7 +569,7 @@ func (a *App) viewMarketDetail(c *myui.Context) {
 				myui.Divider(c)
 				a.viewMarketDoc(c, sk, d)
 			})
-		}))
+		})
 		myui.Row(c).FillWidth().Padding(0, pad).AlignItems(myui.Center).Children(func() {
 			a.viewMarketStatus(c)
 		})
@@ -604,7 +602,7 @@ func (a *App) marketInstallAction(c *myui.Context, sk market.Skill, installed, p
 	case installed:
 		pill(c, locales.UiMarketInstalled(), t.Success)
 	case m.installing == marketKey(sk):
-		myui.Spinner(c)
+		loadingIndicator(c, locales.UiMarketInstalling(sk.Name))
 	default:
 		var button myui.Element
 		if primary {
@@ -637,7 +635,7 @@ func (a *App) viewMarketDoc(c *myui.Context, sk market.Skill, d *marketDoc) {
 		a.viewMarketError(c, locales.UiMarketDocFailed(d.err), func() { a.loadMarketDocAsync(sk) })
 	default:
 		myui.Row(c).FillWidth().Gap(t.Space(2)).AlignItems(myui.Center).Children(func() {
-			myui.Spinner(c)
+			loadingIndicator(c, locales.UiMarketDocLoading())
 			myui.Text(c, locales.UiMarketDocLoading()).TextColor(t.TextMuted)
 		})
 	}
@@ -713,13 +711,13 @@ func (a *App) viewMarketItems(c *myui.Context, skills []market.Skill) {
 	}
 	installed := a.installedNames()
 	pad := marketPad(c.Theme())
-	smoothScroll(myui.List(c.Key("market-rows"), &a.market.list, len(skills)).Grow(1).MinHeight(0).
+	myui.List(c.Key("market-rows"), &a.market.list, len(skills)).Grow(1).MinHeight(0).
 		ItemKey(func(i int) any { return marketKey(skills[i]) }).Rows(func(row myui.ListRow) {
 		rc := row.Context
 		myui.Box(rc).FillWidth().Padding(rc.Theme().Space(1), pad, rc.Theme().Space(1)).Children(func() {
 			a.viewMarketRow(rc, skills[row.Index], installed)
 		})
-	}), a.market.scrollReset)
+	})
 }
 
 // viewMarketGrid 是卡片网格：每个虚拟行放 cols 张卡片，cols 随窗口宽度变。最后一行不满的
@@ -732,7 +730,7 @@ func (a *App) viewMarketGrid(c *myui.Context, skills []market.Skill) {
 	rows := (len(skills) + cols - 1) / cols
 	installed := a.installedNames()
 	pad := marketPad(t)
-	smoothScroll(myui.List(c.Key("market-grid"), &a.market.grid, rows).Grow(1).MinHeight(0).
+	myui.List(c.Key("market-grid"), &a.market.grid, rows).Grow(1).MinHeight(0).
 		ItemKey(func(r int) any { return marketKey(skills[r*cols]) }).Rows(func(row myui.ListRow) {
 		rc := row.Context
 		// 虚拟行本身没有间隔；留出垂直槽，避免相邻卡片边框相接，也容纳悬停轻抬。
@@ -747,7 +745,7 @@ func (a *App) viewMarketGrid(c *myui.Context, skills []market.Skill) {
 				}
 			})
 		})
-	}), a.market.scrollReset)
+	})
 }
 
 // viewMarketCard 是网格里的一张卡片：头像、名字与来源（点它进详情页）；底部是安装次数与安装
@@ -816,7 +814,7 @@ func (a *App) viewMarketTranslateNote(c *myui.Context, sk market.Skill, desc str
 	switch {
 	case !ok || e.pending:
 		myui.Row(c).Gap(t.Space(1.5)).AlignItems(myui.Center).Children(func() {
-			myui.Spinner(c)
+			loadingIndicator(c, locales.UiTranslateInProgress())
 			myui.Text(c, locales.UiTranslateInProgress()).FontSize(t.FontSize - 1).TextColor(t.TextMuted)
 		})
 	case e.err != "":

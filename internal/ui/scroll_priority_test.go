@@ -18,27 +18,24 @@ func TestWheelScrollYieldsToListJumpDuringGlide(t *testing.T) {
 
 func testWheelScrollListJump(t *testing.T, delay time.Duration) {
 	var list myui.ListState
-	var wheel *wheelScroll
-	var reset uint64
+	var scroll myui.ScrollState
 	tt := myui.NewTester(func(c *myui.Context) {
-		e := smoothScroll(myui.List(c.Key("list"), &list, 1000).Fill().Rows(func(row myui.ListRow) {
+		myui.List(c.Key("list"), &list, 1000).Fill().TrackScroll(&scroll).Rows(func(row myui.ListRow) {
 			myui.Text(row.Context, fmt.Sprintf("item-%d", row.Index)).Height(40)
-		}), reset)
-		wheel = myui.Local(e, "kura-wheel-scroll", func() wheelScroll { return wheelScroll{} })
+		})
 	}, 300, 200)
-	tt.Scroll(100, 100, 0, 2000)
+	tt.Wheel(100, 100, 0, 2000)
 	if delay > 0 {
 		tt.Advance(delay)
 	}
-	if !wheel.scroll.Scrolling() {
-		t.Fatalf("前置条件：滚轮应仍在动画中，y=%g moving=%v", wheel.scroll.Y, wheel.scroll.Scrolling())
+	if scroll.Y >= 2000 || (delay > 0 && scroll.Y <= 0) {
+		t.Fatalf("前置条件：应处于原生滚轮动画中，y=%g", scroll.Y)
 	}
-	reset++ // 与市场切榜单、搜索时的显式跳转契约一致。
 	list.ScrollTo(0, myui.Start)
 	tt.Frame()
 	tt.Advance(200 * time.Millisecond)
 	if row, ok := tt.Find("item-0"); !ok || math.Abs(float64(row.Y)) > 0.1 {
-		t.Fatalf("列表跳到顶部后不能被旧滚轮动画带走：first=%v found=%v y=%g", row, ok, wheel.scroll.Y)
+		t.Fatalf("列表跳到顶部后不能被旧滚轮动画带走：first=%v found=%v y=%g", row, ok, scroll.Y)
 	}
 }
 
@@ -51,9 +48,9 @@ func TestWheelScrollListKeepsPositionAfterHidden(t *testing.T) {
 			myui.Box(c.Key("other")).Fill()
 			return
 		}
-		smoothScroll(myui.List(c.Key("list"), &list, 1000).Fill().Rows(func(row myui.ListRow) {
+		myui.List(c.Key("list"), &list, 1000).Fill().Rows(func(row myui.ListRow) {
 			myui.Text(row.Context, fmt.Sprintf("item-%d", row.Index)).Height(40)
-		}))
+		})
 	}, 300, 200)
 	list.ScrollTo(500, myui.Start)
 	tt.Frame()

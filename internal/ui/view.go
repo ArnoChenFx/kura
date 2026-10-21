@@ -278,7 +278,7 @@ func (a *App) viewRoots(c *myui.Context) {
 	myui.Column(c).Width(a.rootsEff).Shrink(0).FillHeight().Background(a.pal.sidebar).Children(func() {
 		myui.Text(c, locales.UiRootsTitle()).FontSize(t.FontSize-2).FontWeight(600).TextColor(t.TextMuted).
 			Padding(t.Space(6), t.Space(5), t.Space(3), t.Space(5))
-		smoothScroll(myui.Scroll(c)).Grow(1).FillWidth().Children(func() {
+		myui.Scroll(c).Grow(1).FillWidth().Children(func() {
 			myui.Column(c).FillWidth().Padding(0, t.Space(3)).Gap(t.Space(1.5)).Children(func() {
 				for i, root := range a.lib.Roots {
 					a.rootItem(c, root, i == 0)
@@ -552,7 +552,7 @@ func (a *App) viewMainHeader(c *myui.Context) {
 			SingleLine().Tooltip(a.cfg.Root).Grow(1).Basis(120).MinWidth(0)
 		myui.Row(c).Shrink(0).Gap(t.Space(1)).AlignItems(myui.Center).Children(func() {
 			if a.scanning {
-				myui.Spinner(c)
+				loadingIndicator(c, locales.UiActionRefresh())
 			}
 			ghostButton(c.Key("refresh"), iconRefresh, locales.UiActionRefresh(), a.scanning, a.ReloadAsync)
 			if a.checkingAll || a.checking != "" {
@@ -683,14 +683,14 @@ func (a *App) viewList(c *myui.Context, rows []*store.Skill) {
 		return
 	}
 	t := c.Theme()
-	smoothScroll(myui.List(c.Key("local-skills:"+a.cfg.Root), a.list, len(rows)).
+	myui.List(c.Key("local-skills:"+a.cfg.Root), a.list, len(rows)).
 		Grow(1).FillWidth().MinHeight(0).Gap(t.Space(1.5)).
 		Padding(0, t.Space(5), t.Space(3), t.Space(5)).
 		ItemKey(func(i int) any { return skillKey(rows[i]) }).
 		Rows(func(row myui.ListRow) {
 			s := rows[row.Index]
 			a.viewRow(row.Context, s, a.isSelected(s))
-		}), uint64(a.gen))
+		})
 }
 
 // viewRow 是列表里的一个技能：头像、名称与描述占主区，右侧操作固定宽度；
@@ -733,7 +733,7 @@ func (a *App) viewRow(c *myui.Context, s *store.Skill, selected bool) {
 				myui.Box(c).Width(t.Space(9)).Height(t.Space(9)).Shrink(0).Center().Children(func() {
 					switch {
 					case busy:
-						myui.Spinner(c)
+						loadingIndicator(c, locales.UiDetailBusy(s.Name))
 					case s.State == store.StateTrashed:
 						ghostButton(c, iconRestore, locales.UiActionRestore(), false, func() { a.RestoreAsync(s.Name) })
 					default:
@@ -789,11 +789,11 @@ func (a *App) viewGrid(c *myui.Context, rows []*store.Skill) {
 	// 主题，建完再切回 cell 主题：下一个单元格在这之后构建，读的是 c 此刻的
 	// 主题。
 	c.SetTheme(a.skin.cell)
-	smoothScroll(myui.GridView(c.Key("local-grid:"+a.cfg.Root), a.grid, len(rows), cardMinWidth, cardHeight, func(i int) {
+	myui.GridView(c.Key("local-grid:"+a.cfg.Root), a.grid, len(rows), cardMinWidth, cardHeight, func(i int) {
 		c.SetTheme(t)
 		a.viewCard(c, rows[i], i == a.selIdx)
 		c.SetTheme(a.skin.cell)
-	}), uint64(a.gen)).Grow(1).FillWidth().Padding(0, t.Space(4), t.Space(2), t.Space(4))
+	}).Grow(1).FillWidth().Padding(0, t.Space(4), t.Space(2), t.Space(4))
 	c.SetTheme(t)
 }
 
@@ -880,7 +880,7 @@ func (a *App) viewCard(c *myui.Context, s *store.Skill, selected bool) {
 			})
 			switch {
 			case busy:
-				myui.Spinner(c)
+				loadingIndicator(c, locales.UiDetailBusy(s.Name))
 			case s.State == store.StateTrashed:
 				ghostButton(c, iconRestore, locales.UiActionRestore(), false, func() { a.RestoreAsync(s.Name) })
 			default:
@@ -986,7 +986,7 @@ func (a *App) viewDetail(c *myui.Context, s *store.Skill) {
 	panel := myui.Column(c.Key("detail-pane")).Width(a.detailEff).Shrink(0).FillHeight().Background(a.pal.panel)
 	detailMotion(c, panel)
 	panel.Children(func() {
-		smoothScroll(myui.Scroll(c)).Grow(1).MinHeight(0).FillWidth().Children(func() {
+		myui.Scroll(c).Grow(1).MinHeight(0).FillWidth().Children(func() {
 			myui.Column(c).FillWidth().Padding(t.Space(5), t.Space(5)).Gap(t.Space(4)).Children(func() {
 				myui.Row(c).FillWidth().Gap(t.Space(3)).AlignItems(myui.Start).Children(func() {
 					avatar(c, a.pal, s.Name, t.Space(12), s.State != store.StateEnabled)
@@ -1100,7 +1100,7 @@ func (a *App) viewTranslateNote(c *myui.Context, s *store.Skill) {
 	switch {
 	case !ok || e.pending:
 		myui.Row(c).Gap(t.Space(1.5)).AlignItems(myui.Center).Children(func() {
-			myui.Spinner(c)
+			loadingIndicator(c, locales.UiTranslateInProgress())
 			myui.Text(c, locales.UiTranslateInProgress()).FontSize(t.FontSize - 1).TextColor(t.TextMuted)
 		})
 	case e.err != "":
@@ -1275,7 +1275,7 @@ func (a *App) viewDetailActions(c *myui.Context, s *store.Skill, busy bool) {
 	t := c.Theme()
 	if busy {
 		myui.Row(c).FillWidth().Gap(t.Space(2)).AlignItems(myui.Center).Children(func() {
-			myui.Spinner(c).Shrink(0)
+			loadingIndicator(c, locales.UiDetailBusy(s.Name)).Shrink(0)
 			myui.Text(c, locales.UiDetailBusy(s.Name)).Grow(1).MinWidth(0).SingleLine().TextColor(t.TextMuted)
 		})
 		return
@@ -1415,7 +1415,7 @@ func (a *App) viewReviewModal(c *myui.Context) {
 				if len(r.entries) == 0 {
 					myui.Text(c, locales.UiReviewNothingToCheck()).TextColor(t.TextMuted)
 				}
-				smoothScroll(myui.Scroll(c)).Grow(1).Height(340).Children(func() {
+				myui.Scroll(c).Grow(1).Height(340).Children(func() {
 					myui.Column(c).FillWidth().Gap(10).Children(func() {
 						for i := range r.entries {
 							a.viewReviewEntry(c.Key(r.entries[i].skill), &r.entries[i])
@@ -1457,7 +1457,7 @@ func (a *App) viewReviewModal(c *myui.Context) {
 					}
 					myui.Text(c, msg).TextColor(t.Warning)
 				}
-				smoothScroll(myui.Scroll(c)).Grow(1).Height(320).Children(func() {
+				myui.Scroll(c).Grow(1).Height(320).Children(func() {
 					myui.Column(c).FillWidth().Gap(2).Children(func() {
 						for _, f := range p.Files {
 							a.viewDiffRow(c, f)

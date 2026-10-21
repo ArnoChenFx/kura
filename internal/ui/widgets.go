@@ -6,8 +6,16 @@ import (
 	"github.com/ArnoChenFx/kura/internal/i18n"
 	"github.com/ArnoChenFx/kura/internal/store"
 	"github.com/ArnoChenFx/kura/locales"
+	"github.com/egoist/mygo/plugins/loading"
 	myui "github.com/egoist/mygo/ui"
 )
+
+// loadingIndicator 统一使用官方加载动画，保持原有主题尺寸并说明正在执行的任务。
+// 减少动效、可见性及无障碍进度语义由 loading 插件处理。
+func loadingIndicator(c *myui.Context, label string) myui.Element {
+	t := c.Theme()
+	return loading.Ring(c, loading.Options{Size: t.FontSize * 1.25, Color: t.TextMuted}).Label(label)
+}
 
 // stateText 把技能状态翻译成短标签。
 func stateText(s store.State) string {
