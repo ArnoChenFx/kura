@@ -179,7 +179,7 @@ func (a *App) viewSnapshotsModal(c *myui.Context) {
 	myui.Modal(c, &h.open, func() {
 		myui.Column(c).Width(610).Height(bodyHeight).MinHeight(0).Gap(t.Space(2)).Children(func() {
 			myui.Text(c, locales.UiSnapshotTitle(h.name)).Bold().FontSize(t.FontSize + 2).Shrink(0)
-			smoothScroll(myui.Scroll(c.Key("snapshot-list"))).Height(listHeight).MinHeight(0).FillWidth().Children(func() {
+			myui.Scroll(c.Key("snapshot-list")).Height(listHeight).MinHeight(0).FillWidth().Children(func() {
 				myui.Column(c).FillWidth().Gap(4).Children(func() {
 					if !h.loading && len(h.items) == 0 && h.err == "" {
 						myui.Text(c, locales.UiSnapshotEmpty()).TextColor(t.TextMuted)
@@ -212,7 +212,7 @@ func (a *App) viewSnapshotsModal(c *myui.Context) {
 				if h.preview.MetadataChanged {
 					myui.Text(c, locales.UiSnapshotMetadataChanged()).FontSize(t.FontSize - 1).TextColor(t.Warning)
 				}
-				smoothScroll(myui.Scroll(c.Key("snapshot-files"))).Height(filesHeight).MinHeight(0).FillWidth().Children(func() {
+				myui.Scroll(c.Key("snapshot-files")).Height(filesHeight).MinHeight(0).FillWidth().Children(func() {
 					myui.Column(c).FillWidth().Gap(3).Children(func() {
 						for _, f := range h.preview.Files {
 							label := diffStatusText(f.Status) + "  " + f.Path
@@ -231,7 +231,7 @@ func (a *App) viewSnapshotsModal(c *myui.Context) {
 			if h.file != "" {
 				myui.Text(c, h.file).SingleLine().Bold()
 			}
-			smoothScroll(myui.Scroll(c.Key("snapshot-diff"))).Grow(1).MinHeight(0).FillWidth().Children(func() {
+			myui.Scroll(c.Key("snapshot-diff")).Grow(1).MinHeight(0).FillWidth().Children(func() {
 				myui.Column(c).FillWidth().Gap(1).Selectable().Children(func() {
 					if h.fileLoading {
 						myui.Text(c, locales.UiSnapshotLoading()).TextColor(t.TextMuted)

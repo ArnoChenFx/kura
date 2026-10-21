@@ -9,93 +9,114 @@ import (
 	myui "github.com/egoist/mygo/ui"
 )
 
-// 验证真实滚轮事件经过容器的处理器，能经过中间帧抵达更小的目标，快速连滚
-// 不丢步，反向滚动立即转向，且停止后不再漂移。
+// 原生滚轮保留中间帧并累积完整步长；反向输入从累积目标扣除，停止后不漂移。
 func TestWheelScrollSmoothAccumulationAndReverse(t *testing.T) {
-	var s *wheelScroll
+	var scroll myui.ScrollState
 	tt := myui.NewTester(func(c *myui.Context) {
-		e := smoothScroll(myui.Scroll(c).Fill())
-		s = myui.Local(e, "kura-wheel-scroll", func() wheelScroll { return wheelScroll{} })
-		e.Children(func() { myui.Box(c).Height(2000).Shrink(0) })
+		myui.Scroll(c).Fill().TrackScroll(&scroll).Children(func() {
+			myui.Box(c).Height(2000).Shrink(0)
+		})
 	}, 300, 200)
-	tt.Scroll(100, 100, 0, 100)
-	if s.scroll.Y >= 45 {
-		t.Fatalf("滚轮应平滑过渡，首帧位置=%g", s.scroll.Y)
+	tt.Wheel(100, 100, 0, 100)
+	if scroll.Y >= 100 || !tt.FramePending() {
+		t.Fatalf("滚轮应平滑过渡，首帧位置=%g", scroll.Y)
 	}
 	tt.Advance(50 * time.Millisecond)
-	if s.scroll.Y <= 0 || s.scroll.Y >= 45 {
-		t.Fatalf("缺少滚动中间帧：%g", s.scroll.Y)
+	if scroll.Y <= 0 || scroll.Y >= 100 {
+		t.Fatalf("缺少滚动中间帧：%g", scroll.Y)
 	}
-	tt.Scroll(100, 100, 0, 100)
+	tt.Wheel(100, 100, 0, 100)
 	tt.Advance(200 * time.Millisecond)
-	if math.Abs(float64(s.scroll.Y-90)) > 0.1 || s.scroll.Scrolling() {
-		t.Fatalf("连续两步应累积并停在90：位置=%g, moving=%v", s.scroll.Y, s.scroll.Scrolling())
+	if math.Abs(float64(scroll.Y-200)) > 0.1 {
+		t.Fatalf("连续两步应累积到200：%g", scroll.Y)
 	}
-	tt.Scroll(100, 100, 0, 100)
+	tt.Wheel(100, 100, 0, 100)
 	tt.Advance(40 * time.Millisecond)
-	before := s.scroll.Y
-	tt.Scroll(100, 100, 0, -100)
+	before := scroll.Y
+	tt.Wheel(100, 100, 0, -100)
 	tt.Advance(200 * time.Millisecond)
-	if math.Abs(float64(s.scroll.Y-(before-45))) > 0.1 {
-		t.Fatalf("反向应从当前可见位置向上45：before=%g, after=%g", before, s.scroll.Y)
+	if before <= 200 || math.Abs(float64(scroll.Y-200)) > 0.1 {
+		t.Fatalf("反向应抵消尚未完成的同等步长：before=%g, after=%g", before, scroll.Y)
 	}
-	stop := s.scroll.Y
+	stop := scroll.Y
 	tt.Advance(time.Second)
-	if s.scroll.Y != stop {
-		t.Fatalf("停止滚动后发生漂移：%g → %g", stop, s.scroll.Y)
+	if scroll.Y != stop {
+		t.Fatalf("停止滚动后发生漂移：%g → %g", stop, scroll.Y)
 	}
 }
 
 func TestWheelScrollReducedMotionAndVirtualList(t *testing.T) {
-	var s *wheelScroll
+	var scroll myui.ScrollState
 	var list myui.ListState
 	built := 0
 	tt := myui.NewTester(func(c *myui.Context) {
 		built = 0
-		e := myui.List(c, &list, 1000).Fill().Rows(func(row myui.ListRow) {
+		myui.List(c, &list, 1000).Fill().TrackScroll(&scroll).Rows(func(row myui.ListRow) {
 			built++
 			myui.Text(row.Context, fmt.Sprintf("item-%d", row.Index)).Height(40)
 		})
-		smoothScroll(e)
-		s = myui.Local(e, "kura-wheel-scroll", func() wheelScroll { return wheelScroll{} })
 	}, 300, 200)
 	tt.SetPreferences(myui.Preferences{ReduceMotion: true})
-	tt.Scroll(100, 100, 0, 1000)
-	if math.Abs(float64(s.scroll.Y-450)) > 0.1 || s.scroll.Scrolling() {
-		t.Fatalf("减少动效时应直接滚动较小步长：%g, moving=%v", s.scroll.Y, s.scroll.Scrolling())
+	tt.Wheel(100, 100, 0, 1000)
+	if math.Abs(float64(scroll.Y-1000)) > 0.1 {
+		t.Fatalf("减少动效时应直接滚动完整步长：%g", scroll.Y)
 	}
 	if built >= 30 {
-		t.Fatalf("平滑滚动不应破坏虚拟化：构建%d行", built)
+		t.Fatalf("滚动不应破坏虚拟化：构建%d行", built)
 	}
-	if _, ok := tt.Find("item-12"); !ok {
+	if _, ok := tt.Find("item-25"); !ok {
 		t.Fatal("滚动后未构建新的可见行")
 	}
-	// 列表自身跳转仍然生效，不被 TrackScroll 的旧位置覆盖。
 	list.ScrollTo(500, myui.Start)
 	tt.Frame()
 	if _, ok := tt.Find("item-500"); !ok {
-		t.Fatal("TrackScroll 覆盖了列表的行跳转")
+		t.Fatal("原生滚动覆盖了列表的行跳转")
 	}
 }
 
-func TestWheelScrollLeavesPreciseAndBoundaryInput(t *testing.T) {
-	s := wheelScroll{scroll: myui.ScrollState{Y: 100, MaxY: 500}}
-	for _, ev := range []myui.InputEvent{
-		{Kind: myui.InputScroll, DY: 3, Precise: true},
-		{Kind: myui.InputScroll, DY: 50, Mods: myui.Shift},
-		{Kind: myui.InputScroll, DX: 50},
-		{Kind: myui.InputPointerDown},
-	} {
-		if s.input(ev) || s.scroll.Scrolling() {
-			t.Fatalf("不应拦截原生输入：%+v", ev)
-		}
+// 触控板立即接管滚轮动画，横向滚轮仍可滚动。
+func TestWheelScrollLeavesPreciseAndHorizontalInput(t *testing.T) {
+	var scroll myui.ScrollState
+	tt := myui.NewTester(func(c *myui.Context) {
+		myui.ScrollBoth(c).Fill().TrackScroll(&scroll).Children(func() {
+			myui.Box(c).Width(2000).Height(2000).Shrink(0)
+		})
+	}, 300, 200)
+	tt.Wheel(100, 100, 0, 100)
+	tt.Advance(40 * time.Millisecond)
+	before := scroll.Y
+	tt.Scroll(100, 100, 0, 3)
+	if math.Abs(float64(scroll.Y-before-3)) > 0.1 {
+		t.Fatalf("触控板应立即移动3：before=%g after=%g", before, scroll.Y)
 	}
-	s.scroll.Y = 500
-	if s.input(myui.InputEvent{Kind: myui.InputScroll, DY: 50}) {
-		t.Fatal("到达底部应允许外层滚动容器处理事件")
+	stop := scroll.Y
+	tt.Advance(time.Second)
+	if scroll.Y != stop {
+		t.Fatal("触控板接管后旧动画仍在继续")
 	}
-	s.scroll.Y = 0
-	if s.input(myui.InputEvent{Kind: myui.InputScroll, DY: -50}) {
-		t.Fatal("到达顶部应允许外层滚动容器处理事件")
+	tt.Wheel(100, 100, 100, 0)
+	tt.Advance(200 * time.Millisecond)
+	if math.Abs(float64(scroll.X-100)) > 0.1 || scroll.Y != stop {
+		t.Fatalf("横向滚轮应只横向移动：x=%g y=%g", scroll.X, scroll.Y)
+	}
+}
+
+// 内层到达底部后，后续滚轮输入必须交给外层滚动区。
+func TestWheelScrollAtBoundaryReachesOuterContainer(t *testing.T) {
+	var inner, outer myui.ScrollState
+	tt := myui.NewTester(func(c *myui.Context) {
+		myui.Scroll(c).Fill().TrackScroll(&outer).Children(func() {
+			myui.Scroll(c).Height(150).FillWidth().Shrink(0).TrackScroll(&inner).Children(func() {
+				myui.Box(c).Height(500).Shrink(0)
+			})
+			myui.Box(c).Height(1000).Shrink(0)
+		})
+	}, 300, 200)
+	inner.Y = inner.MaxY
+	tt.Frame()
+	tt.Wheel(100, 75, 0, 100)
+	tt.Advance(200 * time.Millisecond)
+	if inner.Y != inner.MaxY || math.Abs(float64(outer.Y-100)) > 0.1 {
+		t.Fatalf("边界滚轮未交给外层：inner=%g/%g outer=%g", inner.Y, inner.MaxY, outer.Y)
 	}
 }

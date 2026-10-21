@@ -98,7 +98,7 @@ kura 自己的目录：
 - **颜色只从 `internal/ui/theme.go` 来**（`kuraScheme` / `palette`），视图代码里不写十六进制。用户最新选择是**中性石墨灰黑与纸白暖灰**：导航、画布、详情与卡片分层，主操作用银白/墨灰，薄荷绿用于启用状态。不要恢复深蓝、深紫或雾蓝紫的大面积背景与强调色；头像色板也避开蓝紫（`theme_test.go` 守着）。
 - **GridView 给每个单元格自己画一层选中框与悬停底**（圆角 8、2px 边：网格有焦点时 `Accent`，无焦点时 `SurfacePressed` 底加 `Border` 边，悬停时 `SurfaceHover` 底），颜色取自构建网格时的主题。kura 的卡片自己画选中与悬停（圆角更大、边 1px），两层叠一起就是「高亮框和卡片边框对不齐」。所以 `viewGrid` 用 `skin.cell`（这四个颜色透明的主题副本）构建网格，卡片里换回真主题（见 `viewGrid`、`newSkin`）。动网格或卡片外框后先跑 `TestCardChromeIsOneAlignedRing`（读真实渲染的像素）。
 - **别在要参与网格点击的元素上调 `RightClicked()` / `Clicked()` / `Pressed()`**：它们把元素标成可点击，会吞掉网格单元格要收的左键点击（表现为点卡片选不中）。右键要做的事放进 `ContextMenu` 的构建函数（它只在菜单打开、选了菜单项后各跑一次；右键选中卡片就在那里做）。
-- **部件绑定的局部变量在构建结束或查询响应时才被写入**：构建中途直接比较它，拿不到这一次的点击，下一遍构建又从应用状态重新推出，点击就丢了。分段控件用 `Track.Changed()`、开关用 `Changed()` 在同一次构建里取到新值（见 `viewThemeSwitch`、`viewCard` 里的开关），或者直接绑应用的持久字段（`a.filter`、`a.rootSel`）。
+- **部件绑定值在构造函数返回前写回**（MyGo 0.6.0）：局部派生值可在同一次构建里用 `Track.Changed()` / `Changed()` 读出并提交（见 `viewThemeSwitch`、`viewCard`），也可直接绑应用的持久字段（`a.filter`、`a.rootSel`）。`OnClick` / `OnChange` 等回调在配置完成后、重建前执行；输入是否允许取决于用户操作那一帧的 `Disabled` / `ReadOnly` 等配置。
 - **原生右键菜单**（`Element.ContextMenu`）不出现在截图里。菜单项的 `Chosen()` 在选择后的下一帧报告，副作用只能放在它里面；测试用 `tt.RightClick` / `tt.Menu()` / `tt.ChooseMenuItem`（见 `menus_test.go`）。
 - **外观**：`App.themeMode` 决定皮肤（`View` 开头 `kuraScheme.apply(c, a.themeMode)`，跟随系统时读系统外观）。改它一律走 `SetThemeAsync`：立刻换皮肤，后台同步原生外观（`mygo.Theme.SetSource`）并写 `config.json`，连续切换只有最新一次执行，写盘失败只在状态行报告、不回滚皮肤。启动时 `main.go` 在 `App.Run` 之前调 `app.SyncTheme()`。
 - **窗口没有系统标题栏**（`main.go` 用 `mygo.TitleBarHidden` + `TitleBarHeight: 40`，但保留系统的最小化/最大化/关闭按钮）。`viewTitlebar` 自绘一条顶栏：高度取 `max(c.TitleBar().Height, titleBarMinHeight)`，内边距经 `c.TitleBar()` 的 `Left`/`Right` 避开窗口按钮，整条 `DragWindow()`（拖动窗口，双击 = 最大化/还原）。**标题栏里不放可交互元素**——它们会吃掉拖动手势。
@@ -129,7 +129,7 @@ kura 自己的目录：
 gofmt -l .                      # 必须为空
 go vet ./...                    # 必须干净
 go tool mygo vet .              # 必须干净
-go tool mygo i18n check         # catalogs 必须无错（462 条消息）
+go tool mygo i18n check         # catalogs 必须无错（当前 506 条消息）
 go test ./...                   # 全包通过
 CGO_ENABLED=0 go test ./...     # 全包通过
 CGO_ENABLED=0 go build ./...    # 成功

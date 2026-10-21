@@ -613,7 +613,7 @@ func (a *App) viewInstallModal(c *myui.Context) {
 			}
 			myui.Row(c).FillWidth().Gap(t.Space(2)).AlignItems(myui.Center).Children(func() {
 				if s.busy {
-					myui.Spinner(c)
+					loadingIndicator(c, installPhaseLabel(s.phase))
 					myui.Text(c, installPhaseLabel(s.phase)).TextColor(t.TextMuted)
 				}
 				myui.Spacer(c)
@@ -654,7 +654,7 @@ func (a *App) viewInstallCandidates(c *myui.Context) {
 				c.Invalidate()
 			}
 		})
-		smoothScroll(myui.Scroll(c).Key("install-candidates")).FillWidth().Height(float32(rows) * t.Space(5)).Children(func() {
+		myui.Scroll(c.Key("install-candidates")).FillWidth().Height(float32(rows) * t.Space(5)).Children(func() {
 			myui.Column(c).FillWidth().Gap(t.Space(0.5)).Children(func() {
 				for i := range s.cands {
 					// 直接绑应用状态（a.install.cands[i].on）：复选框的输入

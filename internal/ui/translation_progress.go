@@ -18,7 +18,7 @@ func (a *App) viewDocTranslation(c *myui.Context, key, src string) {
 	switch {
 	case !ok || e.pending:
 		myui.Row(c).FillWidth().Gap(t.Space(1.5)).AlignItems(myui.Center).Wrap().Children(func() {
-			myui.Spinner(c)
+			loadingIndicator(c, locales.UiTranslateFullInProgress())
 			label := locales.UiTranslateFullInProgress()
 			if len(e.chunks) > 0 {
 				label = locales.UiTranslateDocProgress(len(e.parts), len(e.chunks))

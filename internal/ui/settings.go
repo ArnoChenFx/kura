@@ -293,7 +293,7 @@ func (a *App) viewSettingsModal(c *myui.Context) {
 				myui.Text(c, locales.UiSettingsTranslation()).FontSize(t.FontSize - 1).TextColor(t.TextMuted)
 			})
 			// 长表单滚动，标题与确认按钮固定；最小窗口里也能保存或取消。
-			smoothScroll(myui.Scroll(c.Key("settings-body"))).FillWidth().MinHeight(0).
+			myui.Scroll(c.Key("settings-body")).FillWidth().MinHeight(0).
 				MaxHeight(max(80, height-200)).Children(func() {
 				myui.Column(c).FillWidth().Gap(t.Space(3)).Padding(0, t.Space(1), 0, 0).Children(func() {
 					// settings.json 读不出来（JSON 损坏）：说清楚，保存会覆盖它。
