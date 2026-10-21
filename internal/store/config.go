@@ -163,6 +163,11 @@ type HomeConfig struct {
 	// UpdateCheckedAt 是 kura 自己最近一次成功检查应用更新的时间（RFC3339）。
 	// 后台检查的节奏靠它；插件的 lastCheck 只记插件自己的检查。
 	UpdateCheckedAt string `json:"updateCheckedAt,omitempty"`
+	// UpdateCheckedVersion 是上面那条检查时间对应的应用版本，也就是那次检查时
+	// 正在运行的版本。用来判断「装完新版本后第一次启动要不要重新查一次」：记录的
+	// 版本与当前运行版本不一致时，这条时间不再推迟后台检查。空串（旧版本写的
+	// config.json 只有时间、没有这一项）表示版本未知，不能当成「与当前版本一致」。
+	UpdateCheckedVersion string `json:"updateCheckedVersion,omitempty"`
 	// Discovered 记录已经考虑过的 agent 技能目录（绝对路径）。自动发现
 	// （Library.DiscoverAgentRoots）每个路径只考虑一次：用户之后从列表移除的
 	// 目录记在这里，下次启动不会被再次加回来。

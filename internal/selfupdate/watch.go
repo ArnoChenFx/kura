@@ -17,6 +17,18 @@ package selfupdate
 //   - 插件静默安装：偏好开、勾了自动下载。插件自己查、静默下载，下次启动生效；kura 不再
 //     查、不亮蓝点（用户已经选了静默安装，蓝点只会是噪音）。
 //
+// 上次检查算不算数的判据是「应用版本有没有变」。config.json 里的 updateCheckedAt 带上了
+// 那次检查时运行的版本（updateCheckedVersion），插件的 lastCheck 也一并只在这个前提下
+// 采信：
+//
+//   - 记录里的版本 == 当前运行版本（b.version，来自 mygo.App.Version）：用这条时间（以及
+//     插件的 lastCheck 中较新的一个）排期，也就是原来的行为——用户在更新窗口里手动检查
+//     成功，仍会推迟下一次后台检查。
+//   - 版本不同，或记录里的版本未知（旧版本写的 config.json 只有时间）：完全不采信，也不采信
+//     插件的 lastCheck，启动约 10 秒后就查一次。装完新版本第一次启动先查一遍就是靠这一条。
+//   - 当前运行版本为空（开发构建、go test 取不到版本）：退回按时间排期的老行为，且下一次
+//     检查最多被推到「一天后」。否则每次检查写下的记录都对不上版本，会退化成每 10 秒查一次。
+//
 // 开发构建与包管理器安装（mygo.Updater.Enabled 为假）：什么也不做，插件也不动。
 //
 // 「稍后提醒我」之后蓝点不会马上回来；下一次后台检查仍发现同一个版本时才亮，与插件的
@@ -49,7 +61,8 @@ type stopper interface{ Stop() bool }
 type Background struct {
 	cfg     *store.Config
 	host    host
-	enabled bool // 应用能否自我更新，Prepare 时定下，之后只读
+	enabled bool   // 应用能否自我更新，Prepare 时定下，之后只读
+	version string // 当前运行的应用版本，Prepare 时定下，之后只读；空串表示版本未知
 
 	now   func() time.Time
 	after func(d time.Duration, fn func()) stopper
@@ -67,10 +80,13 @@ type Background struct {
 	started bool      // Start 之后才排定检查
 	pref    bool      // 「自动检查更新」的当前值
 	checked time.Time // kura 最近一次成功的检查
-	failed  time.Time // 最近一次失败的检查，零值为没有
-	running bool      // 有检查在路上，一次只跑一个
-	gen     int       // 每次重新排定都递增：过期的定时器回调直接作废
-	timer   stopper
+	// checkedVersion 是 checked 那次检查时运行的版本；与 version 不一致（或为空）时
+	// 这条时间不再推迟检查。
+	checkedVersion string
+	failed         time.Time // 最近一次失败的检查，零值为没有
+	running        bool      // 有检查在路上，一次只跑一个
+	gen            int       // 每次重新排定都递增：过期的定时器回调直接作废
+	timer          stopper
 }
 
 // Prepare 在 mygo.App.Run 之前调用（插件已经挂载，窗口还没有）：定下「自动检查更新」的
@@ -89,7 +105,11 @@ func prepare(cfg *store.Config, h host) (*Background, error) {
 	b.pref = pref
 	b.pluginOn = legacy != nil && *legacy
 	b.enabled = h.enabled()
-	b.checked, _ = store.LastUpdateCheck(cfg)
+	b.version = h.appVersion()
+	if last, readErr := store.LastUpdateCheck(cfg); readErr == nil {
+		b.checked = last.At
+		b.checkedVersion = last.Version
+	}
 	b.apply()
 	return b, err
 }
@@ -167,13 +187,33 @@ func (b *Background) reschedule() {
 		return
 	}
 	now := b.now()
-	last := b.checked
-	if t := b.host.lastCheck(); t.After(last) {
-		last = t
-	}
+	last := b.lastCheckLocked()
 	wait := max(nextCheck(last, b.failed, now).Sub(now), firstCheckWait)
 	gen := b.gen
 	b.timer = b.after(wait, func() { b.fire(gen) })
+}
+
+// lastCheckLocked 返回下一次检查应当据以起算的「上一次成功检查」时刻；零值表示没有可
+// 采信的时间，按 firstCheckWait 尽快查一次。持有 mu 时调用。
+//
+// 判据是版本：插件 updater.json 里的 lastCheck 只记「什么时候查过」，不知道那是哪个版本
+// 的检查，而用户手动检查并装上新版之后它就刚被刷新（重启也不会查——这是升级后一直等不到
+// 蓝点的成因）。config.json 里的 updateCheckedAt 现在带上了当时的版本，所以：
+//
+//   - 当前版本为空（开发构建、go test）：退回按时间排期的老行为，且最多推迟一个间隔
+//     （nextCheck 本身就不会把检查推到 now+checkInterval 之后），不引入每 10 秒一查的抖动。
+//   - 记录里的版本与当前版本相同：用这条时间，并继续采信更新的插件 lastCheck（手动检查成功
+//     推迟下一次后台检查，是原有且有意为之的行为）。
+//   - 版本不同或未知：两条时间都不采信，尽快查一次。
+func (b *Background) lastCheckLocked() time.Time {
+	if b.version == "" || b.checkedVersion == b.version {
+		last := b.checked
+		if t := b.host.lastCheck(); t.After(last) {
+			last = t
+		}
+		return last
+	}
+	return time.Time{}
 }
 
 // ownLocked 报告后台检查由 kura 负责：偏好开，且没有勾插件的静默安装。持有 mu 时调用。
@@ -200,8 +240,8 @@ func (b *Background) fire(gen int) {
 	b.finish(lit, err)
 }
 
-// finish 记下一次检查的结果，然后排定下一次。成功：记下时间（写进 config.json）并亮灭蓝点；
-// 失败：只记下失败的时刻，蓝点保持原样。
+// finish 记下一次检查的结果，然后排定下一次。成功：记下时间与当时的应用版本（写进
+// config.json）并亮灭蓝点；失败：只记下失败的时刻，蓝点保持原样。
 func (b *Background) finish(lit bool, err error) {
 	now := b.now()
 	b.mu.Lock()
@@ -211,6 +251,7 @@ func (b *Background) finish(lit bool, err error) {
 	} else {
 		b.failed = time.Time{}
 		b.checked = now
+		b.checkedVersion = b.version
 		if b.ownLocked() {
 			b.report(lit)
 		}
@@ -218,7 +259,7 @@ func (b *Background) finish(lit bool, err error) {
 	b.mu.Unlock()
 	if err == nil {
 		// 写不下来只影响下次启动之后何时再查，不值得打扰用户。
-		_ = store.SetLastUpdateCheck(b.cfg, now)
+		_ = store.SetLastUpdateCheck(b.cfg, store.UpdateCheck{At: now, Version: b.version})
 	}
 	b.reschedule()
 }
