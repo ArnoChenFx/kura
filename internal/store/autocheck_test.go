@@ -194,19 +194,52 @@ func TestLoadLibraryAutoCheckDefaultsOn(t *testing.T) {
 func TestLastUpdateCheckRoundTrip(t *testing.T) {
 	base, _ := newLibraryFixture(t)
 	got, err := LastUpdateCheck(base)
-	if err != nil || !got.IsZero() {
+	if err != nil || !got.At.IsZero() || got.Version != "" {
 		t.Fatalf("从未检查过应返回零值，得到 %v err=%v", got, err)
 	}
 	at := time.Date(2026, 10, 18, 9, 30, 15, 0, time.FixedZone("CST", 8*3600))
-	if err := SetLastUpdateCheck(base, at); err != nil {
+	if err := SetLastUpdateCheck(base, UpdateCheck{At: at, Version: "0.1.18"}); err != nil {
 		t.Fatal(err)
 	}
 	got, err = LastUpdateCheck(base)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !got.Equal(at.Truncate(time.Second)) {
-		t.Errorf("读回的时间 %v 与写入的 %v 不一致", got, at)
+	if !got.At.Equal(at.Truncate(time.Second)) {
+		t.Errorf("读回的时间 %v 与写入的 %v 不一致", got.At, at)
+	}
+	if got.Version != "0.1.18" {
+		t.Errorf("读回的版本 = %q，想要 %q", got.Version, "0.1.18")
+	}
+	// 再写一条版本未知的记录：时间要换掉，版本也必须被清掉，不能留着上一条。
+	later := at.Add(time.Hour)
+	if err := SetLastUpdateCheck(base, UpdateCheck{At: later}); err != nil {
+		t.Fatal(err)
+	}
+	got, err = LastUpdateCheck(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.At.Equal(later.Truncate(time.Second)) || got.Version != "" {
+		t.Errorf("清空版本的一记录应真的清掉版本，得到 %v / %q", got.At, got.Version)
+	}
+}
+
+// TestLastUpdateCheckReadsTheOldFormat 验证兼容旧文件：旧版本的 config.json 只有
+// updateCheckedAt（RFC3339 时间串），没有版本。读出来时间照旧，版本是空串，也就是
+// 「版本未知」；读取方据此不采信它，宁可多查一次。
+func TestLastUpdateCheckReadsTheOldFormat(t *testing.T) {
+	base, _ := newLibraryFixture(t)
+	writeRawConfig(t, base, `{"roots":[],"updateCheckedAt":"2026-10-18T09:30:15Z"}`)
+	got, err := LastUpdateCheck(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := time.Date(2026, 10, 18, 9, 30, 15, 0, time.UTC); !got.At.Equal(want) {
+		t.Errorf("旧格式的时间 = %v，想要 %v", got.At, want)
+	}
+	if got.Version != "" {
+		t.Errorf("旧格式没有版本，应读成空串（版本未知），得到 %q", got.Version)
 	}
 }
 
@@ -214,7 +247,7 @@ func TestSetLastUpdateCheckRefusesCorruptConfig(t *testing.T) {
 	base, _ := newLibraryFixture(t)
 	const broken = "{bad"
 	writeRawConfig(t, base, broken)
-	if err := SetLastUpdateCheck(base, time.Now()); err == nil {
+	if err := SetLastUpdateCheck(base, UpdateCheck{At: time.Now(), Version: "0.1.18"}); err == nil {
 		t.Fatal("config.json 损坏时后台写入应返回错误")
 	}
 	if got := readRawConfig(t, base); got != broken {
@@ -231,7 +264,7 @@ func TestSetLastUpdateCheckKeepsOtherSettings(t *testing.T) {
 	if err := lib.SetView(ViewList); err != nil {
 		t.Fatal(err)
 	}
-	if err := SetLastUpdateCheck(base, time.Date(2026, 10, 18, 1, 0, 0, 0, time.UTC)); err != nil {
+	if err := SetLastUpdateCheck(base, UpdateCheck{At: time.Date(2026, 10, 18, 1, 0, 0, 0, time.UTC), Version: "0.1.18"}); err != nil {
 		t.Fatal(err)
 	}
 	again, err := LoadLibrary(base)
@@ -240,5 +273,8 @@ func TestSetLastUpdateCheckKeepsOtherSettings(t *testing.T) {
 	}
 	if again.View != ViewList {
 		t.Errorf("记下检查时间不应丢掉排列模式，得到 %q", again.View)
+	}
+	if got, err := LastUpdateCheck(base); err != nil || got.Version != "0.1.18" {
+		t.Errorf("记下检查时间应保留版本，得到 %q err=%v", got.Version, err)
 	}
 }

@@ -33,6 +33,10 @@ type host interface {
 	automaticDownloads() bool
 	// lastCheck 是插件最近一次成功检查的时间（用户手动检查也算）。
 	lastCheck() time.Time
+	// appVersion 是当前运行的应用版本（打包构建才有；开发构建与 go test 里是空串）。
+	// 用来判断 config.json 里记的检查时间属于哪个版本：装完新版本后旧的时间不再
+	// 推迟后台检查。它不涉及插件，与上面几项放一起是为了让测试能注入。
+	appVersion() string
 	// skippedVersion 是用户在更新窗口里选「跳过这个版本」记下的版本号，没有则为空串。
 	skippedVersion() string
 	// legacyAutomaticChecks 是插件 updater.json 里 automaticChecks 的当前值，nil 表示
@@ -62,6 +66,11 @@ func (productionHost) check(ctx context.Context) (string, bool, error) {
 func (productionHost) automaticDownloads() bool { return updater.AutomaticDownloads() }
 
 func (productionHost) lastCheck() time.Time { return updater.LastCheck() }
+
+// appVersion 转发给包的 appVersion（同一份：mygo.json 的 version 是应用版本号的唯一来源，
+// 这里不另记一份；「关于」弹窗的版本行也用它）。开发构建与 go test 里它可能为空串，调用方
+// 按「版本未知」处理。
+func (productionHost) appVersion() string { return appVersion() }
 
 func (productionHost) skippedVersion() string { return readPluginFile().SkippedVersion }
 

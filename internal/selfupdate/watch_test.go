@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -106,6 +107,7 @@ type fakeHost struct {
 	mu sync.Mutex
 
 	canUpdate     bool
+	version       string // 当前运行的应用版本，空串即版本未知（开发构建）
 	latest        string // 更新源的最新版本，空串即已是最新
 	checkErr      error
 	beforeCheck   func() // 非 nil 时每次检查都在它返回之后才有结果
@@ -155,6 +157,12 @@ func (h *fakeHost) lastCheck() time.Time {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	return h.pluginLast
+}
+
+func (h *fakeHost) appVersion() string {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.version
 }
 
 func (h *fakeHost) skippedVersion() string {
@@ -629,6 +637,128 @@ func TestBackgroundOneCheckAtATime(t *testing.T) {
 	<-done
 	if got := r.reported(); !slices.Equal(got, []bool{true}) {
 		t.Errorf("在路上的那次检查完成后应亮蓝点，得到 %v", got)
+	}
+}
+
+// setLastCheck 把 config.json 里的「上一次成功检查」写成 at / version（走 store 的正式写入口）。
+// version 为空串就是旧版本留下且版本未知的那种记录（写出来的文件里没有版本字段）。
+func setLastCheck(t *testing.T, cfg *store.Config, at time.Time, version string) {
+	t.Helper()
+	if err := store.SetLastUpdateCheck(cfg, store.UpdateCheck{At: at, Version: version}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// lastCheckRecord 读回 config.json 里的「上一次成功检查」记录。
+func lastCheckRecord(t *testing.T, cfg *store.Config) store.UpdateCheck {
+	t.Helper()
+	rec, err := store.LastUpdateCheck(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return rec
+}
+
+// TestBackgroundChecksSoonAfterTheAppVersionChanges 是「装完新版后二十四小时内不再检查」的
+// 回归测试：上一次成功检查发生在升级之前的版本上（二十分钟前），用户又在这时从更新窗口里
+// 手动检查并装上了新版（插件 lastCheck 刚被刷新、比那条记录还新）。重启后这两条时间都不能
+// 把检查推到二十四小时之后：启动约 10 秒后就要查一次。
+func TestBackgroundChecksSoonAfterTheAppVersionChanges(t *testing.T) {
+	cfg := newTestConfig(t)
+	recent := newFakeClock().now().Add(-20 * time.Minute)
+	setLastCheck(t, cfg, recent, "0.1.17")
+
+	// 插件的手动检查比 kura 那条记录还新（5 分钟前），旧行为会拿它把检查推到 24 小时后。
+	h := &fakeHost{canUpdate: true, version: "0.1.18", latest: "0.2.0", pluginLast: recent.Add(15 * time.Minute)}
+	r := newRig(t, h, cfg)
+	r.start()
+	r.clock.advance(firstCheckWait)
+	if h.checkCount() != 1 {
+		t.Fatalf("装完新版本后第一次启动应重新查一次，查询次数 %d", h.checkCount())
+	}
+	if got := r.reported(); !slices.Equal(got, []bool{true}) {
+		t.Errorf("查到新版本应亮蓝点，得到 %v", got)
+	}
+	// 检查成功后记录里的版本换成当前版本，之后恢复成一天一次，不会反复重查。
+	if rec := lastCheckRecord(t, cfg); rec.Version != "0.1.18" {
+		t.Errorf("检查成功后应记下当前版本 %q，得到 %q", "0.1.18", rec.Version)
+	}
+	r.clock.advance(day - time.Second)
+	if h.checkCount() != 1 {
+		t.Errorf("版本记录对齐之后不该立刻重查，查询次数 %d", h.checkCount())
+	}
+	r.clock.advance(2 * time.Second)
+	if h.checkCount() != 2 {
+		t.Errorf("版本记录对齐之后应回到一天一次，查询次数 %d", h.checkCount())
+	}
+}
+
+// TestBackgroundIgnoresACheckRecordWithoutAVersion 验证旧格式的兼容：旧版本写的 config.json
+// 只有 updateCheckedAt、没有版本。版本未知时这条时间不采信（也不采信插件的 lastCheck），
+// 宁可多查一次。
+func TestBackgroundIgnoresACheckRecordWithoutAVersion(t *testing.T) {
+	cfg := newTestConfig(t)
+	recent := newFakeClock().now().Add(-20 * time.Minute)
+	// 直接写文件，模拟旧版本留下的 config.json（新版本的写入口总是会写版本）。
+	if err := os.MkdirAll(cfg.Home, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := `{"roots":[],"autoCheckUpdates":true,"updateCheckedAt":"` + recent.UTC().Format(time.RFC3339) + `"}`
+	if err := os.WriteFile(cfg.ConfigPath(), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	h := &fakeHost{canUpdate: true, version: "0.1.18", pluginLast: recent}
+	r := newRig(t, h, cfg)
+	r.start()
+	r.clock.advance(firstCheckWait)
+	if h.checkCount() != 1 {
+		t.Fatalf("记录里的版本未知时应尽快查一次，查询次数 %d", h.checkCount())
+	}
+}
+
+// TestBackgroundKeepsTheManualCheckDelayOnTheSameVersion 验证版本没变时行为不变：插件里手动
+// 检查的时间仍然推迟下一次后台检查（不重复查更新源）。
+func TestBackgroundKeepsTheManualCheckDelayOnTheSameVersion(t *testing.T) {
+	cfg := newTestConfig(t)
+	recent := newFakeClock().now().Add(-20 * time.Minute)
+	setLastCheck(t, cfg, recent, "0.1.17")
+
+	h := &fakeHost{canUpdate: true, version: "0.1.17"}
+	r := newRig(t, h, cfg)
+	r.start()
+	r.clock.advance(firstCheckWait)
+	if h.checkCount() != 0 {
+		t.Fatalf("同一个版本上刚查过不到一天不应再查，查询次数 %d", h.checkCount())
+	}
+	r.clock.advance(day)
+	if h.checkCount() != 1 {
+		t.Errorf("距上次成功满一天应再查一次，查询次数 %d", h.checkCount())
+	}
+}
+
+// TestBackgroundUnknownAppVersionFallsBackToTheClock 验证当前版本取不到（开发构建、go test 里
+// mygo.App.Version() 为空串）时不因此每次都查：按时间排期，刚查过就等一天，不会退化成
+// 每 10 秒查一次更新源。不管记录里写的是没有版本、还是别的版本号（比如上一次是打包构建跑的）。
+func TestBackgroundUnknownAppVersionFallsBackToTheClock(t *testing.T) {
+	for _, version := range []string{"", "0.1.17"} {
+		t.Run("记录里的版本="+strconv.Quote(version), func(t *testing.T) {
+			cfg := newTestConfig(t)
+			recent := newFakeClock().now().Add(-20 * time.Minute)
+			setLastCheck(t, cfg, recent, version)
+
+			h := &fakeHost{canUpdate: true, pluginLast: recent} // 当前运行版本也是未知
+			r := newRig(t, h, cfg)
+			r.start()
+			r.clock.advance(firstCheckWait)
+			if h.checkCount() != 0 {
+				t.Fatalf("版本未知时不应把每次启动都当成「版本变了」立刻查，查询次数 %d", h.checkCount())
+			}
+			r.clock.advance(day)
+			if n := h.checkCount(); n != 1 {
+				t.Errorf("版本未知时应回到一天一次，查询次数 %d", n)
+			}
+		})
 	}
 }
 
