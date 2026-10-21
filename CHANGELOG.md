@@ -6,6 +6,11 @@ kura 遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 的格�
 
 ## [Unreleased]
 
+## 0.1.19
+
+- 升级 MyGo 至 0.6.2：Linux 上拉丁词之间的中文标点改用该语言的字体绘制，触控板双指捏合会作为输入事件上报，Wayland 下第二个实例能把激活令牌转给已在运行的窗口。
+- 升级评估见 [docs/note/mygo-0.6.2.md](docs/note/mygo-0.6.2.md)：kura 用到的包导出 API 无增删，业务代码未改。
+
 ## 0.1.18
 
 - 修复装完新版本后一直等不到更新提示：手动检查并升级之后，插件刚刷新的检查时间会把后台检查推到 24 小时后，重启也不会查。
