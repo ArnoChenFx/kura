@@ -11,9 +11,10 @@ package selfupdate
 // 三种模式，由「自动检查更新」与插件的「以后自动下载并安装更新」共同决定：
 //
 //   - 关：偏好关了。kura 不查，插件也不调度。
-//   - kura 检查（默认）：偏好开、没勾自动下载。启动约 10 秒后查一次（距上次成功检查不足
-//     一天则等到期），之后每 24 小时一次。查到且没被跳过的新版本亮蓝点；查不到则熄灭；
-//     失败不动蓝点，一小时后重试。插件的调度开关关着，它永远不会自己弹窗。
+//   - kura 检查（默认）：偏好开、没勾自动下载。每次启动约 10 秒后查一次（只有上次成功
+//     检查距今不足 10 分钟才跳过，免得连续重启、崩溃重启反复请求更新源），同一次运行里
+//     之后每 24 小时一次。查到且没被跳过的新版本亮蓝点；查不到则熄灭；失败不动蓝点，
+//     一小时后重试。插件的调度开关关着，它永远不会自己弹窗。
 //   - 插件静默安装：偏好开、勾了自动下载。插件自己查、静默下载，下次启动生效；kura 不再
 //     查、不亮蓝点（用户已经选了静默安装，蓝点只会是噪音）。
 //
@@ -47,6 +48,11 @@ const (
 	firstCheckWait = 10 * time.Second
 	// checkInterval 是两次成功检查之间的间隔，与插件的默认值一致。
 	checkInterval = 24 * time.Hour
+	// launchInterval 是「刚查过就不必再查」的窗口，只对本次启动的第一次检查有效：上次
+	// 成功检查距今不足它就跳过这次启动的检查（连续重启、崩溃重启不反复请求更新源），否则
+	// 启动后查一次。它的用意是「每次启动都看一眼有没有新版本」，而不是按上次检查的时刻
+	// 排期——用户隔几小时重启一次，也要在启动时知道有没有新版本。
+	launchInterval = 10 * time.Minute
 	// retryInterval 是检查失败之后最晚再试的间隔，与插件一致。
 	retryInterval = time.Hour
 	// checkTimeout 是一次检查的总时限：宁可放弃也不挂着，失败只是不动蓝点。
@@ -85,8 +91,12 @@ type Background struct {
 	checkedVersion string
 	failed         time.Time // 最近一次失败的检查，零值为没有
 	running        bool      // 有检查在路上，一次只跑一个
-	gen            int       // 每次重新排定都递增：过期的定时器回调直接作废
-	timer          stopper
+	// launchCheck 报告本次启动的第一次检查还没有发生：这一轮排期用 launchInterval 的短
+	// 窗口，首检一发生（见 fire）或判定不必查（见 waitLocked）就清零，之后一律按
+	// nextCheck 的节奏。
+	launchCheck bool
+	gen         int // 每次重新排定都递增：过期的定时器回调直接作废
+	timer       stopper
 }
 
 // Prepare 在 mygo.App.Run 之前调用（插件已经挂载，窗口还没有）：定下「自动检查更新」的
@@ -121,6 +131,8 @@ func newBackground(cfg *store.Config, h host) *Background {
 		now:   time.Now,
 		after: func(d time.Duration, fn func()) stopper { return time.AfterFunc(d, fn) },
 		spawn: func(fn func()) { go fn() },
+		// 每个 Background 就是一次启动，第一次检查的短窗口从它开始算。
+		launchCheck: true,
 	}
 }
 
@@ -186,11 +198,33 @@ func (b *Background) reschedule() {
 		b.report(false)
 		return
 	}
-	now := b.now()
-	last := b.lastCheckLocked()
-	wait := max(nextCheck(last, b.failed, now).Sub(now), firstCheckWait)
 	gen := b.gen
-	b.timer = b.after(wait, func() { b.fire(gen) })
+	b.timer = b.after(b.waitLocked(b.lastCheckLocked(), b.now()), func() { b.fire(gen) })
+}
+
+// waitLocked 返回排下一次检查要等多久。
+//
+// 本次启动的第一次检查走短窗口 launchInterval：上次成功检查距今不足它就不查（连续重启、
+// 崩溃后重启不反复请求更新源），否则 firstCheckWait 之后就查——这样隔几个小时重启一次也
+// 能在启动时看到有没有新版本，不必等到「上次成功检查满 24 小时」。首检之后一律按
+// nextCheck：距上次成功检查满一个间隔（24 小时），失败过则一小时后再试。
+//
+// 只在真的排定首检时才清零 launchCheck：重新排定（系统唤醒、插件状态变化）可能发生在新定时器
+// 到点之前，那时候还得继续按首检排，不能把这次检查推到一天后。持有 mu 时调用。
+func (b *Background) waitLocked(last, now time.Time) time.Duration {
+	// nextCheck 自带 firstCheckWait 的下限：没有可采信的时间（版本变了、旧记录没有版本）时
+	// 零值 last 让它立刻到期，于是启动约 10 秒后就查。
+	normal := max(nextCheck(last, b.failed, now).Sub(now), firstCheckWait)
+	if !b.launchCheck {
+		return normal
+	}
+	if now.Sub(last) < launchInterval {
+		// 刚查过：这次启动不必再查，按正常节奏排；首检就此用掉，不再参与之后的排期。
+		// 零值的 last 在这里不会满足条件（那是「一直没有可采信的时间」），所以它会去查。
+		b.launchCheck = false
+		return normal
+	}
+	return firstCheckWait
 }
 
 // lastCheckLocked 返回下一次检查应当据以起算的「上一次成功检查」时刻；零值表示没有可
@@ -230,6 +264,8 @@ func (b *Background) fire(gen int) {
 		return
 	}
 	b.running = true
+	// 本次启动的第一次检查已经发生：之后的排期回到 nextCheck（24 小时 / 失败一小时重试）。
+	b.launchCheck = false
 	b.timer = nil
 	b.mu.Unlock()
 
