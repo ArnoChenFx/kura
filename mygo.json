@@ -1,7 +1,7 @@
 {
   "name": "kura",
   "identifier": "com.example.kura",
-  "version": "0.1.19",
+  "version": "0.1.20",
   "out": "build",
   "linux": {
     "webview": false
