@@ -206,6 +206,16 @@ func (h *fakeHost) emitChange() {
 	}
 }
 
+// emitResume 模拟系统从睡眠中醒来：kura 会因此重新排定下一次检查。
+func (h *fakeHost) emitResume() {
+	h.mu.Lock()
+	fns := slices.Clone(h.onResumes)
+	h.mu.Unlock()
+	for _, fn := range fns {
+		fn()
+	}
+}
+
 func (h *fakeHost) setLatest(v string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -718,33 +728,35 @@ func TestBackgroundIgnoresACheckRecordWithoutAVersion(t *testing.T) {
 }
 
 // TestBackgroundKeepsTheManualCheckDelayOnTheSameVersion 验证版本没变时行为不变：插件里手动
-// 检查的时间仍然推迟下一次后台检查（不重复查更新源）。
+// 检查的时间仍然推迟下一次后台检查（不重复查更新源）——它在 10 分钟窗口之内，所以这次启动
+// 不查，等的是「手动检查 + 24 小时」。
 func TestBackgroundKeepsTheManualCheckDelayOnTheSameVersion(t *testing.T) {
 	cfg := newTestConfig(t)
-	recent := newFakeClock().now().Add(-20 * time.Minute)
-	setLastCheck(t, cfg, recent, "0.1.17")
+	now := newFakeClock().now()
+	setLastCheck(t, cfg, now.Add(-2*time.Hour), "0.1.17")
 
-	h := &fakeHost{canUpdate: true, version: "0.1.17"}
+	// 用户两分钟前在更新窗口里手动检查过：插件刚刷新了 lastCheck，比 config.json 那条还新。
+	h := &fakeHost{canUpdate: true, version: "0.1.17", pluginLast: now.Add(-2 * time.Minute)}
 	r := newRig(t, h, cfg)
 	r.start()
 	r.clock.advance(firstCheckWait)
 	if h.checkCount() != 0 {
-		t.Fatalf("同一个版本上刚查过不到一天不应再查，查询次数 %d", h.checkCount())
+		t.Fatalf("手动检查刚过去两分钟，这次启动不该再查，查询次数 %d", h.checkCount())
 	}
 	r.clock.advance(day)
-	if h.checkCount() != 1 {
-		t.Errorf("距上次成功满一天应再查一次，查询次数 %d", h.checkCount())
+	if n := h.checkCount(); n != 1 {
+		t.Errorf("距手动检查满一天应再查一次，查询次数 %d", n)
 	}
 }
 
 // TestBackgroundUnknownAppVersionFallsBackToTheClock 验证当前版本取不到（开发构建、go test 里
-// mygo.App.Version() 为空串）时不因此每次都查：按时间排期，刚查过就等一天，不会退化成
-// 每 10 秒查一次更新源。不管记录里写的是没有版本、还是别的版本号（比如上一次是打包构建跑的）。
+// mygo.App.Version() 为空串）时不因此每次都查：版本对不上时那条时间仍然按时间用（记录里写的
+// 是没有版本、还是别的版本号都一样），两分钟前查过这次启动就不查，之后回到一天一次。
 func TestBackgroundUnknownAppVersionFallsBackToTheClock(t *testing.T) {
 	for _, version := range []string{"", "0.1.17"} {
 		t.Run("记录里的版本="+strconv.Quote(version), func(t *testing.T) {
 			cfg := newTestConfig(t)
-			recent := newFakeClock().now().Add(-20 * time.Minute)
+			recent := newFakeClock().now().Add(-2 * time.Minute)
 			setLastCheck(t, cfg, recent, version)
 
 			h := &fakeHost{canUpdate: true, pluginLast: recent} // 当前运行版本也是未知
@@ -759,6 +771,166 @@ func TestBackgroundUnknownAppVersionFallsBackToTheClock(t *testing.T) {
 				t.Errorf("版本未知时应回到一天一次，查询次数 %d", n)
 			}
 		})
+	}
+}
+
+// TestBackgroundUnknownAppVersionDoesNotDegradeToChecking 验证版本未知时也不会退化成每 10 秒
+// 查一次更新源：二十多分钟前查过，这次启动查一次，之后一整天不再查。
+func TestBackgroundUnknownAppVersionDoesNotDegradeToChecking(t *testing.T) {
+	cfg := newTestConfig(t)
+	recent := newFakeClock().now().Add(-20 * time.Minute)
+	setLastCheck(t, cfg, recent, "")
+
+	h := &fakeHost{canUpdate: true, pluginLast: recent}
+	r := newRig(t, h, cfg)
+	r.start()
+	r.clock.advance(firstCheckWait)
+	if n := h.checkCount(); n != 1 {
+		t.Fatalf("二十分钟前查过，这次启动应查一次，查询次数 %d", n)
+	}
+	// 重新排定（唤醒、插件状态变化）不会让它在一天之内再查。
+	h.emitResume()
+	h.emitChange()
+	r.clock.advance(day + time.Minute)
+	if n := h.checkCount(); n != 2 {
+		t.Errorf("首检之后应等满一天，查询次数 %d", n)
+	}
+}
+
+// TestBackgroundChecksOnEveryLaunch 是用户实测的场景（v0.1.19）：那天 02:37 后台检查成功过，
+// 18:49 重启 kura，之后一直没有蓝点，因为旧排期要等到「上次成功检查满 24 小时」。同一个版本、
+// 上次成功检查在十六小时前，启动约 10 秒后就要查一次；首检之后照旧等满一天。
+func TestBackgroundChecksOnEveryLaunch(t *testing.T) {
+	cfg := newTestConfig(t)
+	now := newFakeClock().now()
+	setLastCheck(t, cfg, now.Add(-16*time.Hour), "0.1.19")
+
+	h := &fakeHost{canUpdate: true, version: "0.1.19", latest: "0.2.0"}
+	r := newRig(t, h, cfg)
+	r.start()
+	if h.checkCount() != 0 {
+		t.Fatal("启动那一刻不应立刻检查")
+	}
+	r.clock.advance(firstCheckWait)
+	if n := h.checkCount(); n != 1 {
+		t.Fatalf("同一个版本上隔十六小时重启也要在启动时查一次，查询次数 %d", n)
+	}
+	if got := r.reported(); !slices.Equal(got, []bool{true}) {
+		t.Errorf("查到新版本应亮蓝点，得到 %v", got)
+	}
+	r.clock.advance(day - time.Second)
+	if n := h.checkCount(); n != 1 {
+		t.Errorf("首检之后应等满一天，查询次数 %d", n)
+	}
+	r.clock.advance(2 * time.Second)
+	if n := h.checkCount(); n != 2 {
+		t.Errorf("首检之后满一天应再查，查询次数 %d", n)
+	}
+}
+
+// TestBackgroundSkipsTheLaunchCheckRightAfterASuccess 验证 10 分钟窗口的另一半：两分钟前刚
+// 成功检查过（同一个版本），再启动一次不必马上又请求更新源（连续重启、崩溃重启），按「上次
+// 成功检查 + 24 小时」排。
+func TestBackgroundSkipsTheLaunchCheckRightAfterASuccess(t *testing.T) {
+	cfg := newTestConfig(t)
+	now := newFakeClock().now()
+	setLastCheck(t, cfg, now.Add(-2*time.Minute), "0.1.19")
+
+	h := &fakeHost{canUpdate: true, version: "0.1.19", latest: "0.2.0"}
+	r := newRig(t, h, cfg)
+	r.start()
+	r.clock.advance(firstCheckWait)
+	if n := h.checkCount(); n != 0 {
+		t.Fatalf("两分钟前刚查过，这次启动不该再查，查询次数 %d", n)
+	}
+	r.clock.advance(time.Hour)
+	if n := h.checkCount(); n != 0 {
+		t.Fatalf("离上次成功检查还不到一天，不该查，查询次数 %d", n)
+	}
+	r.clock.advance(day)
+	if n := h.checkCount(); n != 1 {
+		t.Fatalf("上次成功检查满一天应查一次，查询次数 %d", n)
+	}
+	if got := r.reported(); !slices.Equal(got, []bool{true}) {
+		t.Errorf("查到新版本应亮蓝点，得到 %v", got)
+	}
+}
+
+// TestBackgroundLaunchCheckDoesNotRepeatWithinOneRun 验证新规则不会退化成「每次重新排定都查
+// 一次」：首检之后的重新排定（系统唤醒、插件状态变化）仍要等满 24 小时；而首检到点之前的
+// 重新排定不能把这次启动的检查推到一天后。
+func TestBackgroundLaunchCheckDoesNotRepeatWithinOneRun(t *testing.T) {
+	cfg := newTestConfig(t)
+	now := newFakeClock().now()
+	setLastCheck(t, cfg, now.Add(-16*time.Hour), "0.1.19")
+
+	h := &fakeHost{canUpdate: true, version: "0.1.19"}
+	r := newRig(t, h, cfg)
+	r.start()
+	// 启动途中的重新排定不影响首检的排定。
+	h.emitResume()
+	h.emitChange()
+	r.clock.advance(firstCheckWait)
+	if n := h.checkCount(); n != 1 {
+		t.Fatalf("启动后应查一次，查询次数 %d", n)
+	}
+	// 首检已经发生：之后的重新排定都要等满一天。
+	h.emitResume()
+	h.emitChange()
+	r.clock.advance(6 * time.Hour)
+	if n := h.checkCount(); n != 1 {
+		t.Fatalf("首检之后重新排定不该再查，查询次数 %d", n)
+	}
+	r.clock.advance(day)
+	if n := h.checkCount(); n != 2 {
+		t.Errorf("首检之后满一天应再查一次，查询次数 %d", n)
+	}
+}
+
+// TestBackgroundChecksOnLaunchEvenRightAfterAnUpgrade 是 v0.1.18 那条行为的回归：记录里的时间
+// 再新（两分钟前），只要它不是当前版本查的（或根本没有版本），就不采信，启动约 10 秒后照查
+// 一次——新加的 10 分钟窗口不能把「装完新版本要重新查」吃掉。
+func TestBackgroundChecksOnLaunchEvenRightAfterAnUpgrade(t *testing.T) {
+	for _, recorded := range []string{"0.1.18", ""} {
+		t.Run("记录里的版本="+strconv.Quote(recorded), func(t *testing.T) {
+			cfg := newTestConfig(t)
+			recent := newFakeClock().now().Add(-2 * time.Minute)
+			setLastCheck(t, cfg, recent, recorded)
+
+			// 插件的手动检查也是两分钟前：它同样不知道那是哪个版本的检查。
+			h := &fakeHost{canUpdate: true, version: "0.1.19", latest: "0.2.0", pluginLast: recent}
+			r := newRig(t, h, cfg)
+			r.start()
+			r.clock.advance(firstCheckWait)
+			if n := h.checkCount(); n != 1 {
+				t.Fatalf("装完新版本后第一次启动要查一次，查询次数 %d", n)
+			}
+		})
+	}
+}
+
+// TestBackgroundFailedLaunchCheckRetriesInAnHour 验证首检失败之后回到「失败一小时重试」：既
+// 不重新按启动窗口排（那会变成每 10 秒查一次断网的用户），也不干等一天。
+func TestBackgroundFailedLaunchCheckRetriesInAnHour(t *testing.T) {
+	cfg := newTestConfig(t)
+	now := newFakeClock().now()
+	// 上次成功检查是很久以前：24 小时的到期时间早过去了，于是由失败重试决定下一次。
+	setLastCheck(t, cfg, now.Add(-30*day), "0.1.19")
+
+	h := &fakeHost{canUpdate: true, version: "0.1.19", checkErr: errors.New("network is down")}
+	r := newRig(t, h, cfg)
+	r.start()
+	r.clock.advance(firstCheckWait)
+	if n := h.checkCount(); n != 1 {
+		t.Fatalf("启动后应查一次，查询次数 %d", n)
+	}
+	r.clock.advance(time.Hour - time.Second)
+	if n := h.checkCount(); n != 1 {
+		t.Fatalf("失败之后不应在一小时之内再查，查询次数 %d", n)
+	}
+	r.clock.advance(2 * time.Second)
+	if n := h.checkCount(); n != 2 {
+		t.Errorf("首检失败一小时后应重试，查询次数 %d", n)
 	}
 }
 
