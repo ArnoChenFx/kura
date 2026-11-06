@@ -2,6 +2,8 @@
 
 A desktop manager for agent skills, built with [MyGo](https://github.com/egoist/mygo)'s native `ui` package: no webview, no Node, no Bun.
 
+[![Listed on Awesome MyGo](https://awesomemygo.dev/badge.svg)](https://awesomemygo.dev/apps/kura)
+
 [中文说明](README-zh.md)
 
 ![Screenshot](docs/screenshot.png)
