@@ -2,6 +2,8 @@
 
 一个桌面技能管理器（agent skills manager），用 [MyGo](https://github.com/egoist/mygo) 的原生 `ui` 包构建：没有 webview，不需要 Node，也不需要 Bun。
 
+[![Listed on Awesome MyGo](https://awesomemygo.dev/badge.svg)](https://awesomemygo.dev/apps/kura)
+
 [English README](README.md)
 
 ![Screenshot](docs/screenshot.png)
