@@ -3,6 +3,7 @@
 A desktop manager for agent skills, built with [MyGo](https://github.com/egoist/mygo)'s native `ui` package: no webview, no Node, no Bun.
 
 [![Listed on Awesome MyGo](https://awesomemygo.dev/badge.svg)](https://awesomemygo.dev/apps/kura)
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
 [中文说明](README-zh.md)
 
@@ -85,3 +86,7 @@ CGO_ENABLED=0 go build ./...
 ## Development and docs
 
 [AGENTS.md](AGENTS.md) has this repository's engineering rules (package boundaries, the UI thread contract, verification, test isolation); [REQUIREMENTS.md](REQUIREMENTS.md) has what kura must do, edge cases and non-goals included. [CHANGELOG.md](CHANGELOG.md) is the source of release notes, and each release needs a `## <version>` heading because the updater shows that section. Development notes live in [docs/note/](docs/note/).
+
+## License
+
+kura is licensed under the [Apache License 2.0](LICENSE). Copyright 2026 Arno Chen.

@@ -3,6 +3,7 @@
 一个桌面技能管理器（agent skills manager），用 [MyGo](https://github.com/egoist/mygo) 的原生 `ui` 包构建：没有 webview，不需要 Node，也不需要 Bun。
 
 [![Listed on Awesome MyGo](https://awesomemygo.dev/badge.svg)](https://awesomemygo.dev/apps/kura)
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
 [English README](README.md)
 
@@ -85,3 +86,7 @@ CGO_ENABLED=0 go build ./...
 ## 参与开发与文档
 
 [AGENTS.md](AGENTS.md) 是仓库的工程约定（包边界、UI 线程契约、验证要求、测试隔离）； [REQUIREMENTS.md](REQUIREMENTS.md) 是 kura 必须做到什么，含边界情况与非目标。 [CHANGELOG.md](CHANGELOG.md) 是发布说明的来源，且每个版本都要有 `## <版本号>` 标题，因为更新器会展示那一小节。开发笔记都在 [docs/note/](docs/note/)。
+
+## 许可证
+
+kura 使用 [Apache License 2.0](LICENSE) 许可。Copyright 2026 Arno Chen.
