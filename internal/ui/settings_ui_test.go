@@ -4,9 +4,12 @@
 package ui
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
+
+	myui "github.com/egoist/mygo/ui"
 
 	"github.com/ArnoChenFx/kura/internal/store"
 )
@@ -130,7 +133,10 @@ func TestSettingsModalSavesFromInputs(t *testing.T) {
 		{"密钥", fakeKey},
 		{"模型", "fake-model"},
 	} {
-		if err := tt.Click(in.label); err != nil {
+		// mygo 0.8 的 Tester.Click 会校验命中的是不是那个控件本身：Field 标题文字的中心
+		// 落在输入框上，按它的规则不算「点到输入框」。改点标题靠左的位置（同一行内），
+		// 与真人点标题左侧的空白一样会聚焦输入框。
+		if err := clickFieldInput(a, tt, in.label); err != nil {
 			t.Fatalf("点不到输入框 %q: %v；文本 %v", in.label, err, tt.Texts())
 		}
 		tt.Type(in.text)
@@ -250,4 +256,16 @@ func TestCorruptSettingsFileDoesNotBreakApp(t *testing.T) {
 	if a.settingsErr != "" {
 		t.Errorf("保存成功后应清掉读取错误，得到 %q", a.settingsErr)
 	}
+}
+
+// clickFieldInput 点 Field 标题靠左的位置并把界面跟上：mygo 0.8 的 Tester.Click
+// 不接受「文字中心落在另一个控件上」的点击，而输入框要的就是这种点击。
+func clickFieldInput(a *App, tt *myui.Tester, label string) error {
+	r, ok := tt.Find(label)
+	if !ok {
+		return fmt.Errorf("找不到 %q", label)
+	}
+	tt.ClickAt(r.X+40, r.Y+r.H/2)
+	refresh(a, tt)
+	return nil
 }

@@ -29,8 +29,8 @@ A desktop manager for agent skills, built with [MyGo](https://github.com/egoist/
 
 Download from the [Releases](https://github.com/ArnoChenFx/kura/releases) page. Release assets are named like this:
 
-- Windows: `kura.Setup.<version>.amd64.exe` (per-user installer), `kura.exe` (portable)
-- macOS: `kura.<version>.arm64.dmg`, `kura.<version>.amd64.dmg`
+- Windows: `kura-setup-<version>-amd64.exe` (per-user installer), `kura.exe` (portable)
+- macOS: `kura-<version>-arm64.dmg`, `kura-<version>-amd64.dmg`
 - Linux: `kura_<version>_{amd64,arm64}.deb`, `kura-<version>-linux-<arch>.tar.gz`, or `install.sh` (per-user install into `~/.local/kura.app`, no root)
 
 Those assets hold the window app; the CLI is a separate binary. Build it from source (below), or take the `kura-cli-<os>-<arch>` artifact CI attaches to each run.
