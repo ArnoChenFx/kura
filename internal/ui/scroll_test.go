@@ -9,7 +9,7 @@ import (
 	myui "github.com/egoist/mygo/ui"
 )
 
-// 原生滚轮保留中间帧并累积完整步长；反向输入从累积目标扣除，停止后不漂移。
+// 原生滚轮保留中间帧并累积完整步长；反向的一格立刻往回滚（mygo 0.7 起取消尚未走完的行程），停止后不漂移。
 func TestWheelScrollSmoothAccumulationAndReverse(t *testing.T) {
 	var scroll myui.ScrollState
 	tt := myui.NewTester(func(c *myui.Context) {
@@ -33,10 +33,12 @@ func TestWheelScrollSmoothAccumulationAndReverse(t *testing.T) {
 	tt.Wheel(100, 100, 0, 100)
 	tt.Advance(40 * time.Millisecond)
 	before := scroll.Y
+	// mygo 0.7 起，反向的一格不吸收尚未走完的行程：残留行程就地取消，从当前位置往回走
+	// （上游 TestWheelReverseAtEnd）。所以这里断言「往回走」，不再断言正好回到 200。
 	tt.Wheel(100, 100, 0, -100)
 	tt.Advance(200 * time.Millisecond)
-	if before <= 200 || math.Abs(float64(scroll.Y-200)) > 0.1 {
-		t.Fatalf("反向应抵消尚未完成的同等步长：before=%g, after=%g", before, scroll.Y)
+	if before <= 200 || scroll.Y >= before {
+		t.Fatalf("反向应立刻往回滚：before=%g, after=%g", before, scroll.Y)
 	}
 	stop := scroll.Y
 	tt.Advance(time.Second)

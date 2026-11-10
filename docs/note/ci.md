@@ -22,10 +22,10 @@
   - macOS (arm64 / amd64)：macos-latest（dmg 制作需要 macOS）。
   - Windows (amd64)：ubuntu-latest，先 `apt-get install nsis`。
   - Linux (amd64+arm64)：ubuntu-latest，**一个 job 里一次构建两个架构**（`-platform "linux/amd64,linux/arm64"`）。两个架构共用同一份 `install.sh`；拆成两个并行 job 时，`gh release upload --clobber` 的删除+创建会在并发下撞 `HTTP 422 ReleaseAsset.name already exists`（v0.1.6 实际发生，重跑单 job 才通过）。放在同一个 job 里，mygo 的 `uploads()` 会按文件名去重，只传一份。
-  - 每行把安装器与更新文件（`*Setup*.exe`、`*.dmg`、`*.deb`、 `kura-<版本>-<目标>.tar.gz`、`*.delta`、`update-<目标>.json`）上传到草稿 Release；Windows 行另外补传裸 `kura.exe`（`-upload` 不收它，但旧工作流有，保住便携版）。**清单由 mygo 最后上传**，避免应用读到指向缺失文件的清单。
+  - 每行把安装器与更新文件（`*-setup-*.exe`、`*.dmg`、`*.deb`、 `kura-<版本>-<目标>.tar.gz`、`*.delta`、`update-<目标>.json`）上传到草稿 Release；Windows 行另外补传裸 `kura.exe`（`-upload` 不收它，但旧工作流有，保住便携版）。**清单由 mygo 最后上传**，避免应用读到指向缺失文件的清单。
 - `publish`：`gh release edit --draft=false` 把草稿发布为正式 Release。
 
-**发布内容**：Windows `kura Setup <version> amd64.exe` + `kura.exe`， macOS `kura <version> <arch>.dmg`，Linux `*.deb` 和 `kura-<version>-linux-<arch>.tar.gz`（内含 install.sh），以及供自更新用的签名更新压缩包、delta 与 `update-<目标>.json` 清单。
+**发布内容**（0.7.0 起 mygo 改了资产命名）：Windows `kura-setup-<version>-amd64.exe` + `kura.exe`， macOS `kura-<version>-<arch>.dmg`，Linux `*.deb` 和 `kura-<version>-linux-<arch>.tar.gz`（内含 install.sh），以及供自更新用的签名更新压缩包、delta 与 `update-<目标>.json` 清单。
 
 **依赖的 secret**：`MYGO_UPDATER_PRIVATE_KEY` = `go tool mygo keygen` 生成的 `mygo-update.key` 全文（单行 base64，不是文件路径）。它让每个平台的产物多出 **签名的**更新包与清单——没有它，`mygo build` 仍会成功但**不产出更新文件**，发出去的版本无法被自更新发现。所以工作流把它设为硬性前提（缺失即失败）。
 
