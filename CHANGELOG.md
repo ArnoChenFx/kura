@@ -6,6 +6,12 @@ kura 遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 的格�
 
 ## [Unreleased]
 
+## 0.1.22
+
+- 依赖升级：MyGo 0.6.3 → 0.8.3。窗口、滚动、输入与更新的行为不变；kura 用到的 API 没有删除或改名，业务代码未改。
+- 滚到底再往回拨鼠标滚轮时立刻响应（上游 0.7.0 起反向滚轮不再被尚未走完的行程吸收）。
+- Windows 与 macOS 的安装包换了文件名：`kura-setup-<版本>-<架构>.exe`、`kura-<版本>-<架构>.dmg`（原来的名字是 `kura Setup <版本> amd64.exe` 与 `kura <版本> <架构>.dmg`）；Release 另附 `install.ps1` 与 `SHA256SUMS`。已安装的副本照旧自更新。
+
 ## 0.1.21
 
 - 每次启动 kura 都检查一次应用更新：启动约 10 秒后查一次，只有上次成功检查在 10 分钟以内才跳过（挡住连续重启、崩溃重启攒出的重复请求），同一次运行里之后仍每 24 小时一次。原来首检按「上次成功检查 + 24 小时」排期，当天查过一次就等于当天之后不再查，重启也看不到蓝点。
@@ -15,12 +21,10 @@ kura 遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 的格�
 
 - 升级 MyGo 至 0.6.3：Windows 上隐藏标题栏并启用材质时，最大化窗口不再露出系统的标题栏按钮；隐藏的滚动条轨道也放行点击；表格最后一列不再有可拖拽的边。
 - Windows 的文本框独占按键，编辑菜单里的 Ctrl+V 只粘贴一次；大段文字的内联变换每段只查找一次，滚动更省。
-- 升级评估见 [docs/note/mygo-0.6.3.md](docs/note/mygo-0.6.3.md)：kura 用到的包只有新增的 `ContentRules`（WebKit 内容拦截，未使用），业务代码未改。
 
 ## 0.1.19
 
 - 升级 MyGo 至 0.6.2：Linux 上拉丁词之间的中文标点改用该语言的字体绘制，触控板双指捏合会作为输入事件上报，Wayland 下第二个实例能把激活令牌转给已在运行的窗口。
-- 升级评估见 [docs/note/mygo-0.6.2.md](docs/note/mygo-0.6.2.md)：kura 用到的包导出 API 无增删，业务代码未改。
 
 ## 0.1.18
 
