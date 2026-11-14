@@ -111,7 +111,7 @@ jobs:
           MYGO_UPDATER_PRIVATE_KEY: ${{ secrets.MYGO_UPDATER_PRIVATE_KEY }}
           GH_TOKEN: ${{ github.token }}
         run: go tool mygo build -platform "${{ matrix.platform }}" -upload
-      # mygo 的 -upload 只收安装器与更新文件（`*-setup-*.exe`、`*.dmg`、`*.deb`、
+      # mygo 的 -upload 只收安装器与更新文件（`*-setup-*.exe`、`*.dmg`、`*.deb`、`*.rpm`、
       # `*-linux-*.tar.gz`、`*.delta`、`update-*.json`），不含 Windows 的裸
       # kura.exe；这里补传它，保住旧工作流就有的便携版。它不被清单引用，
       # 所以放在清单之后上传也不影响更新。
