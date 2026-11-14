@@ -48,13 +48,18 @@ type visibleSkill struct {
 	name, description, display, source string
 }
 
+// visibleCache 是 visible() 的缓存。缓存键是（扫描快照 skills、搜索词 query、状态筛选
+// filter、排序偏好 sort），四者任一变了就重算。排序偏好必须在键里：否则切换排序后
+// 命中上一次的 rows，界面顺序纹丝不动。
 type visibleCache struct {
-	skills []*store.Skill
-	sorted []visibleSkill
-	rows   []*store.Skill
-	query  string
-	filter int
-	valid  bool
+	skills  []*store.Skill
+	entries []visibleSkill // 按扫描原序保存的搜索键；排序偏好变化时从它重排，不依赖上一次的排序结果
+	sorted  []visibleSkill // entries 按 sort 排好的副本
+	rows    []*store.Skill
+	query   string
+	filter  int
+	sort    store.SortPref // sorted 与 rows 是按哪种排序排的
+	valid   bool
 }
 
 // App 是 kura 主窗口的状态。View 由 MyGo 在主线程反复调用，
@@ -166,6 +171,8 @@ type App struct {
 	themeMu        sync.Mutex         // 串行化同步原生外观与写 config.json
 	viewMode       string             // 技能区排列模式：store.ViewGrid / store.ViewList
 	viewSeq        atomic.Int64       // 排列模式切换的序号：后台任务只执行最新一次
+	sortPref       store.SortPref     // 技能区排序偏好：默认按修改时间、新的在前；零值等同默认
+	sortSeq        atomic.Int64       // 排序偏好切换的序号：后台任务只执行最新一次
 	langPref       string             // 界面语言偏好：store.LangSystem / LangZH / LangEN
 	langSeq        atomic.Int64       // 语言切换的序号：后台任务只执行最新一次
 	// setLocale 把语言偏好应用到「应用显示的语言」。生产环境交给 mygo.App
@@ -236,6 +243,8 @@ func NewApp(cfg *store.Config) *App {
 	if a.viewMode == "" {
 		a.viewMode = store.ViewGrid
 	}
+	// 排序偏好：lib.Sort 已规范（没存过或存坏了就是默认：按修改时间、新的在前）。
+	a.sortPref = lib.Sort
 	// 界面语言偏好：具体语言的解析（system → zh/en）在 main.go / CLI 里做，
 	// 窗口侧只记住偏好，切语言走 SetLangAsync。
 	a.langPref = lib.Lang
@@ -368,19 +377,26 @@ func filterState(f int) store.State {
 	return ""
 }
 
-// visible 返回按状态筛选与搜索词过滤后的技能，按名字排序（不区分大小写）。
+// visible 返回按状态筛选与搜索词过滤后的技能，按排序偏好（a.sortPref）排序：默认按修改时间、
+// 新的在前；按名称时不区分大小写、同名再按原名；时间相同再按名称（compareVisible）。
+// 结果是输入与偏好的纯函数，稳定可复现。排序只在这里做一次：网格与列表两种排列共用
+// 这份结果，所以两者永远是同一个顺序。
 // 停用的技能与启用的混排，不沉到最后：状态只靠卡片上的开关与标签表达。
 // 「全部」不含回收站：回收站里的技能只在「回收站」筛选下出现，避免与在用技能
 // 混在一起。
+//
+// 缓存键见 visibleCache：排序偏好变化必须使缓存失效（走缓存键，而不是靠调用方
+// 手动清缓存）。这里不读磁盘：修改时间来自扫描时算好的 Skill.ModTime。
 func (a *App) visible() []*store.Skill {
 	cache := &a.visibleRows
+	order := a.sortOrder()
 	sameSkills := cache.valid && slices.Equal(cache.skills, a.skills)
-	if sameSkills && cache.query == a.query && cache.filter == a.filter {
+	if sameSkills && cache.query == a.query && cache.filter == a.filter && cache.sort == order {
 		return cache.rows
 	}
 	if !sameSkills {
 		cache.skills = slices.Clone(a.skills)
-		cache.sorted = make([]visibleSkill, len(a.skills))
+		cache.entries = make([]visibleSkill, len(a.skills))
 		for i, s := range a.skills {
 			entry := visibleSkill{
 				skill: s, name: strings.ToLower(s.Name), description: strings.ToLower(s.Description),
@@ -393,11 +409,14 @@ func (a *App) visible() []*store.Skill {
 					entry.source += "\x00" + sourceSearchQuery(src.URL)
 				}
 			}
-			cache.sorted[i] = entry
+			cache.entries[i] = entry
 		}
-		slices.SortStableFunc(cache.sorted, func(x, y visibleSkill) int {
-			return cmp.Or(cmp.Compare(x.name, y.name), cmp.Compare(x.skill.Name, y.skill.Name))
-		})
+	}
+	if !sameSkills || cache.sort != order {
+		// 从扫描原序的 entries 重排（稳定排序），而不是在上一次的排序结果上再排：
+		// 同一份输入加同一个偏好总是同一个结果，与之前切换过几次排序无关。
+		cache.sorted = slices.Clone(cache.entries)
+		slices.SortStableFunc(cache.sorted, compareVisible(order))
 	}
 	q := strings.ToLower(strings.TrimSpace(a.query))
 	sourceQ := sourceSearchQuery(q)
@@ -414,8 +433,41 @@ func (a *App) visible() []*store.Skill {
 			rows = append(rows, s)
 		}
 	}
-	cache.rows, cache.query, cache.filter, cache.valid = rows, a.query, a.filter, true
+	cache.rows, cache.query, cache.filter, cache.sort, cache.valid = rows, a.query, a.filter, order, true
 	return rows
+}
+
+// sortOrder 返回规范后的排序偏好：a.sortPref 是零值（测试里直接构造的 App）或不认识时
+// 按默认（按修改时间、新的在前）。
+func (a *App) sortOrder() store.SortPref {
+	order, err := store.NormalizeSort(a.sortPref)
+	if err != nil {
+		return store.DefaultSort()
+	}
+	return order
+}
+
+// compareVisible 返回 order 对应的比较函数（供 SortStableFunc 用）。
+//   - 按名称：不区分大小写，同名再按原名（与改动前固定按名称排序时完全一致）；
+//   - 按修改时间：按 Skill.ModTime 降序（新的在前）或升序（旧的在前）；时间相同再按
+//     名称，且两个方向下同时间的条目都按名称升序（不随方向翻转），结果稳定可复现。
+//
+// 名称、原名都相同的条目（同名的启用/停用/回收站副本）比较结果为 0，稳定排序保持它们在
+// 扫描原序里的相对顺序（启用、停用、回收站）。
+func compareVisible(order store.SortPref) func(x, y visibleSkill) int {
+	byName := func(x, y visibleSkill) int {
+		return cmp.Or(cmp.Compare(x.name, y.name), cmp.Compare(x.skill.Name, y.skill.Name))
+	}
+	if order.Key != store.SortTime {
+		return byName
+	}
+	return func(x, y visibleSkill) int {
+		d := x.skill.ModTime.Compare(y.skill.ModTime)
+		if order.Desc {
+			d = -d
+		}
+		return cmp.Or(d, byName(x, y))
+	}
 }
 
 // sourceSearchQuery 让 GitHub 仓库链接与 owner/repo 使用同一个搜索词；
@@ -949,11 +1001,11 @@ func (a *App) DiscoverAgentRootsAsync(home string) {
 }
 
 // libCopy 复制目录列表交给后台修改，成功后再在 UI 线程换上。带上主题、
-// 排列、语言与自动检查偏好：后台的 SetTheme / SetView / SetLang / SetAutoCheck
-// 都是 config.json 的「读—改—写」，副本缺了哪一项都可能把它当成空值写回去。
+// 排列、排序、语言与自动检查偏好：后台的 SetTheme / SetView / SetSort / SetLang /
+// SetAutoCheck 都是 config.json 的「读—改—写」，副本缺了哪一项都可能把它当成空值写回去。
 func (a *App) libCopy() *store.Library {
 	return &store.Library{Home: a.lib.Home, Roots: append([]string(nil), a.lib.Roots...),
-		Theme: a.themeMode, View: a.viewMode, Lang: a.langPref, AutoCheck: a.autoCheck}
+		Theme: a.themeMode, View: a.viewMode, Sort: a.sortPref, Lang: a.langPref, AutoCheck: a.autoCheck}
 }
 
 // OpenPathAsync 用系统默认方式打开 path：文件夹用文件管理器，SKILL.md 用
@@ -1109,6 +1161,36 @@ func (a *App) SetViewAsync(mode string) {
 		}
 		if err := lib.SetView(mode); err != nil {
 			a.publish(func() { a.status, a.statusErr = locales.UiStatusViewSaveFailed(err.Error()), true })
+		}
+	})
+}
+
+// SetSortAsync 切换技能区的排序偏好为 s（store.SortPref：按名称，或按修改时间、新的/旧的在前）。
+// 界面立刻换序——下一帧 visible() 按新偏好排列（偏好在它的缓存键里）；选中项以技能名
+// 与存放状态为准（selName / selState），换序不丢；写 config.json 在后台做，写盘失败只在
+// 状态行报告，不回滚已换的顺序。与 SetViewAsync 一样：相同的偏好直接返回（幂等，重复
+// 构建不会重复写盘），连续切换只有最新一次会执行；不认识的取值在状态行报错。
+func (a *App) SetSortAsync(s store.SortPref) {
+	s, err := store.NormalizeSort(s)
+	if err != nil {
+		a.status, a.statusErr = err.Error(), true
+		return
+	}
+	if s == a.sortPref {
+		return
+	}
+	a.sortPref = s
+	seq := a.sortSeq.Add(1)
+	lib := a.libCopy()
+	a.spawn(func() {
+		// 与外观、排列、语言共用同一把锁：都是 config.json 的「读—改—写」，串行执行。
+		a.themeMu.Lock()
+		defer a.themeMu.Unlock()
+		if a.sortSeq.Load() != seq {
+			return
+		}
+		if err := lib.SetSort(s); err != nil {
+			a.publish(func() { a.status, a.statusErr = locales.UiStatusSortSaveFailed(err.Error()), true })
 		}
 	})
 }

@@ -103,6 +103,7 @@ func TestSplitterKeepsEightDIPHitAreaOnBothSides(t *testing.T) {
 // 透明命中层不能吞掉紧邻主栏右边的滚动条；拖滚动条只滚列表，不改栏宽。
 func TestDetailSplitterLeavesMainScrollbarDraggable(t *testing.T) {
 	a, cfg := newTestApp(t)
+	pinNameOrder(a) // 本用例依赖名称顺序（写于固定按名称排序的年代），见 pinNameOrder
 	for i := range 80 {
 		seedSkill(t, cfg, fmt.Sprintf("scroll-%02d", i), nil)
 	}

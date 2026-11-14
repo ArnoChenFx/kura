@@ -17,6 +17,7 @@ func TestCompactHeaderKeepsSpaceForSkillsAndActionsVisible(t *testing.T) {
 		for _, mode := range []string{store.ThemeLight, store.ThemeDark} {
 			t.Run(fmt.Sprintf("%d-%s", width, mode), func(t *testing.T) {
 				a, cfg := newTestApp(t)
+				pinNameOrder(a) // 本用例依赖名称顺序（写于固定按名称排序的年代），见 pinNameOrder
 				for i := range 12 {
 					seedDescribed(t, cfg, fmt.Sprintf("compact-skill-%02d", i), "A short description", nil)
 				}

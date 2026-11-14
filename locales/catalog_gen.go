@@ -7167,3 +7167,117 @@ func StoreErrTranslateRateLimited(seconds int) string {
 func (msgs Messages) StoreErrTranslateRateLimited(seconds int) string {
 	return Catalog.Format(msgs.locale, "storeErrTranslateRateLimited", map[string]any{"seconds": seconds})
 }
+
+// StoreErrUnknownSort says "store: the sort order must be name or time"
+// in the language the app shows.
+//
+// 错误：排序方式只能是 name 或 time。
+func StoreErrUnknownSort() string { return In(i18n.Locale()).StoreErrUnknownSort() }
+
+// StoreErrUnknownSort says "store: the sort order must be name or time"
+// in the language of msgs.
+//
+// 错误：排序方式只能是 name 或 time。
+func (msgs Messages) StoreErrUnknownSort() string {
+	return Catalog.Format(msgs.locale, "storeErrUnknownSort", nil)
+}
+
+// UiSortLabel says "Sort"
+// in the language the app shows.
+//
+// 排序开关的标签（无障碍名）。
+func UiSortLabel() string { return In(i18n.Locale()).UiSortLabel() }
+
+// UiSortLabel says "Sort"
+// in the language of msgs.
+//
+// 排序开关的标签（无障碍名）。
+func (msgs Messages) UiSortLabel() string {
+	return Catalog.Format(msgs.locale, "uiSortLabel", nil)
+}
+
+// UiSortName says "Sort by name"
+// in the language the app shows.
+//
+// 排序选项：按名称（不区分大小写，A 到 Z）。
+func UiSortName() string { return In(i18n.Locale()).UiSortName() }
+
+// UiSortName says "Sort by name"
+// in the language of msgs.
+//
+// 排序选项：按名称（不区分大小写，A 到 Z）。
+func (msgs Messages) UiSortName() string {
+	return Catalog.Format(msgs.locale, "uiSortName", nil)
+}
+
+// UiSortTimeNewest says "Sort by modified time (newest first)"
+// in the language the app shows.
+//
+// 排序选项：按修改时间，新的在前（默认）。
+func UiSortTimeNewest() string { return In(i18n.Locale()).UiSortTimeNewest() }
+
+// UiSortTimeNewest says "Sort by modified time (newest first)"
+// in the language of msgs.
+//
+// 排序选项：按修改时间，新的在前（默认）。
+func (msgs Messages) UiSortTimeNewest() string {
+	return Catalog.Format(msgs.locale, "uiSortTimeNewest", nil)
+}
+
+// UiSortTimeOldest says "Sort by modified time (oldest first)"
+// in the language the app shows.
+//
+// 排序选项：按修改时间，旧的在前。
+func UiSortTimeOldest() string { return In(i18n.Locale()).UiSortTimeOldest() }
+
+// UiSortTimeOldest says "Sort by modified time (oldest first)"
+// in the language of msgs.
+//
+// 排序选项：按修改时间，旧的在前。
+func (msgs Messages) UiSortTimeOldest() string {
+	return Catalog.Format(msgs.locale, "uiSortTimeOldest", nil)
+}
+
+// UiSortTimeNewestTip says "Sort by modified time (newest first). Click again for oldest first"
+// in the language the app shows.
+//
+// 「按修改时间」分段已选中、当前新的在前时的悬停提示，说明再点一次可以反转方向。
+func UiSortTimeNewestTip() string { return In(i18n.Locale()).UiSortTimeNewestTip() }
+
+// UiSortTimeNewestTip says "Sort by modified time (newest first). Click again for oldest first"
+// in the language of msgs.
+//
+// 「按修改时间」分段已选中、当前新的在前时的悬停提示，说明再点一次可以反转方向。
+func (msgs Messages) UiSortTimeNewestTip() string {
+	return Catalog.Format(msgs.locale, "uiSortTimeNewestTip", nil)
+}
+
+// UiSortTimeOldestTip says "Sort by modified time (oldest first). Click again for newest first"
+// in the language the app shows.
+//
+// 「按修改时间」分段已选中、当前旧的在前时的悬停提示，说明再点一次可以反转方向。
+func UiSortTimeOldestTip() string { return In(i18n.Locale()).UiSortTimeOldestTip() }
+
+// UiSortTimeOldestTip says "Sort by modified time (oldest first). Click again for newest first"
+// in the language of msgs.
+//
+// 「按修改时间」分段已选中、当前旧的在前时的悬停提示，说明再点一次可以反转方向。
+func (msgs Messages) UiSortTimeOldestTip() string {
+	return Catalog.Format(msgs.locale, "uiSortTimeOldestTip", nil)
+}
+
+// UiStatusSortSaveFailed says "Could not save the sort order: {reason}"
+// in the language the app shows.
+//
+// 状态行：排序方式保存失败。
+func UiStatusSortSaveFailed(reason string) string {
+	return In(i18n.Locale()).UiStatusSortSaveFailed(reason)
+}
+
+// UiStatusSortSaveFailed says "Could not save the sort order: {reason}"
+// in the language of msgs.
+//
+// 状态行：排序方式保存失败。
+func (msgs Messages) UiStatusSortSaveFailed(reason string) string {
+	return Catalog.Format(msgs.locale, "uiStatusSortSaveFailed", map[string]any{"reason": reason})
+}

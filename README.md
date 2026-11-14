@@ -21,7 +21,7 @@ A desktop manager for agent skills, built with [MyGo](https://github.com/egoist/
 - **Shows the full skill text and can translate it.** Google Translate works without an API key by default; experimental Microsoft Translator support and a custom OpenAI-compatible API are also selectable. Long translations show progress and can stop and resume without repeating completed sections. Free service availability depends on your region and the service; failed requests keep the original text, and you can switch services manually. Translations stay in memory and never modify `SKILL.md`.
 - **Reviews and restores history snapshots.** Open a skill’s history, inspect file differences and restore a selected version. The current version is saved before restoration.
 - **Speaks Chinese and English.** Messages live in MyGo's official ARB catalogs (`locales/`), so MyGo's own menus, file dialogs and controls follow the language too. The interface language follows the system on first launch (a `zh*` locale is Chinese, anything else is English) and can be pinned in the settings dialog; the CLI has `--lang` and `KURA_LANG`.
-- **Three-column window** (roots, cards, details). Column widths are draggable, roots can be reordered by dragging, skills show as a card grid or a list, and there are search plus All / Enabled / Disabled / Trash filters with counts. Context menus use the system's native menus.
+- **Three-column window** (roots, cards, details). Column widths are draggable, roots can be reordered by dragging, skills show as a card grid or a list, sorted by modified time (newest first, the default) or by name (click the clock again to reverse the direction), and there are search plus All / Enabled / Disabled / Trash filters with counts. Context menus use the system's native menus.
 - **Updates itself** through the MyGo updater: the app menu has a check for updates. A background check runs about ten seconds after launch and then daily; a newer version only lights a dot on the update button and never opens a window by itself. A download is installed only after its Ed25519 signature has been verified.
 - **Finds agent directories on this machine.** On startup kura adds the global skill directories that already exist (Claude Code, Codex, Cursor, Gemini CLI, Pi and others — see `internal/store/agentdirs.go`), and a directory removed from the list is never added back.
 
@@ -57,7 +57,7 @@ Exit codes: `0` success, `1` operation failed, `2` usage error, `3` `doctor` fou
 | Path | Contents |
 | --- | --- |
 | `~/.agents/skills/` | default skill root (Windows: `%USERPROFILE%\.agents\skills`) |
-| `~/.kura/config.json` | added roots, appearance (`theme`), skill layout (`view`) |
+| `~/.kura/config.json` | added roots, appearance (`theme`), skill layout (`view`), sort order (`sort`) |
 | `~/.kura/disabled/`, `trash/<skill>/<stamp>/`, `snapshots/<skill>/<stamp>/` | disabled skills, removed ones (restorable), and snapshots taken before an update or a removal |
 | `~/.kura/roots/<id>/` | the same three folders for each added root; `<id>` is the first 12 hex digits of the SHA-256 of the normalised root path |
 | `~/.kura/settings.json` | translation service and target language, plus optional custom API URL, key and model |

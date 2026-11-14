@@ -143,6 +143,17 @@ ADDED = {
     "storeErrLinkCrossVolume",
     "storeErrReplaceTargetUnsafe",
     "uiRootsNoneAvailable",
+    # 技能区的排序方式（config.json 的 sort）：未知取值的错误、筛选栏里排序开关的标签与三个
+    # 选项（名称 / 修改时间新的在前 / 修改时间旧的在前），以及排序偏好写盘失败时状态行的提示。
+    "storeErrUnknownSort",
+    "uiSortLabel",
+    "uiSortName",
+    "uiSortTimeNewest",
+    "uiSortTimeOldest",
+    # 「按修改时间」分段已选中时的悬停提示（说明再点一次可反转方向），整句进目录、不拼接。
+    "uiSortTimeNewestTip",
+    "uiSortTimeOldestTip",
+    "uiStatusSortSaveFailed",
 }
 
 

@@ -9,6 +9,7 @@ import (
 	"io"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/ArnoChenFx/kura/internal/store"
 	"github.com/ArnoChenFx/kura/locales"
@@ -43,6 +44,7 @@ type skillJSON struct {
 	PluginName  string `json:"pluginName,omitempty"`
 	UpdatedAt   string `json:"updatedAt,omitempty"`
 	ContentHash string `json:"contentHash,omitempty"`
+	ModTime     string `json:"modTime,omitempty"`   // 技能最近动过的时间（RFC 3339，UTC），取不到时不出现
 	MetaError   string `json:"metaError,omitempty"` // 元数据损坏时的原因
 }
 
@@ -61,6 +63,14 @@ func toSkillJSON(s *store.Skill) skillJSON {
 		State:      string(s.State),
 		HasSkillMd: s.HasSKILLMD,
 		Dir:        s.Dir,
+	}
+	// modTime 三种存放状态都有（口径见 store.Skill.ModTime：目录、SKILL.md、.kura-meta.json
+	// 三个 mtime 取最大；回收站条目只剩容器目录的 mtime，约等于移入回收站的时间）。
+	// 用 RFC3339Nano（UTC）：整秒时与 RFC3339 完全一致，有小数秒时保留文件系统的完整精度，
+	// 标准的 RFC 3339 解析器都能读。零值（三个路径都取不到）不输出。
+	// 命令行永远按名称输出技能（见 store.scanDir）；排序偏好 sort 只在界面里生效。
+	if !s.ModTime.IsZero() {
+		out.ModTime = s.ModTime.UTC().Format(time.RFC3339Nano)
 	}
 	if s.State != store.StateTrashed {
 		out.MetaError = s.MetaErr

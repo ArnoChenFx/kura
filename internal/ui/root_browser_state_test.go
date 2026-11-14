@@ -151,6 +151,7 @@ func TestRootBrowserKeepsIndependentGridAndListScroll(t *testing.T) {
 	for _, mode := range []string{store.ViewGrid, store.ViewList} {
 		t.Run(mode, func(t *testing.T) {
 			a, cfg := newTestApp(t)
+			pinNameOrder(a) // 本用例依赖名称顺序（写于固定按名称排序的年代），见 pinNameOrder
 			other := makeRoot(t, "other")
 			if err := a.lib.AddRoot(other); err != nil {
 				t.Fatal(err)

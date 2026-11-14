@@ -99,6 +99,20 @@ var (
 		`<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M21 9H3"/><path d="M21 15H3"/>`))
 )
 
+// 排序开关用到的图标：名称、修改时间新的在前、修改时间旧的在前。与「排列模式」的图标
+// 放在一起：两组开关并排出现在筛选栏里。
+var (
+	// iconSortName（lucide arrow-down-a-z）：按名称排序（A 到 Z）。
+	iconSortName = myui.MustParseSVG(svgIcon(
+		`<path d="m3 16 4 4 4-4"/><path d="M7 20V4"/><path d="M20 8h-5"/><path d="M15 10V6.5a2.5 2.5 0 0 1 5 0V10"/><path d="M15 14h5l-5 6h5"/>`))
+	// iconSortNewest（lucide clock-arrow-down）：按修改时间，新的在前——钟面加向下的箭头。
+	iconSortNewest = myui.MustParseSVG(svgIcon(
+		`<path d="M12.338 21.994A10 10 0 1 1 21.925 13.227"/><path d="M12 6v6l2 1"/><path d="m14 18 4 4 4-4"/><path d="M18 14v8"/>`))
+	// iconSortOldest（lucide clock-arrow-up）：按修改时间，旧的在前——钟面加向上的箭头。
+	iconSortOldest = myui.MustParseSVG(svgIcon(
+		`<path d="M13.228 21.925A10 10 0 1 1 21.994 12.338"/><path d="M12 6v6l1.562 .781"/><path d="m14 18 4-4 4 4"/><path d="M18 22v-8"/>`))
+)
+
 // 设置与翻译用到的图标。
 var (
 	// iconSettings（lucide settings）：左栏的「设置」入口（齿轮）。

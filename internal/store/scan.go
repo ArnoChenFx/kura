@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/ArnoChenFx/kura/internal/i18n"
 	"github.com/ArnoChenFx/kura/locales"
@@ -25,6 +26,12 @@ type Skill struct {
 	Description string
 	Meta        *Meta
 	MetaErr     string
+	// ModTime 是这个技能「最近什么时候动过」，界面按它排序（默认新的在前）。
+	// 取值口径见 skillModTime：技能目录自身、目录里 SKILL.md、目录里
+	// .kura-meta.json 三个 mtime 里最大的一个，任一取不到就跳过它；三个都取不到时
+	// 为零值（time.Time{}）。扫描时算一次放进来，之后和 Skill 的其他字段一样是只读
+	// 快照——不要在每次构建界面时现算（那是磁盘 I/O，不能放在 UI 线程）。
+	ModTime time.Time
 }
 
 const (
@@ -124,6 +131,7 @@ func buildSkill(dir, name string, state State) *Skill {
 		Dir:        dir,
 		State:      state,
 		HasSKILLMD: fileExists(filepath.Join(dir, "SKILL.md")),
+		ModTime:    skillModTime(dir),
 	}
 	if s.HasSKILLMD {
 		s.Description = readDescription(dir)
@@ -135,6 +143,43 @@ func buildSkill(dir, name string, state State) *Skill {
 		s.Meta = res.Meta
 	}
 	return s
+}
+
+// skillModTime 返回技能「最近动过」的时间：max(技能目录自身的 mtime、目录里 SKILL.md
+// 的 mtime、目录里 .kura-meta.json 的 mtime)。任一取不到（不存在、无权限）就跳过
+// 它；三个都取不到时返回零值。
+//
+// 为什么是这三个：
+//   - 目录的 mtime 只在这个目录「直接增删条目」时才变（新增、删除、改名子目录或文件，
+//     编辑器用「写临时文件再改名」保存 SKILL.md 也算），改一个已有文件的内容不会动它；
+//   - 直接改 SKILL.md 的正文只动文件自己的 mtime，不动目录的；
+//   - 安装、更新、导入元数据都会重写 .kura-meta.json。
+//
+// 三者取最大，才等于用户心里的「这个技能什么时候动过」。
+//
+// 为什么不递归整棵树取最大：那要给每个技能把所有文件都 Stat 一遍，kura list 与
+// 界面扫描在带大 assets（图片、模型、数据集）的技能上会明显变慢；而 assets 内部的
+// 改动并不影响用户对卡片顺序的直觉——SKILL.md 与元数据才是技能本身。所以这里只看
+// 这三个路径，刻意不往下走。
+//
+// 一律用 os.Stat（跟随链接）而不是 os.Lstat：技能目录可能是联接点或目录符号链接，
+// 用户关心的是链接指向的真实内容什么时候动过；链接本身的 mtime 只是建链的那一刻，
+// 没有意义。目录里的 SKILL.md 与元数据路径经由链接解析，同样落在目标上。
+//
+// 回收站里的条目是 trash/<name> 这个容器目录（SKILL.md 与元数据在它的时间戳子目录
+// 里），后两个路径取不到，只剩容器自己的 mtime，约等于它被移入回收站的时间。
+func skillModTime(dir string) time.Time {
+	var latest time.Time
+	for _, p := range [...]string{dir, filepath.Join(dir, "SKILL.md"), filepath.Join(dir, MetaFileName)} {
+		info, err := os.Stat(p)
+		if err != nil {
+			continue
+		}
+		if mt := info.ModTime(); mt.After(latest) {
+			latest = mt
+		}
+	}
+	return latest
 }
 
 // fileExists 报告路径是否存在。
