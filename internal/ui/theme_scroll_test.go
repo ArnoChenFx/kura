@@ -16,6 +16,7 @@ func TestThemeSwitchKeepsLongListScrollPosition(t *testing.T) {
 	for _, initial := range []string{store.ThemeLight, store.ThemeDark} {
 		t.Run(initial, func(t *testing.T) {
 			a, cfg := newTestApp(t)
+			pinNameOrder(a) // 本用例依赖名称顺序（写于固定按名称排序的年代），见 pinNameOrder
 			var names []string
 			for i := 0; i < 30; i++ {
 				name := fmt.Sprintf("scroll-skill-%02d", i)

@@ -153,6 +153,14 @@ type HomeConfig struct {
 	// View 是技能区的排列模式：ViewGrid（卡片网格）或 ViewList（两行列表）；
 	// 空串等同卡片网格。
 	View string `json:"view,omitempty"`
+	// Sort 是技能区的排序偏好，形如 {"key":"time","desc":true}：key 取 SortName 或
+	// SortTime，desc 只在 SortTime 下有意义（真是新的在前，缺省为真）。没有这一项、
+	// 或手改出的未知/损坏值，读取时一律按默认（DefaultSort：按修改时间、新的在前）
+	// 处理，不算错误。因此这里用 json.RawMessage 原样保存，而不是结构体：类型写错
+	// （比如写成字符串）不会让整个 config.json 解析失败——那会把根目录列表也丢掉——
+	// 其他写者（SetTheme 等）“读—改—写” config.json 时也不会替用户改掉它不认识的
+	// 内容。读写一律经 Library（Sort、SetSort）。
+	Sort json.RawMessage `json:"sort,omitempty"`
 	// Lang 是界面语言偏好：LangSystem（跟随系统，缺省）、LangZH 或 LangEN。
 	// 空串等同跟随系统。
 	Lang string `json:"lang,omitempty"`

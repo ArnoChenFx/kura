@@ -13,6 +13,7 @@ import (
 // 也能识别把所有行塞进 Scroll 的回归，而不只验证末行被视口裁切。
 func TestLocalListBuildsOnlyVisibleRowsAndReachesEnd(t *testing.T) {
 	a, cfg := newTestApp(t)
+	pinNameOrder(a) // 本用例依赖名称顺序（写于固定按名称排序的年代），见 pinNameOrder
 	const total = 200
 	names := make(map[string]bool, total)
 	for i := range total {

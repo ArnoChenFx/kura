@@ -3052,5 +3052,42 @@
         "type": "int"
       }
     }
+  },
+  "storeErrUnknownSort": "store: the sort order must be name or time",
+  "@storeErrUnknownSort": {
+    "description": "错误：排序方式只能是 name 或 time。"
+  },
+  "uiSortLabel": "Sort",
+  "@uiSortLabel": {
+    "description": "排序开关的标签（无障碍名）。"
+  },
+  "uiSortName": "Sort by name",
+  "@uiSortName": {
+    "description": "排序选项：按名称（不区分大小写，A 到 Z）。"
+  },
+  "uiSortTimeNewest": "Sort by modified time (newest first)",
+  "@uiSortTimeNewest": {
+    "description": "排序选项：按修改时间，新的在前（默认）。"
+  },
+  "uiSortTimeOldest": "Sort by modified time (oldest first)",
+  "@uiSortTimeOldest": {
+    "description": "排序选项：按修改时间，旧的在前。"
+  },
+  "uiSortTimeNewestTip": "Sort by modified time (newest first). Click again for oldest first",
+  "@uiSortTimeNewestTip": {
+    "description": "「按修改时间」分段已选中、当前新的在前时的悬停提示，说明再点一次可以反转方向。"
+  },
+  "uiSortTimeOldestTip": "Sort by modified time (oldest first). Click again for newest first",
+  "@uiSortTimeOldestTip": {
+    "description": "「按修改时间」分段已选中、当前旧的在前时的悬停提示，说明再点一次可以反转方向。"
+  },
+  "uiStatusSortSaveFailed": "Could not save the sort order: {reason}",
+  "@uiStatusSortSaveFailed": {
+    "description": "状态行：排序方式保存失败。",
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
   }
 }

@@ -64,6 +64,8 @@ kura 是一个**桌面技能管理器**，用 [MyGo](https://github.com/egoist/m
     - **更新（`replaceSkill`）与历史快照恢复（`restoreSnapshot`）作用在链接指向的真实目录上**（`realDir`：`os.Readlink`，相对目标按链接所在目录换算），链接保持不动，“失败从快照恢复”照旧成立，暂存目录建在真实目录旁边（与它同卷）。这是用户明确允许的。因为替换会先删光目标，先过 `checkReplaceTarget`：目标是盘符根、或把 kura 的技能根目录/数据目录包含在内（链接指回了上级）就拒绝（`storeErrReplaceTargetUnsafe`）。`.kura-meta.json` 也写进真实目录（包括“导入元数据”）。
     - 新增“读技能目录里所有文件”的代码时，用 `walkTree` 并让测试覆盖联接点与符号链接（`links_test.go` 的 `forEachLinkKind`：Windows 上两种都跑，联接点用 `mklink /J`，不需要管理员；没权限建符号链接时跳过）。
 
+15. **技能区的排序存在 `config.json` 的 `sort`**（`{"key":"name"|"time","desc":bool}`；`key` 缺省/未知/损坏都按默认：**按修改时间、新的在前**；`desc` 只在 `time` 下有意义，缺省为真，`name` 固定 A 到 Z）。读写只经 `store.Library`（`Sort`、`SetSort`，`store.NormalizeSort` 规范化），`SetSort` 与 `SetTheme` / `SetView` 一样是 `configMu` 下的「读—改—写」；`HomeConfig.Sort` 用 `json.RawMessage` 保存，所以手改出的坏值**不会让整个 config.json 解析失败**（那会把根目录列表也丢掉），无关的写入也不会替用户改掉它。界面切换走 `SetSortAsync`（立刻换序，后台写盘，失败只在状态行报告、不回滚）。**命令行永远按名称输出**，`sort` 只在界面里生效。排序依据 `Skill.ModTime` 的口径与理由见 `store.skillModTime` 与 `REQUIREMENTS.md`：`max(技能目录自身、目录里 SKILL.md、目录里 .kura-meta.json 三个 mtime)`，任一取不到就跳过，**不递归整棵树**，链接技能用 `os.Stat` 取目标的；扫描时算一次放进 `Skill`，不在每次构建里现算。
+
 kura 自己的目录：
 
 ```
@@ -72,7 +74,7 @@ kura 自己的目录：
   trash/<skill>/                 # 已移除的技能（带时间戳）
   snapshots/<skill>/<timestamp>/ # 更新前/移除前的快照
   roots/<id>/                    # 追加根目录各自的 disabled/ trash/ snapshots/
-  config.json                    # 根目录与偏好（theme：system | light | dark；view：grid | list；autoCheckUpdates：自动检查更新；updateCheckedAt：kura 上次成功检查更新的时间；updateCheckedVersion：那条时间对应的应用版本，与当前运行版本不一致时不采信）
+  config.json                    # 根目录与偏好（theme：system | light | dark；view：grid | list；sort：{"key":"name"|"time","desc":bool}，缺省按修改时间、新的在前；autoCheckUpdates：自动检查更新；updateCheckedAt：kura 上次成功检查更新的时间；updateCheckedVersion：那条时间对应的应用版本，与当前运行版本不一致时不采信）
   settings.json                  # 翻译 API 与全局目标语言（密钥明文，权限 0600）
 ```
 
@@ -105,6 +107,7 @@ kura 自己的目录：
 - **切换根目录要作废旧结果**：后台任务启动时记下 `App.gen`，发布时 `gen != a.gen` 就只清 busy、不覆盖当前列表（见 `publishAfterWork`、`reload`）。新增后台路径必须照做。
 - **左栏只显示存在的目录**：`viewRoots` 只渲染 `App.rootAvailable` 为真的目录（`os.Stat` 成功且是目录，链接目录算存在；口径与 `store.DirExists` 一致），不存在的不显示、不留计数徽标。存在与否**不在每帧里现查**（每帧 Stat 十几次太贵，死掉的网络盘还会卡住界面），而是随扫描在后台判定、缓存在 `App.rootExists`（经 `setRootExists` 回填，同时清掉它的 `rootCounts`）：当前目录由 `applyScan` 顺手得出（复用它原有的一次 `os.Stat`），其他目录在 `reload` 第二阶段与计数一起算，`DiscoverAgentRootsAsync` 新加的目录记为存在，`RemoveRootAsync` 删掉记录。没检查过的按存在处理（启动时左栏不会先空一下）。选中的目录（`rootSel`）不存在时，`ensureRootSelection` 切到列表里第一个**已确认存在**的目录（默认目录排第一，所以优先）：它只在第二阶段拿到所有目录新鲜的存在性之后才决定，不用过期缓存做跳转（否则「一个都不存在」时选中项会来回漂移）；一个都不存在时保留现状，左栏给 `uiRootsNoneAvailable` 提示，界面照常渲染。目录只是被隐藏，仍记在 `config.json` 里，回来后刷新就重新出现。
 - 选中以**技能名与存放状态**为准（`selName` / `selState`），区分启用、停用和回收站里的同名副本；网格里才用下标（`selIdx`，由 `syncSelection` 对齐）。筛选把选中项藏起来时右栏保持不变；移动成功后跟随该副本的新状态，但不能覆盖操作期间用户的新选择。
+- **排序偏好变化要作废 `visible()` 的缓存**：缓存键是（扫描快照、搜索词、状态筛选、排序偏好 `sortPref`），排序偏好必须在键里，不靠调用方手动清缓存，否则切换排序后界面顺序纹丝不动（`TestVisibleOrdersByPreference` 守着）。排序只在 `visible()` 里做一次，网格与列表共用它的结果；换序只改偏好，选中仍以 `selName` / `selState` 为准，不会丢。排序用的是扫描时放进 `Skill` 的 `ModTime`，**不在 UI 线程读磁盘**。
 - **颜色只从 `internal/ui/theme.go` 来**（`kuraScheme` / `palette`），视图代码里不写十六进制。用户最新选择是**中性石墨灰黑与纸白暖灰**：导航、画布、详情与卡片分层，主操作用银白/墨灰，薄荷绿用于启用状态。不要恢复深蓝、深紫或雾蓝紫的大面积背景与强调色；头像色板也避开蓝紫（`theme_test.go` 守着）。
 - **GridView 给每个单元格自己画一层选中框与悬停底**（圆角 8、2px 边：网格有焦点时 `Accent`，无焦点时 `SurfacePressed` 底加 `Border` 边，悬停时 `SurfaceHover` 底），颜色取自构建网格时的主题。kura 的卡片自己画选中与悬停（圆角更大、边 1px），两层叠一起就是「高亮框和卡片边框对不齐」。所以 `viewGrid` 用 `skin.cell`（这四个颜色透明的主题副本）构建网格，卡片里换回真主题（见 `viewGrid`、`newSkin`）。动网格或卡片外框后先跑 `TestCardChromeIsOneAlignedRing`（读真实渲染的像素）。
 - **别在要参与网格点击的元素上调 `RightClicked()` / `Clicked()` / `Pressed()`**：它们把元素标成可点击，会吞掉网格单元格要收的左键点击（表现为点卡片选不中）。右键要做的事放进 `ContextMenu` 的构建函数（它只在菜单打开、选了菜单项后各跑一次；右键选中卡片就在那里做）。
@@ -139,7 +142,7 @@ kura 自己的目录：
 gofmt -l .                      # 必须为空
 go vet ./...                    # 必须干净
 go tool mygo vet .              # 必须干净
-go tool mygo i18n check         # catalogs 必须无错（当前 509 条消息）
+go tool mygo i18n check         # catalogs 必须无错（当前 517 条消息）
 go test ./...                   # 全包通过
 CGO_ENABLED=0 go test ./...     # 全包通过
 CGO_ENABLED=0 go build ./...    # 成功

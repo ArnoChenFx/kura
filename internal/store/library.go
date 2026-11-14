@@ -10,6 +10,7 @@ package store
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -39,6 +40,8 @@ var (
 	ErrUnknownTheme = i18n.NewError("storeErrUnknownTheme", func() string { return locales.StoreErrUnknownTheme() })
 	// ErrUnknownView 表示排列模式不是 grid 或 list。
 	ErrUnknownView = i18n.NewError("storeErrUnknownView", func() string { return locales.StoreErrUnknownView() })
+	// ErrUnknownSort 表示排序依据不是 name 或 time。
+	ErrUnknownSort = i18n.NewError("storeErrUnknownSort", func() string { return locales.StoreErrUnknownSort() })
 )
 
 // 外观偏好的取值（config.json 的 theme）。
@@ -83,6 +86,78 @@ func NormalizeView(v string) (string, error) {
 	return "", fmt.Errorf("%w: %q", ErrUnknownView, v)
 }
 
+// 技能区排序依据的取值（config.json 的 sort.key）。
+const (
+	// SortName 按名称排序：不区分大小写，同名再按原名；方向固定为 A 到 Z。
+	SortName = "name"
+	// SortTime 按修改时间排序（Skill.ModTime），方向由 SortPref.Desc 决定；时间相同
+	// 再按名称，保证结果稳定可复现。
+	SortTime = "time"
+)
+
+// SortPref 是技能区的排序偏好（config.json 的 sort），在 config.json 里形如
+// {"key":"time","desc":true}。排序只在界面里生效：命令行的 list 永远按名称输出。
+type SortPref struct {
+	// Key 是排序依据：SortName 或 SortTime。空串（包括零值）等同默认，见 DefaultSort。
+	Key string `json:"key"`
+	// Desc 在 SortTime 下为真表示新的在前（默认），为假表示旧的在前；
+	// SortName 下没有意义，规范化后恒为假。
+	Desc bool `json:"desc"`
+}
+
+// DefaultSort 是没存过、或存的值不认识时的排序：按修改时间，新的在前。
+func DefaultSort() SortPref { return SortPref{Key: SortTime, Desc: true} }
+
+// NormalizeSort 把排序偏好规范成合法取值之一：空 Key（包括零值）是默认（按修改时间、
+// 新的在前）；SortName 的 Desc 恒规范成假（名称排序固定 A 到 Z）；SortTime 原样保留
+// 方向；不认识的 Key（大小写也要对）返回 ErrUnknownSort。读 config.json 时遇到这个错误
+// 按默认处理、不当作错误（同 NormalizeView）；SetSort 则拒绝它、不写盘。
+func NormalizeSort(s SortPref) (SortPref, error) {
+	switch s.Key {
+	case "":
+		return DefaultSort(), nil
+	case SortName:
+		return SortPref{Key: SortName}, nil
+	case SortTime:
+		return s, nil
+	}
+	return SortPref{}, fmt.Errorf("%w: %q", ErrUnknownSort, s.Key)
+}
+
+// sortFromHome 从 config.json 取出排序偏好：没有这一项、不是对象、字段类型不对、key 不认识，
+// 一律按默认处理，不算错误（同 theme / view）。desc 缺省为真（新的在前）。
+func sortFromHome(hc *HomeConfig) SortPref {
+	if len(hc.Sort) == 0 {
+		return DefaultSort()
+	}
+	var raw struct {
+		Key  string `json:"key"`
+		Desc *bool  `json:"desc"`
+	}
+	if err := json.Unmarshal(hc.Sort, &raw); err != nil {
+		return DefaultSort()
+	}
+	s := SortPref{Key: raw.Key, Desc: true}
+	if raw.Desc != nil {
+		s.Desc = *raw.Desc
+	}
+	norm, err := NormalizeSort(s)
+	if err != nil {
+		return DefaultSort()
+	}
+	return norm
+}
+
+// marshalSort 把已规范的排序偏好编码成写进 config.json 的形状。SortPref 只有一个字符串与
+// 一个布尔值，编码不会失败；万一失败返回 nil，调用方就不写这一项（读取时按默认）。
+func marshalSort(s SortPref) json.RawMessage {
+	data, err := json.Marshal(s)
+	if err != nil {
+		return nil
+	}
+	return data
+}
+
 // configMu 串行化对 config.json 的「读—改—写」。窗口里改外观与增删目录是
 // 各自的后台任务，不串行的话，一个任务会覆盖另一个刚写下的改动，或者读到
 // 对方写了一半的文件，把它当成损坏的配置覆盖掉。
@@ -100,6 +175,9 @@ type Library struct {
 	// View 是读取时 config.json 里的排列模式（已规范，缺省为 ViewGrid）。
 	// 与 Theme 一样只在启动时读；改排列模式走 SetView，它直接读写文件。
 	View string
+	// Sort 是读取时 config.json 里的排序偏好（已规范，缺省为 DefaultSort：按修改时间、
+	// 新的在前）。与 Theme、View 一样只在启动时读；改排序走 SetSort，它直接读写文件。
+	Sort SortPref
 	// Lang 是读取时 config.json 里的界面语言偏好（已规范，缺省为
 	// LangSystem，即跟随系统）。启动时由 main.go / CLI 解析成具体语言并
 	// 交给 i18n.Set；改语言走 SetLang。
@@ -115,7 +193,7 @@ type Library struct {
 // 同样返回只含默认根目录的 Library，并附带错误，调用方可继续使用。
 func LoadLibrary(base *Config) (*Library, error) {
 	l := &Library{Home: base.Home, Roots: []string{filepath.Clean(base.Root)},
-		Theme: ThemeSystem, View: ViewGrid, Lang: LangSystem, AutoCheck: true}
+		Theme: ThemeSystem, View: ViewGrid, Sort: DefaultSort(), Lang: LangSystem, AutoCheck: true}
 	hc, _, err := LoadHomeConfig(base)
 	if err != nil {
 		return l, err
@@ -128,6 +206,8 @@ func LoadLibrary(base *Config) (*Library, error) {
 	if v, verr := NormalizeView(hc.View); verr == nil {
 		l.View = v
 	}
+	// 排序同理：缺失、不认识或损坏都按默认（按修改时间、新的在前）处理，不当作错误。
+	l.Sort = sortFromHome(hc)
 	// 语言偏好同理：缺失或不认识都按跟随系统处理。
 	l.Lang = langFromHome(hc)
 	if hc.AutoCheck != nil {
@@ -148,6 +228,10 @@ func (l *Library) fallbackHome() *HomeConfig {
 	}
 	if l.View != "" && l.View != ViewGrid {
 		hc.View = l.View
+	}
+	// 排序同理：只有不同于默认的才写（零值规范成默认，不写）。
+	if s, err := NormalizeSort(l.Sort); err == nil && s != DefaultSort() {
+		hc.Sort = marshalSort(s)
 	}
 	if l.Lang != "" && l.Lang != LangSystem {
 		hc.Lang = l.Lang
@@ -406,6 +490,32 @@ func (l *Library) SetView(v string) error {
 		return err
 	}
 	l.View = v
+	return nil
+}
+
+// SetSort 把排序偏好写进 config.json（其余内容原样保留）。s 的 Key 不是 name、time
+// （空串视为默认）时返回 ErrUnknownSort，不写盘。与 SetTheme / SetView 一样是持
+// configMu 的「读—改—写」；config.json 损坏时它被新文件覆盖（见 fallbackHome）。
+func (l *Library) SetSort(s SortPref) error {
+	s, err := NormalizeSort(s)
+	if err != nil {
+		return err
+	}
+	configMu.Lock()
+	defer configMu.Unlock()
+	c := &Config{Root: l.Roots[0], Home: l.Home}
+	hc, _, err := LoadHomeConfig(c)
+	if err != nil {
+		hc = l.fallbackHome()
+	}
+	if hc.CreatedAt == "" {
+		hc.CreatedAt = time.Now().UTC().Format(time.RFC3339)
+	}
+	hc.Sort = marshalSort(s)
+	if err := SaveHomeConfig(c, hc); err != nil {
+		return err
+	}
+	l.Sort = s
 	return nil
 }
 

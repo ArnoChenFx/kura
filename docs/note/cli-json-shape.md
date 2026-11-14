@@ -28,13 +28,18 @@
       "pluginName": "mattpocock-skills",
       "updatedAt": "2026-09-06T13:34:08Z",
       "contentHash": "sha256:3301…",
+      "modTime": "2026-09-06T13:34:08.1234567Z", // 技能最近动过的时间，RFC 3339，UTC
       "metaError": ""                  // 仅当 .kura-meta.json 损坏时出现
     }
   ]
 }
 ```
 
-带 `omitempty` 的字段在无值时不出现。trashed 条目的目录结构是 `trash/<name>/<stamp>`，容器本身没有 SKILL.md/元数据，因此 `hasSkillMd=false` 且不输出 source* 字段，属于正常现象。
+带 `omitempty` 的字段在无值时不出现。
+
+`modTime` 是后加的字段（只增不改义）：口径是 **技能目录自身、目录里 `SKILL.md`、目录里 `.kura-meta.json` 三个 mtime 中最大的一个**，任一取不到就跳过它，不递归整棵树；技能目录是链接（联接点 / 目录符号链接）时取链接目标的 mtime。格式是 UTC 的 RFC 3339：整秒时形如 `2026-09-06T13:34:08Z`，文件系统给出小数秒时保留完整精度（标准的 RFC 3339 解析器都能读）。三个路径都取不到时该字段不出现。三种存放状态都有这个字段：trashed 条目只剩容器目录 `trash/<name>` 的 mtime，约等于它被移入回收站的时间。
+
+**输出顺序永远是按名称。** `~/.kura/config.json` 里的 `sort`（界面的排序偏好，默认按修改时间、新的在前）只对窗口版生效，命令行不读它：脚本消费方要按时间排序时，自己用 `modTime` 排。trashed 条目的目录结构是 `trash/<name>/<stamp>`，容器本身没有 SKILL.md/元数据，因此 `hasSkillMd=false` 且不输出 source* 字段，属于正常现象。
 
 ## disable / enable / remove / restore / add / update
 

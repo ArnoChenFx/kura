@@ -594,17 +594,20 @@ func (a *App) viewMainHeader(c *myui.Context) {
 	})
 }
 
-// viewFilterBar 把排列开关与搜索框放在同组，状态筛选可整组换到下一行。
-// 最窄中栏也只需要两行，不会为排列按钮再占一整行；缩放时控件身份不变。
+// viewFilterBar 把排序开关、排列开关与搜索框放在同组，状态筛选可整组换到下一行。
+// 最窄中栏也只需要两行，不会为排序、排列按钮再占一整行；缩放时控件身份不变。
+// 排序开关在排列开关的左边（排列开关仍在组的最右端），两组开关都 Shrink(0)：
+// 窄窗口里被挤的只会是搜索框，开关不会被挤扁。
 func (a *App) viewFilterBar(c *myui.Context) {
 	t := c.Theme()
 	en, dis, trash := a.counts()
 	myui.Row(c.Key("filter-bar")).FillWidth().Wrap().
 		Padding(t.Space(1), t.Space(5), t.Space(3), t.Space(5)).Gap(t.Space(2)).
 		Background(a.pal.header).Justify(myui.SpaceBetween).AlignItems(myui.Center).Children(func() {
-		myui.Row(c.Key("search-controls")).Grow(1).Basis(240).MaxWidth(440).MinWidth(0).
+		myui.Row(c.Key("search-controls")).Grow(1).Basis(240 + sortSwitchFootprint).MaxWidth(440 + sortSwitchFootprint).MinWidth(0).
 			Gap(t.Space(2)).AlignItems(myui.Center).Children(func() {
 			searchBox(c.Key("search"), &a.query, a.pal.card).Grow(1).MinWidth(0)
+			a.viewSortSwitch(c.Key("sort-mode"))
 			a.viewModeSwitch(c.Key("view-mode"))
 		})
 		filterTabs(c.Key("state-filter"), &a.filter,
@@ -661,6 +664,110 @@ func (a *App) viewModeSwitch(c *myui.Context) {
 	})
 	if track.Changed() {
 		a.SetViewAsync(viewModes[sel].mode)
+	}
+}
+
+// 排序开关只有两个分段：按名称、按修改时间。「按修改时间」的方向（新的在前 / 旧的在前）靠再点
+// 一次已选中的这一段来反转，同 Explorer 点列标题；这一段的图标与名字随当前方向变。键盘同样
+// 能到达：方向键在两段之间选择，焦点在已选中的「按修改时间」上按空格或回车就是再点一次。
+const (
+	sortNameSegment = iota // 按名称
+	sortTimeSegment        // 按修改时间
+	sortSegments           // 分段个数
+)
+
+// sortSwitchFootprint 是排序开关占的宽度加上它与邻居的间距（DIP，按默认字号与主题量得：两个 33 宽的
+// 分段 + 轨道内边距与边框 = 74，再加一个 8 的间距）。搜索组（viewFilterBar 的 search-controls）的
+// 基准宽与最大宽都加上它，搜索框才和加排序开关之前一样宽，不会在「一行放得下」的中间宽度上被挤坏；
+// TestSortSwitchIsNotSquashedInNarrowFilterBar 守着各个宽度下搜索框没被挤坏。
+const sortSwitchFootprint = 82
+
+// sortIndex 返回排序偏好落在哪一段：按名称是第一段，按修改时间（不论方向）是第二段；零值与不认识
+// 的取值先规范成默认（按修改时间、新的在前）。
+func sortIndex(p store.SortPref) int {
+	p, err := store.NormalizeSort(p)
+	if err != nil {
+		p = store.DefaultSort()
+	}
+	if p.Key == store.SortName {
+		return sortNameSegment
+	}
+	return sortTimeSegment
+}
+
+// sortChosen 返回用户（用鼠标或方向键）新选中第 i 段之后的偏好：按名称；按修改时间则取新的在前
+// ——换一段总是从「新的在前」开始，要旧的在前再点一次。这里写死「新的在前」而不借
+// store.DefaultSort()：默认排序是另一个会变的决定，与「新选中这一段时从哪个方向开始」无关。
+func sortChosen(i int) store.SortPref {
+	if i == sortNameSegment {
+		return store.SortPref{Key: store.SortName}
+	}
+	return store.SortPref{Key: store.SortTime, Desc: true}
+}
+
+// sortReversed 返回把按修改时间的方向反转之后的偏好。
+func sortReversed(cur store.SortPref) store.SortPref {
+	return store.SortPref{Key: store.SortTime, Desc: !cur.Desc}
+}
+
+// sortSegmentLook 返回第 i 段此刻的无障碍名、悬停提示与图标；cur 是规范后的当前偏好。「按修改时间」
+// 这一段显示的是当前方向；当前是按名称时它显示点一下会得到的方向（新的在前）。只有它已被选中时，
+// 悬停提示才多一句「再点一次改为…」，说明怎么反转。文案每帧现取，语言一切就跟着变。
+func sortSegmentLook(i int, cur store.SortPref) (label, tip string, icon *myui.SVG) {
+	if i == sortNameSegment {
+		return locales.UiSortName(), locales.UiSortName(), iconSortName
+	}
+	selected := cur.Key == store.SortTime
+	if !selected || cur.Desc {
+		label, tip, icon = locales.UiSortTimeNewest(), locales.UiSortTimeNewest(), iconSortNewest
+		if selected {
+			tip = locales.UiSortTimeNewestTip()
+		}
+		return label, tip, icon
+	}
+	return locales.UiSortTimeOldest(), locales.UiSortTimeOldestTip(), iconSortOldest
+}
+
+// viewSortSwitch 是搜索框旁的排序开关：两个图标分段（按名称 / 按修改时间），选中的分段浮起，写法
+// 同 viewModeSwitch：分段的点击在构建结束或查询响应时才写进 sel，所以靠 Changed 在同一次构建里
+// 取到新选择再交给 SetSortAsync（幂等）；sel 每次构建都从 sortPref 重新推出。Shrink(0)：窄窗口里
+// 筛选栏换行时它不被挤扁。
+//
+// 反转方向：已选中的分段再点不会报 Changed，但 Clicked 照常报（指针再点、空格、回车都算；而用方向键
+// 选到另一段时，Changed 与那一段的 Clicked 会同时报）。所以先判 Changed（新选中某一段），再判
+// 「再点已选中的按修改时间」（反转方向），二者不会重复处理。
+//
+// 换序只改排序偏好；选中的技能仍以 selName / selState 为准，不会因为顺序变了而丢。
+func (a *App) viewSortSwitch(c *myui.Context) {
+	t := c.Theme()
+	cur := a.sortOrder()
+	sel := sortIndex(cur)
+	seg := myui.SegmentedBase(c, &sel, sortSegments)
+	track := seg.Track.Label(locales.UiSortLabel()).Padding(t.Space(0.5)).Gap(t.Space(0.5)).
+		Radius(t.Radius).Background(a.pal.card).Border(1, a.pal.line).Shrink(0)
+	if !t.Dark {
+		track.Background(t.Surface)
+	}
+	timeClicked := false
+	track.Children(func() {
+		for i := range sortSegments {
+			label, tip, icon := sortSegmentLook(i, cur)
+			b := seg.Segment(i).Label(label).Tooltip(tip).
+				Padding(t.Space(1.5), t.Space(2)).Radius(t.Radius - 2).TextColor(t.TextMuted)
+			segmentSurface(b, t, i == sel)
+			b.Children(func() {
+				myui.Icon(c, icon).FontSize(t.FontSize + 1)
+			})
+			if b.Clicked() && i == sortTimeSegment {
+				timeClicked = true
+			}
+		}
+	})
+	switch {
+	case track.Changed():
+		a.SetSortAsync(sortChosen(sel))
+	case timeClicked && cur.Key == store.SortTime:
+		a.SetSortAsync(sortReversed(cur))
 	}
 }
 

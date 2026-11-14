@@ -177,10 +177,12 @@ func TestPurgeFromTrashConfirmsAndKeepsSnapshot(t *testing.T) {
 	}
 }
 
-// TestSkillListSortsByNameKeepsDisabledInPlace 验证技能列表默认按名字排序（不区分大小写），
-// 停用的技能留在名字该在的位置，不沉到最后。
+// TestSkillListSortsByNameKeepsDisabledInPlace 验证排序偏好为「按名称」时，技能列表按名称排序（不区分大小写），
+// 停用的技能与启用的混排，保持在原位置，不沉到最后。（默认排序已改为按修改时间，本用例用 pinNameOrder
+// 固定成按名称；默认顺序与按时间排序见 sort_test.go。）
 func TestSkillListSortsByNameKeepsDisabledInPlace(t *testing.T) {
 	a, cfg := newTestApp(t)
+	pinNameOrder(a) // 本用例依赖名称顺序（写于固定按名称排序的年代），见 pinNameOrder
 	seedDescribed(t, cfg, "charlie", "第三个", nil)
 	seedDescribed(t, cfg, "Alpha", "第一个", nil)
 	seedDescribed(t, cfg, "bravo", "第二个", nil)

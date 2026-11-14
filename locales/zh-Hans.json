@@ -741,5 +741,13 @@
         "type": "int"
       }
     }
-  }
+  },
+  "storeErrUnknownSort": "store: 排序方式只能是 name 或 time",
+  "uiSortLabel": "排序",
+  "uiSortName": "按名称排序",
+  "uiSortTimeNewest": "按修改时间排序（新的在前）",
+  "uiSortTimeOldest": "按修改时间排序（旧的在前）",
+  "uiSortTimeNewestTip": "按修改时间排序（新的在前）。再点一次改为旧的在前",
+  "uiSortTimeOldestTip": "按修改时间排序（旧的在前）。再点一次改为新的在前",
+  "uiStatusSortSaveFailed": "排序方式没能保存：{reason}"
 }

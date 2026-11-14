@@ -51,6 +51,7 @@ func countText(tt *myui.Tester, s string) int {
 // TestCardsFlowInRows 验证卡片按窗口宽度一行排多张，窄了再换行成一列。
 func TestCardsFlowInRows(t *testing.T) {
 	a, cfg := newTestApp(t)
+	pinNameOrder(a) // 本用例依赖名称顺序（写于固定按名称排序的年代），见 pinNameOrder
 	names := []string{"s1", "s2", "s3", "s4", "s5", "s6"}
 	for _, n := range names {
 		seedSkill(t, cfg, n, nil)
@@ -227,6 +228,7 @@ func TestEmptyGridMessages(t *testing.T) {
 // 停在它身上；切回去后卡片重新被高亮。
 func TestSelectionSurvivesFilter(t *testing.T) {
 	a, cfg := newTestApp(t)
+	pinNameOrder(a) // 本用例依赖名称顺序（写于固定按名称排序的年代），见 pinNameOrder
 	seedSkill(t, cfg, "alpha", nil)
 	seedSkill(t, cfg, "off", nil)
 	if _, err := cfg.Disable("off"); err != nil {
