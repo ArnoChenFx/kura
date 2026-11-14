@@ -14,7 +14,6 @@ A desktop manager for agent skills, built with [MyGo](https://github.com/egoist/
 ## What it does
 
 - **Several skill roots at once.** `~/.agents/skills` is the default and always first; any other folder can be added in the UI. Each root keeps its own disabled/trash/snapshot state, so same-named skills never interfere. Switching roots preserves each root’s search, filters and browsing position.
-- **Treats linked skills as skills.** A skill folder that is a Windows junction or a directory symlink (CherryStudio and similar programs create them) is listed, counted, hashed, snapshotted, moved and updated like any other. A snapshot is always a real copy, deleting for good removes only the link, and a broken link is ignored. Roots whose folder no longer exists are hidden from the left column.
 - **Installs skills** from a GitHub repository (`owner/repo` or a pasted URL, with optional subdirectory, ref and name) or a local folder. Repository skills are found automatically and several can be installed in one run; one failure does not stop the others. The default name comes from the `name` field of `SKILL.md`.
 - **Browses the skill market.** Explore skills.sh rankings, search loaded entries by skill name or repository, and install into the current root.
 - **Enables and disables by moving**, never copying and never a flag inside the skill: the folder travels between the root and `~/.kura/disabled/`. Removing sends it to `~/.kura/trash/` instead, where it can be restored; deleting it for good asks for confirmation and writes a content snapshot first.
