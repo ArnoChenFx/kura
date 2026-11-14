@@ -378,8 +378,15 @@ func TestUpdateRefusesUnsafeLinkTarget(t *testing.T) {
 		if err == nil {
 			t.Fatal("目标包含技能根目录时应拒绝更新")
 		}
-		if !strings.Contains(err.Error(), base) {
-			t.Errorf("错误信息应说明目标路径：%v", err)
+		// 错误信息要指出它拒绝碰的那个目标目录。两侧都过一遍 canonicalDir：
+		// 报错文案用的就是它，而 CI 的 %TEMP% 是 8.3 短名（RUNNERA~1），
+		// t.TempDir() 给的短名与链接里存的长路径不是同一个字符串。
+		resolved, ok := realDir(c.SkillPath("demo"))
+		if !ok {
+			t.Fatalf("解析链接目标失败：%s", c.SkillPath("demo"))
+		}
+		if want := canonicalDir(resolved); !strings.Contains(err.Error(), want) {
+			t.Errorf("错误信息应说明目标路径 %s：%v", want, err)
 		}
 		if _, err := os.Stat(filepath.Join(c.Root, "bystander", "SKILL.md")); err != nil {
 			t.Fatalf("拒绝更新后技能根目录里的内容必须原样保留：%v", err)
