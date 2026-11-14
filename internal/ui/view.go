@@ -273,6 +273,10 @@ func dragWidth(cur, delta, lo, hi float32) float32 {
 // 默认目录总在第一个）与底部的「添加文件夹」，再往下是 viewRootsFooter 的一行。
 // 浅色导航用银灰底与白色选中项，深色沿用石墨层次。品牌标识在窗口顶栏里，
 // 这里不再重复。
+//
+// 只列出「当前存在且是目录」的目录（链接目录算存在），不存在的不显示，也不在这里留一个计数为 0 的
+// 空壳。存在与否不在这里现查（每帧 Stat 十几次太贵），读的是随扫描一起刷新的 rootExists 缓存（见
+// rootAvailable）。一个都不可用时给一句提示，界面照常渲染。
 func (a *App) viewRoots(c *myui.Context) {
 	t := c.Theme()
 	myui.Column(c).Width(a.rootsEff).Shrink(0).FillHeight().Background(a.pal.sidebar).Children(func() {
@@ -280,8 +284,18 @@ func (a *App) viewRoots(c *myui.Context) {
 			Padding(t.Space(6), t.Space(5), t.Space(3), t.Space(5))
 		myui.Scroll(c).Grow(1).FillWidth().Children(func() {
 			myui.Column(c).FillWidth().Padding(0, t.Space(3)).Gap(t.Space(1.5)).Children(func() {
+				shown := 0
 				for i, root := range a.lib.Roots {
+					if !a.rootAvailable(root) {
+						continue
+					}
+					shown++
+					// i 是在完整列表里的位置：默认目录永远是第 0 个，隐藏别的目录不改变它。
 					a.rootItem(c, root, i == 0)
+				}
+				if shown == 0 {
+					myui.Text(c, locales.UiRootsNoneAvailable()).MaxLines(3).
+						FontSize(t.FontSize-2).TextColor(t.TextMuted).Padding(t.Space(2), t.Space(2.5))
 				}
 			})
 		})

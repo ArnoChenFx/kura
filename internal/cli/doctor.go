@@ -106,6 +106,8 @@ func runDoctor(c *store.Config) doctorResult {
 
 // checkRootEntries 检查根目录本身：不可读报告问题；一级条目里与技能
 // 同级的普通文件单独报告（store.Scan 只看目录，会静默跳过它们）。
+// 「是不是技能目录」用 store.IsSkillDirEntry：指向目录的 Windows 联接点、目录符号链接与普通目录
+// 一样是技能，不能报成「同名普通文件」；断链按「目录不存在」处理，同样不报告。
 func checkRootEntries(c *store.Config) []Problem {
 	entries, err := os.ReadDir(c.Root)
 	if err != nil {
@@ -122,13 +124,14 @@ func checkRootEntries(c *store.Config) []Problem {
 		if strings.HasPrefix(e.Name(), ".") {
 			continue // 隐藏条目（如 .skill-lock.json 的兄弟目录）不是技能。
 		}
-		if !e.IsDir() {
-			problems = append(problems, Problem{
-				Kind:   KindNotADir,
-				Skill:  e.Name(),
-				Detail: locales.CliDoctorRootFileNotDir(),
-			})
+		if store.IsSkillDirEntry(c.Root, e) || store.IsBrokenLinkEntry(c.Root, e) {
+			continue
 		}
+		problems = append(problems, Problem{
+			Kind:   KindNotADir,
+			Skill:  e.Name(),
+			Detail: locales.CliDoctorRootFileNotDir(),
+		})
 	}
 	return problems
 }
@@ -241,7 +244,8 @@ func checkTrash(c *store.Config) []Problem {
 			continue
 		}
 		for _, st := range stamps {
-			if !st.IsDir() {
+			// 链接形式的技能移入回收站后，时间戳层的条目是链接，不是真目录。
+			if !store.IsSkillDirEntry(n.Dir, st) {
 				continue // 时间戳层的零散文件不影响 restore，忽略。
 			}
 			problems = append(problems, Problem{
@@ -269,13 +273,15 @@ func checkSideEntries(dir, label string) []Problem {
 		if strings.HasPrefix(e.Name(), ".") {
 			continue
 		}
-		if !e.IsDir() {
-			problems = append(problems, Problem{
-				Kind:   KindNotADir,
-				Skill:  e.Name(),
-				Detail: locales.CliDoctorSideFileNotDir(label),
-			})
+		// 同 checkRootEntries：指向目录的链接是技能，断链按「目录不存在」处理。
+		if store.IsSkillDirEntry(dir, e) || store.IsBrokenLinkEntry(dir, e) {
+			continue
 		}
+		problems = append(problems, Problem{
+			Kind:   KindNotADir,
+			Skill:  e.Name(),
+			Detail: locales.CliDoctorSideFileNotDir(label),
+		})
 	}
 	return problems
 }

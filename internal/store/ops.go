@@ -185,7 +185,9 @@ func (c *Config) Purge(name string) (*Result, error) {
 	}
 	var snapDir string
 	for _, e := range entries {
-		if !e.IsDir() {
+		// 时间戳层的副本：真实目录，或指向目录的链接（链接形式的技能移入回收站后就是链接）。
+		// 链接副本的快照是穿透复制的真实内容（ensureSnapshot）。
+		if !isSkillDirEntry(trashDir, e) {
 			continue
 		}
 		dst, err := c.ensureSnapshot(name, e.Name(), filepath.Join(trashDir, e.Name()))
@@ -193,6 +195,13 @@ func (c *Config) Purge(name string) (*Result, error) {
 			return nil, err
 		}
 		snapDir = dst
+	}
+	// 逐个删除时间戳副本：链接只摘掉链接本身（removeEntry），绝不穿透到它指向的目录——
+	// 那是别的程序的真实内容。剩下的容器目录与零散文件再整棵删除。
+	for _, e := range entries {
+		if err := removeEntry(filepath.Join(trashDir, e.Name())); err != nil {
+			return nil, i18n.Wrapf(err, "storeErrPurgeFailed", func() string { return locales.StoreErrPurgeFailed(name) })
+		}
 	}
 	if err := os.RemoveAll(trashDir); err != nil {
 		return nil, i18n.Wrapf(err, "storeErrPurgeFailed", func() string { return locales.StoreErrPurgeFailed(name) })
@@ -279,6 +288,7 @@ func within(root, p string) bool {
 }
 
 // latestSubdir 返回 dir 下按名字排序最大的子目录名（时间戳目录名可排序）。
+// 链接形式的技能移入回收站后，时间戳层的条目是链接，所以用 isSkillDirEntry 判定，不用 e.IsDir()。
 func latestSubdir(dir string) (string, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -286,7 +296,7 @@ func latestSubdir(dir string) (string, error) {
 	}
 	var best string
 	for _, e := range entries {
-		if e.IsDir() && e.Name() > best {
+		if e.Name() > best && isSkillDirEntry(dir, e) {
 			best = e.Name()
 		}
 	}

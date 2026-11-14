@@ -254,7 +254,7 @@ func (c *Config) installDir(srcDir string, src Source, nameOverride string, prog
 	// GitHub 来源的仓库根技能目录里带着 clone 的 .git，不能装进技能根目录，
 	// 复制时就跳过它。
 	progress.report(InstallWrite)
-	if err := copyTree(srcDir, dst, src.Type == SourceGitHub); err != nil {
+	if err := copyTree(srcDir, dst, src.Type == SourceGitHub, src.Type == SourceGitHub); err != nil {
 		return nil, i18n.Wrapf(err, "storeErrInstallSkill", func() string { return locales.StoreErrInstallSkill(name) })
 	}
 	hash, err := HashDir(dst)

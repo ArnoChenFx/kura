@@ -1626,6 +1626,22 @@ func (msgs Messages) StoreErrCrossVolumeSource(src string, dst string) string {
 	return Catalog.Format(msgs.locale, "storeErrCrossVolumeSource", map[string]any{"src": src, "dst": dst})
 }
 
+// StoreErrLinkCrossVolume says "store: the link {src} cannot be moved to {dst} on another volume; nothing was copied and the link stays where it was"
+// in the language the app shows.
+//
+// 错误：链接（联接点/符号链接）无法跨卷移动，不展开成真目录，原链接保留。
+func StoreErrLinkCrossVolume(src string, dst string) string {
+	return In(i18n.Locale()).StoreErrLinkCrossVolume(src, dst)
+}
+
+// StoreErrLinkCrossVolume says "store: the link {src} cannot be moved to {dst} on another volume; nothing was copied and the link stays where it was"
+// in the language of msgs.
+//
+// 错误：链接（联接点/符号链接）无法跨卷移动，不展开成真目录，原链接保留。
+func (msgs Messages) StoreErrLinkCrossVolume(src string, dst string) string {
+	return Catalog.Format(msgs.locale, "storeErrLinkCrossVolume", map[string]any{"src": src, "dst": dst})
+}
+
 // StoreErrDefaultRoot says "store: the default skills folder cannot be removed"
 // in the language the app shows.
 //
@@ -2356,6 +2372,24 @@ func StoreErrReplaceRestored() string { return In(i18n.Locale()).StoreErrReplace
 // 错误：替换失败，已从快照恢复。
 func (msgs Messages) StoreErrReplaceRestored() string {
 	return Catalog.Format(msgs.locale, "storeErrReplaceRestored", nil)
+}
+
+// StoreErrReplaceTargetUnsafe says "store: refusing to update {name}: its link points to {path}, which is a drive root or contains the skills folder or t…"
+// in the language the app shows.
+//
+// 错误：链接技能的目标是盘符根或包含 kura
+// 自己的目录，替换会连带删除它们，拒绝更新。
+func StoreErrReplaceTargetUnsafe(name string, path string) string {
+	return In(i18n.Locale()).StoreErrReplaceTargetUnsafe(name, path)
+}
+
+// StoreErrReplaceTargetUnsafe says "store: refusing to update {name}: its link points to {path}, which is a drive root or contains the skills folder or t…"
+// in the language of msgs.
+//
+// 错误：链接技能的目标是盘符根或包含 kura
+// 自己的目录，替换会连带删除它们，拒绝更新。
+func (msgs Messages) StoreErrReplaceTargetUnsafe(name string, path string) string {
+	return Catalog.Format(msgs.locale, "storeErrReplaceTargetUnsafe", map[string]any{"name": name, "path": path})
 }
 
 // StoreErrRepoDirMissing says "store: no such repository folder: {path}"
@@ -5210,6 +5244,20 @@ func UiRootsLoadFailed(reason string) string { return In(i18n.Locale()).UiRootsL
 // 左栏：读取目录列表失败。
 func (msgs Messages) UiRootsLoadFailed(reason string) string {
 	return Catalog.Format(msgs.locale, "uiRootsLoadFailed", map[string]any{"reason": reason})
+}
+
+// UiRootsNoneAvailable says "None of the skill directories exist right now. Add a folder below."
+// in the language the app shows.
+//
+// 左栏：所有技能目录都不存在时的提示。
+func UiRootsNoneAvailable() string { return In(i18n.Locale()).UiRootsNoneAvailable() }
+
+// UiRootsNoneAvailable says "None of the skill directories exist right now. Add a folder below."
+// in the language of msgs.
+//
+// 左栏：所有技能目录都不存在时的提示。
+func (msgs Messages) UiRootsNoneAvailable() string {
+	return Catalog.Format(msgs.locale, "uiRootsNoneAvailable", nil)
 }
 
 // UiRootsSettingsLoadFailed says "Could not read the settings: {reason}"

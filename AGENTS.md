@@ -20,10 +20,10 @@ kura 是一个**桌面技能管理器**，用 [MyGo](https://github.com/egoist/m
 
 | 包 | 职责 | 约束 |
 | --- | --- | --- |
-| `internal/store` | 核心领域逻辑：扫描、元数据、哈希、启用/停用/移除/恢复/添加/更新/预览更新、多根目录（`Library`） | **不依赖 UI，不依赖 CLI** |
+| `internal/store` | 核心领域逻辑：扫描、元数据、哈希、启用/停用/移除/恢复/添加/更新/预览更新、多根目录（`Library`）、链接形式技能（联接点/目录符号链接）的判定、解析与遍历（`links.go`、`walk.go`） | **不依赖 UI，不依赖 CLI** |
 | `internal/cli` | 无界面命令行入口（`cmd/kura`） | 不依赖 UI；`Run()` 返回退出码，绝不 `os.Exit` |
 | `internal/market` | 读 skills.sh 的榜单与技能快照（公开 JSON 接口，只读、不要密钥） | **不碰磁盘、不依赖 UI**；解析从宽（坏记录跳过、整页结构不对才报错） |
-| `internal/ui` | MyGo 原生窗口：三栏（技能目录 / 卡片网格 / 详情）、技能市场页面、搜索与筛选、开关、安装弹窗、更新预览弹窗 | 不直接做磁盘 I/O，一律经 `internal/store` |
+| `internal/ui` | MyGo 原生窗口：三栏（技能目录（只列存在的目录）/ 卡片网格 / 详情）、技能市场页面、搜索与筛选、开关、安装弹窗、更新预览弹窗 | 不直接做磁盘 I/O，一律经 `internal/store` |
 | `internal/selfupdate` | 挂载 MyGo 原生更新器插件、应用菜单，以及 kura 自己的后台检查节奏（`Background`，只亮蓝点、不开窗口） | 不重写下载/替换逻辑；只调 MyGo 的 `Updater.Check` 与插件的公开 API |
 | `main.go` | MyGo 窗口应用的装配（App / Window / 菜单） | 只做装配 |
 | `cmd/kura/main.go` | CLI 二进制入口，零逻辑 | 只把 `os.Args` 交给 `cli.Run` |
@@ -54,6 +54,15 @@ kura 是一个**桌面技能管理器**，用 [MyGo](https://github.com/egoist/m
 11. **技能区的排列模式存在 `config.json` 的 `view`**（`grid` / `list`；缺省与手改出的未知值都按 `grid`，不算错误）。读写只经 `store.Library`（`View`、`SetView`，`store.NormalizeView` 规范化），与 `theme` 一样是 `configMu` 下的「读—改—写」；界面切换走 `SetViewAsync`（立刻换排列，后台写盘，失败只在状态行报告）。默认是卡片网格。
 12. **翻译服务、可选 API 凭据与全局目标语言存在 `~/.kura/settings.json`**（`provider` / `baseUrl` / `apiKey` / `model` / `targetLang`）。密钥**明文**保存、文件权限 0600：这是用户明确选择的本地单人方案，不接系统凭据管理器、不做加密；密钥绝不能进日志、错误信息、测试夹具或任何导出文件。读写只经 `store.LoadSettings` / `SaveSettings`；目标语言一律 `store.NormalizeTargetLang` 规范化（不认识的值报 `ErrUnknownLang`，**不猜**）。**翻译只用于界面显示**：译文只活在内存里（`internal/ui/translate.go` 的 `translateState`），绝不写技能目录、不改 `SKILL.md`、不写 `.kura-meta.json`、不落任何缓存文件。`provider` 可选免密钥 `google` / `microsoft` 或自定义 `openai`；空配置默认 Google，任一旧自定义字段存在则继续 OpenAI（包含不完整配置）。损坏或未知配置不得静默改用免费服务。只有用户开启译文才请求；自定义 API 未配置齐全（`Settings.Ready()`）时不请求并给引导。免费服务保留代码、命令、链接和 Markdown 标记，接口拒绝或格式破坏时显示原文，不静默跨服务转发。
 13. **检查更新比的是 git 对象哈希，不是时钟，也不为每个技能各 clone 一次**。流程见 `internal/store/upstream.go` 与 `store.PreviewUpdates`：先 `git ls-remote` 比 `source.commit`，变了再做一次只取树的浅 clone（`--filter=blob:none --no-checkout`）比技能子目录的 `source.tree`，仍不同才稀疏检出该子目录逐文件比较。同一仓库（URL 去掉 `.git` 与末尾 `/`，加 ref）的技能共用一次 clone，检查与更新都一样（`PreviewUpdates` / `UpdateMany`，不要在循环里逐个调 `PreviewUpdate` / `Update`）。所有 git 调用走 `runGit` / `gitOutput`（带超时、`GIT_TERMINAL_PROMPT=0`、低速中止），它们经 `gitCommandContext`（`exec_cmd_windows.go` / `exec_cmd_other.go`）启动 git，Windows 下不弹控制台窗口：这是唯一的 git 入口，非测试代码不要再直接 `exec.Command("git", …)`。`Add` 与 `Update` 都要把 `commit` 与 `tree` 写进元数据；元数据没有它们（旧版本安装、由 lock 导入）时退回逐文件比较。
+
+14. **链接形式的技能（Windows 联接点 junction / 目录符号链接）是技能**。CherryStudio 等程序会把技能以联接点建到 `~/.agents/skills` 下，真实内容在别处。Go 在 Windows 上把联接点报成 `ModeIrregular`（既不是 `ModeDir` 也不是 `ModeSymlink`，`e.IsDir()` 为 false），`filepath.WalkDir` 不会进入它，`filepath.EvalSymlinks` 对它无效（返回自身）。所以：
+    - **「这个条目是不是技能目录」只有一处判定**：`store.isSkillDirEntry`（导出版 `IsSkillDirEntry`，`internal/store/links.go`）——普通目录；或符号链接/联接点且 `os.Stat` 成功并是目录。`os.Stat` 失败（断链、无权限、成环）按「目录不存在」处理：不显示、不计数、`doctor` 不报告（`IsBrokenLinkEntry`）。扫描、`CountEnabled`、`doctor`、回收站时间戳层、`latestSubdir`、`Purge` 都用它，**不要再写 `e.IsDir()`**。
+    - **遍历技能目录一律用 `walkTree`（`walk.go`），不用 `filepath.WalkDir`**：它会进入遍历根自己和树里的链接目录，并防环——沿路径记下每层目录的真实路径（规范化大小写），链接指回路径上的祖先就跳过，不死循环、不爆栈；两个链接指向同一目录的菱形不算环，两处都遍历（否则快照会惄惄少一份内容）。指向文件的符号链接保持旧语义（按文件读内容，不跟随成目录）。**`git clone` 的产物是不可信来源**：`copyTree` / `listFilesContext` / `hashTreeExcludingContext` / `diffTreeContext` 对它们用 `walkOpts.noSubLinks`，只解析根、不进入树里的链接目录，免得恶意仓库里的 `evil -> /` 把整个磁盘拖进技能目录（不进入时保持旧行为：读取报错、操作失败）。唯一仍用 `filepath.WalkDir` 的是 `validateSnapshotFiles`：历史副本必须是 kura 自己写下的真实目录树，不跟随任何链接。
+    - **快照是穿透复制的真实内容**（`copyDir` 经 `walkTree`）：链接技能的快照绝不能只是一个指向原目标的链接（那样毫无保护意义）；`HashDir` 校验一致的老规矩不变。
+    - **启用/停用/移入回收站/恢复移动的是链接本身**（`os.Rename`，目标目录不动）。跨卷时不走「复制 + 删除」回退（那会把链接展开成真目录、惄惄把移动变成复制）：符号链接在目的地用同一目标重建，联接点（标准库造不出来）返回 `storeErrLinkCrossVolume`，源原样保留（`moveLinkAcrossVolumes`）。
+    - **永久删除只删链接本身**：`removeEntry` 先 `Lstat`，是链接就 `os.Remove`，绝不 `RemoveAll` 穿透到它指向的目录；不是链接才整棵删除。`Purge` 照旧先写有效快照，“解析后仍在 trash 之内”的判定照旧成立。
+    - **更新（`replaceSkill`）与历史快照恢复（`restoreSnapshot`）作用在链接指向的真实目录上**（`realDir`：`os.Readlink`，相对目标按链接所在目录换算），链接保持不动，“失败从快照恢复”照旧成立，暂存目录建在真实目录旁边（与它同卷）。这是用户明确允许的。因为替换会先删光目标，先过 `checkReplaceTarget`：目标是盘符根、或把 kura 的技能根目录/数据目录包含在内（链接指回了上级）就拒绝（`storeErrReplaceTargetUnsafe`）。`.kura-meta.json` 也写进真实目录（包括“导入元数据”）。
+    - 新增“读技能目录里所有文件”的代码时，用 `walkTree` 并让测试覆盖联接点与符号链接（`links_test.go` 的 `forEachLinkKind`：Windows 上两种都跑，联接点用 `mklink /J`，不需要管理员；没权限建符号链接时跳过）。
 
 kura 自己的目录：
 
@@ -94,6 +103,7 @@ kura 自己的目录：
 - 状态更新后调用 `Invalidate` 请求重绘，不要在同一次构建里同步写模型再查询。
 - UI 失败用 `ui.NewTester` 复现，要覆盖元素消失后重现的额外帧。
 - **切换根目录要作废旧结果**：后台任务启动时记下 `App.gen`，发布时 `gen != a.gen` 就只清 busy、不覆盖当前列表（见 `publishAfterWork`、`reload`）。新增后台路径必须照做。
+- **左栏只显示存在的目录**：`viewRoots` 只渲染 `App.rootAvailable` 为真的目录（`os.Stat` 成功且是目录，链接目录算存在；口径与 `store.DirExists` 一致），不存在的不显示、不留计数徽标。存在与否**不在每帧里现查**（每帧 Stat 十几次太贵，死掉的网络盘还会卡住界面），而是随扫描在后台判定、缓存在 `App.rootExists`（经 `setRootExists` 回填，同时清掉它的 `rootCounts`）：当前目录由 `applyScan` 顺手得出（复用它原有的一次 `os.Stat`），其他目录在 `reload` 第二阶段与计数一起算，`DiscoverAgentRootsAsync` 新加的目录记为存在，`RemoveRootAsync` 删掉记录。没检查过的按存在处理（启动时左栏不会先空一下）。选中的目录（`rootSel`）不存在时，`ensureRootSelection` 切到列表里第一个**已确认存在**的目录（默认目录排第一，所以优先）：它只在第二阶段拿到所有目录新鲜的存在性之后才决定，不用过期缓存做跳转（否则「一个都不存在」时选中项会来回漂移）；一个都不存在时保留现状，左栏给 `uiRootsNoneAvailable` 提示，界面照常渲染。目录只是被隐藏，仍记在 `config.json` 里，回来后刷新就重新出现。
 - 选中以**技能名与存放状态**为准（`selName` / `selState`），区分启用、停用和回收站里的同名副本；网格里才用下标（`selIdx`，由 `syncSelection` 对齐）。筛选把选中项藏起来时右栏保持不变；移动成功后跟随该副本的新状态，但不能覆盖操作期间用户的新选择。
 - **颜色只从 `internal/ui/theme.go` 来**（`kuraScheme` / `palette`），视图代码里不写十六进制。用户最新选择是**中性石墨灰黑与纸白暖灰**：导航、画布、详情与卡片分层，主操作用银白/墨灰，薄荷绿用于启用状态。不要恢复深蓝、深紫或雾蓝紫的大面积背景与强调色；头像色板也避开蓝紫（`theme_test.go` 守着）。
 - **GridView 给每个单元格自己画一层选中框与悬停底**（圆角 8、2px 边：网格有焦点时 `Accent`，无焦点时 `SurfacePressed` 底加 `Border` 边，悬停时 `SurfaceHover` 底），颜色取自构建网格时的主题。kura 的卡片自己画选中与悬停（圆角更大、边 1px），两层叠一起就是「高亮框和卡片边框对不齐」。所以 `viewGrid` 用 `skin.cell`（这四个颜色透明的主题副本）构建网格，卡片里换回真主题（见 `viewGrid`、`newSkin`）。动网格或卡片外框后先跑 `TestCardChromeIsOneAlignedRing`（读真实渲染的像素）。
@@ -129,7 +139,7 @@ kura 自己的目录：
 gofmt -l .                      # 必须为空
 go vet ./...                    # 必须干净
 go tool mygo vet .              # 必须干净
-go tool mygo i18n check         # catalogs 必须无错（当前 506 条消息）
+go tool mygo i18n check         # catalogs 必须无错（当前 509 条消息）
 go test ./...                   # 全包通过
 CGO_ENABLED=0 go test ./...     # 全包通过
 CGO_ENABLED=0 go build ./...    # 成功

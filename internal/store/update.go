@@ -145,29 +145,52 @@ func (c *Config) sourceMeta(name string, missing error) (*Meta, error) {
 // replaceSkill 用 newDir 的内容替换根目录下的技能 name：先快照，再原子替换，
 // 最后刷新元数据。commit/tree 是新内容对应的上游 commit 与子目录树哈希
 // （local 来源为空串）。
+//
+// 技能目录是链接（Windows 联接点、目录符号链接）时，用户明确允许 kura 改它：先把它解析成
+// 真正存放内容的目录（realDir），之后快照、复制、删除、改名、写元数据全部作用在
+// 那个真实目录上，链接本身保持不动——外面的程序仍然通过链接看到新内容。“失败从快照恢复”
+// 的保护对真实目录同样成立。链接可以指到任何地方，而替换会先删光目标，所以先经过
+// checkReplaceTarget 把关（目标是盘符根或包含 kura 自己的目录就拒绝）。普通技能目录不受影响。
 func (c *Config) replaceSkill(name, newDir string, meta *Meta, commit, tree string) (*Result, error) {
-	src := c.SkillPath(name)
+	link := c.SkillPath(name)
+	src := link
+	if fi, err := os.Lstat(link); err == nil && isLinkMode(fi.Mode()) {
+		target, ok := realDir(link)
+		if !ok {
+			return nil, fmt.Errorf("%w: %s", ErrUnknownSkill, name)
+		}
+		if err := c.checkReplaceTarget(name, target); err != nil {
+			return nil, err
+		}
+		src = target
+	}
 	// 快照旧内容（含旧元数据文件本身，用于完整还原）。
 	now := time.Now()
 	snapDir, err := c.snapshotSkill(name, src, now)
 	if err != nil {
 		return nil, err
 	}
-	// 原子替换：先删旧的，再把新内容移进来（同一磁盘上 Rename 是原子的）。
+	// 原子替换：先删旧的，再把新内容移进来（同一磁盘上 Rename 是原子的）。staging 建在真实目录旁边，
+	// 与它同卷——链接指到另一个盘时，建在链接旁边的 staging 过不了最后这次 Rename。
 	staging := src + ".kura-new"
-	os.RemoveAll(staging)
+	removeEntry(staging)
 	// 技能是仓库根或本地来源本身是 git 仓库时目录里带着 .git，不能装进技能目录。
-	if err := copyTree(newDir, staging, true); err != nil {
-		os.RemoveAll(staging)
+	// GitHub 来源是 clone 产物，不进入它树里的链接目录；本地来源是用户自己的目录，照常进入。
+	if err := copyTree(newDir, staging, true, meta.Source.Type == SourceGitHub); err != nil {
+		removeEntry(staging)
 		return nil, i18n.Wrapf(err, "storeErrPrepareContent", func() string { return locales.StoreErrPrepareContent() })
 	}
-	os.RemoveAll(src)
+	// src 已经是解析后的真实目录；removeEntry 对它就是整棵删除，对链接则只摘链接。
+	removeEntry(src)
 	if err := os.Rename(staging, src); err != nil {
 		// 替换失败：从快照恢复旧内容。
 		restoreErr := copyDir(snapDir, src)
 		if restoreErr != nil {
+			// 没能恢复：staging 里的新内容和快照是仅存的完整副本，都保留。
 			return nil, i18n.Wrapf(err, "storeErrReplaceAndRestore", func() string { return locales.StoreErrReplaceAndRestore(snapDir) })
 		}
+		// 已从快照恢复，staging 不再需要；链接技能的 staging 在别的程序的目录旁边，更不能留下。
+		removeEntry(staging)
 		return nil, i18n.Wrapf(err, "storeErrReplaceRestored", func() string { return locales.StoreErrReplaceRestored() })
 	}
 	// 刷新元数据：保留 installedAt/pluginName/notes，更新 updatedAt、commit、树哈希、内容哈希。
@@ -182,5 +205,5 @@ func (c *Config) replaceSkill(name, newDir string, meta *Meta, commit, tree stri
 	if err := writeMeta(src, meta); err != nil {
 		return nil, i18n.Wrapf(err, "storeErrUpdateMeta", func() string { return locales.StoreErrUpdateMeta() })
 	}
-	return &Result{ID: name, State: StateEnabled, Dir: src, SnapshotDir: snapDir}, nil
+	return &Result{ID: name, State: StateEnabled, Dir: link, SnapshotDir: snapDir}, nil
 }

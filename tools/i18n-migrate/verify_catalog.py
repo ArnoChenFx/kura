@@ -138,6 +138,11 @@ ADDED = {
     "uiMarketOpenFailed",
     "uiMarketViewGitHub",
     "uiMarketViewSkillsSh",
+    # 链接形式的技能（联接点/目录符号链接）：跨卷无法移动链接、更新目标不安全时的错误；
+    # 左栏在所有技能目录都不存在时的提示。
+    "storeErrLinkCrossVolume",
+    "storeErrReplaceTargetUnsafe",
+    "uiRootsNoneAvailable",
 }
 
 

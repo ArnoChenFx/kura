@@ -726,6 +726,18 @@
       }
     }
   },
+  "storeErrLinkCrossVolume": "store: the link {src} cannot be moved to {dst} on another volume; nothing was copied and the link stays where it was",
+  "@storeErrLinkCrossVolume": {
+    "description": "错误：链接（联接点/符号链接）无法跨卷移动，不展开成真目录，原链接保留。",
+    "placeholders": {
+      "src": {
+        "type": "String"
+      },
+      "dst": {
+        "type": "String"
+      }
+    }
+  },
   "storeErrDefaultRoot": "store: the default skills folder cannot be removed",
   "@storeErrDefaultRoot": {
     "description": "错误：默认技能目录不能从列表中移除。"
@@ -1091,6 +1103,18 @@
   "storeErrReplaceRestored": "store: the swap failed (restored from the snapshot)",
   "@storeErrReplaceRestored": {
     "description": "错误：替换失败，已从快照恢复。"
+  },
+  "storeErrReplaceTargetUnsafe": "store: refusing to update {name}: its link points to {path}, which is a drive root or contains the skills folder or the kura data folder",
+  "@storeErrReplaceTargetUnsafe": {
+    "description": "错误：链接技能的目标是盘符根或包含 kura 自己的目录，替换会连带删除它们，拒绝更新。",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "path": {
+        "type": "String"
+      }
+    }
   },
   "storeErrRepoDirMissing": "store: no such repository folder: {path}",
   "@storeErrRepoDirMissing": {
@@ -2210,6 +2234,10 @@
         "type": "String"
       }
     }
+  },
+  "uiRootsNoneAvailable": "None of the skill directories exist right now. Add a folder below.",
+  "@uiRootsNoneAvailable": {
+    "description": "左栏：所有技能目录都不存在时的提示。"
   },
   "uiRootsSettingsLoadFailed": "Could not read the settings: {reason}",
   "@uiRootsSettingsLoadFailed": {
