@@ -101,6 +101,9 @@ func validateSnapshotTree(dir, name string) error {
 	return nil
 }
 
+// validateSnapshotFiles 检查「历史副本」：它必须是 kura 自己写下的真实目录树，任何链接、设备、FIFO 都不接受。
+// 这里刻意仍用 filepath.WalkDir：不跟随任何链接，链接是否存在本身就是要抓的问题。
+// 当前副本（用户自己的技能目录）走 validateCurrentFiles。
 func validateSnapshotFiles(dir string) error {
 	if err := filepath.WalkDir(dir, func(p string, e os.DirEntry, err error) error {
 		if err != nil {
@@ -116,6 +119,19 @@ func validateSnapshotFiles(dir string) error {
 	return nil
 }
 
+// validateCurrentFiles 检查「当前副本」：链接形式的技能，或技能里含有链接目录（Windows 联接点、目录符号
+// 链接）都允许——它们会被穿透复制（环被跳过）。其他仍与以前一样拒绝：指向文件的符号链接、
+// 断链、设备、FIFO，它们没法当作普通文件完整备份。walkTree 把链接目录报成目录项，所以这里只需要
+// 拦住不是目录也不是普通文件的项。
+func validateCurrentFiles(dir string) error {
+	return walkTree(dir, walkOpts{}, func(e treeEntry) error {
+		if e.IsDir || e.Mode.IsRegular() {
+			return nil
+		}
+		return invalidSnapshot(e.Path)
+	})
+}
+
 func (c *Config) snapshotTarget(name string, state State) (string, error) {
 	if err := checkName(name); err != nil {
 		return "", err
@@ -129,12 +145,25 @@ func (c *Config) snapshotTarget(name string, state State) (string, error) {
 	default:
 		return "", ErrSnapshotState
 	}
-	if err := snapshotPathSafe(base, dir, false); err != nil {
+	// 从配置根到技能目录的各级必须是真实目录。唯独技能目录自己可以是链接（联接点、目录符号链接）：
+	// 它必须能解析到一个存在的目录；恢复时作用在它指向的真实目录上，链接本身不动（见 restoreSnapshot）。
+	if err := snapshotPathSafe(base, filepath.Dir(dir), false); err != nil {
 		return "", err
 	}
-	// 当前技能可能正因正文/元数据损坏才需要恢复；只拒绝链接与特殊文件，
+	fi, err := os.Lstat(dir)
+	if err != nil {
+		return "", invalidSnapshot(dir)
+	}
+	if isLinkMode(fi.Mode()) {
+		if _, ok := realDir(dir); !ok {
+			return "", invalidSnapshot(dir)
+		}
+	} else if !fi.IsDir() {
+		return "", invalidSnapshot(dir)
+	}
+	// 当前技能可能正因正文/元数据损坏才需要恢复；只拒绝指向文件的链接、断链与特殊文件，
 	// 完整原样备份这些内容，历史来源自身则必须通过更严格的完整性检查。
-	if err := validateSnapshotFiles(dir); err != nil {
+	if err := validateCurrentFiles(dir); err != nil {
 		return "", err
 	}
 	return dir, nil
@@ -224,18 +253,12 @@ func (c *Config) PreviewSnapshot(name string, state State, stampName string) (*S
 func snapshotFileChanges(current, source string) ([]FileDiff, error) {
 	paths := map[string]bool{}
 	files := [2]map[string]bool{{}, {}}
+	// walkTree 会进入当前副本里的链接目录（链接形式的技能本身也是）；历史副本已经确认不含链接，行为与 WalkDir 一致。
 	for side, dir := range []string{current, source} {
-		if err := filepath.WalkDir(dir, func(p string, e os.DirEntry, err error) error {
-			if err != nil {
-				return err
-			}
-			if !e.IsDir() {
-				rel, err := filepath.Rel(dir, p)
-				if err != nil {
-					return err
-				}
-				paths[filepath.ToSlash(rel)] = true
-				files[side][filepath.ToSlash(rel)] = true
+		if err := walkTree(dir, walkOpts{}, func(e treeEntry) error {
+			if !e.IsDir {
+				paths[e.Rel] = true
+				files[side][e.Rel] = true
 			}
 			return nil
 		}); err != nil {
@@ -323,16 +346,10 @@ func summarizeSnapshotFile(path string) (snapshotFileSummary, error) {
 // snapshotFingerprint 保持既有路径+内容哈希口径，但包含元数据并流式读取大文件。
 func snapshotFingerprint(dir string) (string, error) {
 	var paths []string
-	if err := filepath.WalkDir(dir, func(path string, entry os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if !entry.IsDir() {
-			rel, err := filepath.Rel(dir, path)
-			if err != nil {
-				return err
-			}
-			paths = append(paths, filepath.ToSlash(rel))
+	// 用 walkTree：当前副本可以是链接形式的技能，要进入它的目录，不然指纹永远是空目录的指纹。
+	if err := walkTree(dir, walkOpts{}, func(e treeEntry) error {
+		if !e.IsDir {
+			paths = append(paths, e.Rel)
 		}
 		return nil
 	}); err != nil {
@@ -394,12 +411,26 @@ func (c *Config) restoreSnapshot(p *SnapshotPreview, rename func(string, string)
 		return nil, err
 	}
 	b := p.binding
-	stage, err := os.MkdirTemp(filepath.Dir(current), ".kura-restore-")
+	// 当前副本是链接（联接点、目录符号链接）时，替换作用在它指向的真实目录上，链接本身不动；
+	// 暗存目录与备份容器也建在真实目录旁边（与它同卷，最后的 rename 才是原子的）。
+	// 链接可以指到任何地方，所以先过 checkReplaceTarget（盘符根、包含 kura 自己目录的目标一律拒绝）。
+	target := current
+	if fi, lerr := os.Lstat(current); lerr == nil && isLinkMode(fi.Mode()) {
+		real, ok := realDir(current)
+		if !ok {
+			return nil, invalidSnapshot(current)
+		}
+		if err := c.checkReplaceTarget(b.name, real); err != nil {
+			return nil, err
+		}
+		target = real
+	}
+	stage, err := os.MkdirTemp(filepath.Dir(target), ".kura-restore-")
 	if err != nil {
 		return nil, err
 	}
 	defer os.RemoveAll(stage)
-	if err := copySnapshotTree(source, stage); err != nil {
+	if err := copySnapshotTree(source, stage, true); err != nil {
 		return nil, err
 	}
 	if got, err := snapshotFingerprint(stage); err != nil || got != b.snapshotHash {
@@ -416,7 +447,7 @@ func (c *Config) restoreSnapshot(p *SnapshotPreview, rename func(string, string)
 	if err != nil {
 		return nil, err
 	}
-	if err := copySnapshotTree(current, saved); err != nil {
+	if err := copySnapshotTree(current, saved, false); err != nil {
 		os.RemoveAll(saved)
 		return nil, err
 	}
@@ -428,17 +459,17 @@ func (c *Config) restoreSnapshot(p *SnapshotPreview, rename func(string, string)
 		return nil, err
 	}
 	// 备份与目标在同一文件系统；空容器保留唯一名字，不借用可撞名的 .kura-new。
-	holding, err := os.MkdirTemp(filepath.Dir(current), ".kura-previous-")
+	holding, err := os.MkdirTemp(filepath.Dir(target), ".kura-previous-")
 	if err != nil {
 		return nil, err
 	}
 	old := filepath.Join(holding, "content")
-	if err := rename(current, old); err != nil {
+	if err := rename(target, old); err != nil {
 		os.Remove(holding)
 		return nil, err
 	}
-	if err := rename(stage, current); err != nil {
-		if rollbackErr := rename(old, current); rollbackErr != nil {
+	if err := rename(stage, target); err != nil {
+		if rollbackErr := rename(old, target); rollbackErr != nil {
 			// 极端情况下保留完整旧目录与快照，绝不为清理临时目录而删掉它。
 			return nil, i18n.Wrapf(err, "storeErrSnapshotReplace", func() string { return locales.StoreErrSnapshotReplace(old) })
 		}
@@ -450,26 +481,33 @@ func (c *Config) restoreSnapshot(p *SnapshotPreview, rename func(string, string)
 }
 
 // 快照复制保留文件及目录权限；每次只打开一个文件，避免大技能树耗尽文件描述符。
-func copySnapshotTree(source, dest string) error {
+//
+// strict 为真用于历史副本（必须是 kura 自己写下的真实目录树）：根或树里出现任何链接都拒绝，绝不
+// 跟随。strict 为假用于当前副本（用户自己的技能目录）：链接形式的技能、树里的链接目录都穿透复制成
+// 真实内容（环被跳过），其他非普通文件仍拒绝。
+func copySnapshotTree(source, dest string, strict bool) error {
 	type dirMode struct {
 		path string
 		mode os.FileMode
 	}
 	var dirs []dirMode
-	err := filepath.WalkDir(source, func(path string, entry os.DirEntry, err error) error {
-		if err != nil {
+	if strict {
+		// walkTree 会解析根自己的链接，严格模式不允许，所以先查。
+		if fi, err := os.Lstat(source); err != nil {
 			return err
+		} else if isLinkMode(fi.Mode()) {
+			return invalidSnapshot(source)
 		}
-		if entry.Type()&(os.ModeSymlink|os.ModeIrregular) != 0 {
+	}
+	err := walkTree(source, walkOpts{noSubLinks: strict}, func(entry treeEntry) error {
+		path := entry.Path
+		if strict && isLinkMode(entry.Mode) {
 			return invalidSnapshot(path)
 		}
-		rel, err := filepath.Rel(source, path)
-		if err != nil {
-			return err
-		}
-		target := filepath.Join(dest, rel)
-		if entry.IsDir() {
-			info, err := entry.Info()
+		target := filepath.Join(dest, filepath.FromSlash(entry.Rel))
+		if entry.IsDir {
+			// os.Stat 跟随链接：链接目录取目标目录的权限。
+			info, err := os.Stat(path)
 			if err != nil {
 				return err
 			}
@@ -477,10 +515,10 @@ func copySnapshotTree(source, dest string) error {
 			// 复制完子文件后再收紧目录权限，原本只读的目录也能完整准备。
 			return os.MkdirAll(target, 0o755)
 		}
-		if !entry.Type().IsRegular() {
+		if !entry.Mode.IsRegular() {
 			return invalidSnapshot(path)
 		}
-		info, err := entry.Info()
+		info, err := os.Lstat(path)
 		if err != nil {
 			return err
 		}

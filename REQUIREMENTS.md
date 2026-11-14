@@ -13,6 +13,7 @@ kura manages one or more **skill roots**:
 - the default root: `~/.agents/skills` (Windows: `%USERPROFILE%\.agents\skills`). It is always in the list and always first; it can be neither removed nor moved.
 - any other folder the user adds in the UI (for example a project's `.claude/skills`). The list lives in `~/.kura/config.json` under `roots`.
 - one directory per skill, containing `SKILL.md` plus optional files.
+- a skill folder may also be a **link** to a real folder elsewhere: a Windows junction or a directory symlink (CherryStudio and similar programs create these). A link is a skill exactly when it resolves to an existing directory; a broken link (target missing, unreadable or looping) is treated as a folder that does not exist: not listed, not counted, not reported by `doctor`. See [Linked skills](#linked-skills).
 
 Roots are configuration, never constants.
 
@@ -96,6 +97,18 @@ Moving between volumes (for example a root on another drive than `~/.kura` on Wi
 
 The GUI lists a skill’s snapshots and offers a bounded per-file text diff. Restore targets the selected enabled or disabled copy in the original root. A preview binds the source and current content including metadata; changed content requires a new preview. Restoring first saves the current version, stages the complete historical copy and replaces it with rollback on failure. Invalid paths, symlinks, special files and invalid historical metadata are rejected. Snapshots without metadata remain valid for local skills.
 
+### Linked skills
+
+Go on Windows reports a junction as neither a directory nor a symlink (`ModeIrregular`), and `filepath.WalkDir` does not enter it, so linked skills need their own handling. `internal/store/links.go` and `walk.go` hold it; nothing else decides what a skill folder is or walks one.
+
+- **One rule decides what is a skill folder** (`store.isSkillDirEntry`): a real directory, or a symlink/junction whose `os.Stat` succeeds and is a directory. Scanning, counting, `doctor`, the trash's stamp level (`trash/<name>/<stamp>`) and `Purge` all use it.
+- **Content walks enter links.** Hashing, copying, update previews and history snapshots enter a link at the root of a skill and links inside it (`walkTree`). A link that points back at a folder already being walked (a cycle) is skipped, so a loop cannot hang or overflow the stack; two links to the same folder are not a cycle and are both walked. A symlink to a *file* keeps its old meaning: the file's content is read. Content from a git clone is untrusted: links inside it are not entered (a hostile repository must not be able to pull an arbitrary folder into a skill).
+- **Snapshots are real content.** A snapshot of a linked skill is a deep copy, never a link; a snapshot that is merely a link to the original would protect nothing. The `HashDir` check is unchanged.
+- **Enable, disable, remove and restore move the link itself**, never its target. Across volumes a symlink is recreated at the destination; a junction cannot be created from the standard library, so the operation fails with a clear error and nothing changes. Content is never silently copied instead.
+- **Purge removes only the link.** The target folder is untouched. As for any purge, a valid snapshot is written first.
+- **Update and history restore act on the real folder.** The link is resolved (`os.Readlink`, a relative target against the link's folder), the snapshot, copy, replacement and `.kura-meta.json` all happen in the real folder, and the link stays as it is, so the program that owns the folder sees the new content. The usual rollback from the snapshot still applies. Because the replacement deletes the target first, kura refuses when the target is a drive root or contains kura's skill root or data folder (a link pointing back at a parent).
+- The metadata of a linked skill, including what `import-meta` fills in, lives in the folder the link points to.
+
 ## 5. Metadata: `.kura-meta.json`
 
 Written inside each managed skill folder, next to `SKILL.md`:
@@ -159,7 +172,7 @@ Translation exists to make skill text readable in the UI. It is **display only**
 
 Three columns:
 
-1. **Skill roots** (left): the default root plus every folder the user added, each with its enabled-skill count, plus "add folder" (system folder picker). Roots can be dragged to reorder (the default stays first).
+1. **Skill roots** (left): the default root plus every folder the user added, each with its enabled-skill count, plus "add folder" (system folder picker). Roots can be dragged to reorder (the default stays first). **Only roots that currently exist as a directory are listed** (a link to a directory counts as existing): a root whose folder is gone disappears together with its count, and if it was the selected one the window switches to the first root that exists (the default root first). With no existing root the list shows a hint and the window keeps working. Existence is decided in the background along with each scan and cached, never looked up per frame. A hidden root stays in `config.json` and reappears on the next refresh once its folder is back.
 2. **Skill cards** (middle): the skills of the selected root. A card shows the name, the source (`owner/repo` or local), the two-line `description` from `SKILL.md`, tags (update available, disabled, trashed, broken metadata, missing `SKILL.md`) and the enable switch. Above the grid: search (name, description and display name), filter tabs All / Enabled / Disabled / Trash with counts ("All" means enabled + disabled and never includes the trash), and the layout switch. Header actions: refresh, check all for updates, import metadata (default root) or remove from list (added roots), install skill.
 3. **Detail** (right, only while a skill is selected): name, state, description, metadata, location and the actions. Two tabs: overview and full text. The full text renders the `SKILL.md` Markdown (headings, lists, fenced code, quotes, rules and inline code/bold/italic/strikethrough/links; unknown structures degrade to a paragraph; the source is capped and never makes the UI panic). The text is loaded in the background and cached per skill name; a scan invalidates the cache.
 
@@ -201,7 +214,7 @@ Requirements:
 | `add --local PATH [--name N]` / `add --github owner/repo [--sub-path P] [--ref R] [--name N]` | install one skill |
 | `update NAME` | re-fetch the recorded source and replace the content (snapshot first) |
 | `update --check NAME` / `update --check --all` | preview the changes without touching anything; exit 3 when something would change |
-| `doctor` | read-only health check |
+| `doctor` | read-only health check (a link to a directory is a skill, not a plain file; a broken link counts as a folder that does not exist and is not reported) |
 | `version`, `help` | version, usage |
 
 - Exit codes are fixed: `0` success, `1` operation failed (unknown skill, name clash, IO error, …), `2` usage error (unknown command, flag parse failure, wrong argument count), `3` `doctor` found problems or `update --check` found pending updates.
@@ -267,4 +280,8 @@ A change is done only when these are green (the exact commands are in `AGENTS.md
 - The multi-skill install candidate list has only been checked with a 12-candidate headless render and a 3-candidate real window, not with a real repository of ~38 skills.
 - **The skills.sh market searches only loaded ranking entries**, by skill name or source repository; it does not call the server-side search API. Its ranking routes were checked against the live service on 2026-10-17: `all-time`, `hot` and `trending` all answer 200 with the documented shape, as does `/api/download/{owner}/{repo}/{slug}` (see [docs/note/skills-market.md](docs/note/skills-market.md) for the results and sources). A ranking can hold records that are not `owner/repo` on GitHub (for example `open.feishu.cn`); those are skipped rather than shown as installable.
 - **Microsoft's anonymous translation service is experimental.** During v0.1.14 validation in the cloud development environment, the Bing page returned 200 but the translation request returned 401. Offline protocol, cancellation and privacy tests passed; successful live translation remains unverified in that environment. Service availability can differ by region; a rejected request leaves the original text visible.
+- **Linked skills (junctions and directory symlinks) were verified on Windows only**, on the C: and D:/E: volumes, with both kinds. The same test cases run on macOS and Linux with symlinks but have not been exercised there.
+- **A junction cannot be moved across volumes** (the standard library cannot create junctions): disabling or trashing one fails when kura's data folder is on another volume than the root, and the skill stays where it is. Symlinks are recreated across volumes where the system lets the user create them (on Windows that needs developer mode or elevation).
+- **Updating or restoring history on a linked skill writes into the folder the link points to**, which may belong to another program; the user explicitly allows this. `import-meta` likewise writes `.kura-meta.json` there.
+- **A hidden root cannot be removed from the list in the window**: while its folder is missing it is not listed, so there is no menu to remove it. It stays in `config.json` and reappears when the folder returns.
 - Windows device-name handling in `validSkillDirName` is deliberately conservative: on other platforms it falls back to the directory name more often than strictly necessary, and it has not been exercised on other platforms.

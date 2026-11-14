@@ -66,6 +66,7 @@ type App struct {
 	rootSel                string                       // 左栏选中的目录，与 cfg.Root 不同时切换
 	gen                    int                          // 目录切换代数：切换后丢弃旧目录的后台结果
 	rootCounts             map[string]int               // 每个目录根下在用技能数（左栏徽标）
+	rootExists             map[string]bool              // 每个目录当前是否存在且是目录（左栏据此过滤；缺键表示尚未检查）
 	rootBrowsers           map[string]*rootBrowserState // 每个目录本次会话中的浏览位置，不写入配置
 	restoringRootSelection bool                         // 等待扫描验证恢复的精确副本，不能误选同名另一状态
 	adding                 bool                         // 正在选择/添加文件夹
@@ -220,8 +221,8 @@ type App struct {
 // cfg.Root 是默认技能目录；其余目录从 cfg.Home 下的 config.json 读取。
 // 目录列表损坏不致命：只显示默认目录，并在界面上报告错误。
 func NewApp(cfg *store.Config) *App {
-	a := &App{selIdx: -1, syncIdx: -1, busy: map[string]bool{}, rootCounts: map[string]int{}, updates: map[string]bool{},
-		rootsW: rootsWidth, detailW: detailWidth}
+	a := &App{selIdx: -1, syncIdx: -1, busy: map[string]bool{}, rootCounts: map[string]int{}, rootExists: map[string]bool{},
+		updates: map[string]bool{}, rootsW: rootsWidth, detailW: detailWidth}
 	lib, err := store.LoadLibrary(cfg)
 	if err != nil {
 		a.libErr = err.Error()
@@ -541,7 +542,12 @@ func (a *App) applyScan(skills []*store.Skill, err error) {
 		return
 	}
 	a.loadErr = ""
-	if _, serr := os.Stat(a.cfg.Root); os.IsNotExist(serr) {
+	// 同一次 Stat 既给出「目录不存在」的提示，也更新左栏用的「存在」状态（成功且是目录，链接目录算存在，
+	// 口径与 store.DirExists 一致），不在 UI 线程上再多做磁盘访问。
+	info, serr := os.Stat(a.cfg.Root)
+	exists := serr == nil && info.IsDir()
+	a.setRootExists(a.cfg.Root, exists)
+	if os.IsNotExist(serr) {
 		a.loadErr = locales.UiStatusRootMissing(a.cfg.Root)
 	}
 	a.skills = skills
@@ -553,7 +559,10 @@ func (a *App) applyScan(skills []*store.Skill, err error) {
 			n++
 		}
 	}
-	a.rootCounts[a.cfg.Root] = n
+	// 不存在的目录不留计数（setRootExists 已清掉了它），免得残留一个不再成立的数字。
+	if exists {
+		a.rootCounts[a.cfg.Root] = n
+	}
 	// SKILL.md 可能被更新/恢复等操作改写（磁盘上的内容已变），缓存全部
 	// 失效，全文页下一帧重新读；docGen 递增让还在路上的旧读盘结果作废。
 	a.skillDocs = nil
@@ -629,11 +638,17 @@ func (a *App) reload(announce bool) {
 			}
 			// 先发布当前目录，再统计其他目录。慢盘徽标不拖住列表和刷新按钮；
 			// 在 UI 回调里发起第二阶段，也避免同步测试的 spawn 嵌套死锁。
+			// 第二阶段顺手把其他目录「是否存在」也在后台判定好（死掉的网络盘 Stat 可能卡很久，
+			// 绝不能放在 UI 线程或每帧做），结果和徽标一起回填。
 			if len(others) > 1 {
 				a.spawn(func() {
 					counts := make(map[string]int, len(others)-1)
+					exists := make(map[string]bool, len(others)-1)
 					for _, o := range others {
-						if o.Root != cfg.Root {
+						if o.Root == cfg.Root {
+							continue
+						}
+						if exists[o.Root] = store.DirExists(o.Root); exists[o.Root] {
 							counts[o.Root] = o.CountEnabled()
 						}
 					}
@@ -641,17 +656,62 @@ func (a *App) reload(announce bool) {
 						if gen != a.gen || seq != a.scanSeq {
 							return
 						}
-						for root, n := range counts {
+						for root, ok := range exists {
 							// 扫描期间可能移除了其他目录，不能把徽标加回来。
-							if slices.Contains(a.lib.Roots, root) {
-								a.rootCounts[root] = n
+							if !slices.Contains(a.lib.Roots, root) {
+								continue
+							}
+							a.setRootExists(root, ok)
+							if ok {
+								a.rootCounts[root] = counts[root]
 							}
 						}
+						// 选中的目录若已不存在，此时才知道该切到哪一个。
+						a.ensureRootSelection()
 					})
 				})
 			}
+			// 当前目录若已经不存在，要切到哪一个目录不在这里决定：此刻其他目录的「存在」状态还是上一次的
+			// 旧值，据此跳转可能跳到一个其实早已消失的目录，选中项就会在「一个都不存在」时无端漂移。
+			// 等上面第二阶段把所有目录新鲜的存在性回填之后再决定（列表里只有这一个目录时
+			// 没有别的可切，第二阶段也就不需要）。
 		})
 	})
+}
+
+// setRootExists 记下目录 root 当前是否存在且是目录（左栏据此过滤）。不存在时同时清掉它的计数徽标：
+// 一个不存在的目录不该留下最后一次扫描时的残留数字。只在 UI 线程调用。
+func (a *App) setRootExists(root string, exists bool) {
+	if a.rootExists == nil {
+		a.rootExists = map[string]bool{}
+	}
+	a.rootExists[root] = exists
+	if !exists {
+		delete(a.rootCounts, root)
+	}
+}
+
+// rootAvailable 报告目录 root 是否该出现在左栏：已经确认存在的显示，确认不存在的隐藏。还没检查过的
+// （启动后的第一次扫描完成之前）按存在处理，左栏不会先空一下再刷出来。不做磁盘访问，可以每帧调。
+func (a *App) rootAvailable(root string) bool {
+	exists, known := a.rootExists[root]
+	return !known || exists
+}
+
+// ensureRootSelection 在选中的目录（rootSel）已经不存在时，切到列表里第一个确认存在的目录
+// （默认目录排在第一个，所以它优先）。一个都没有确认存在的就保持现状：没有地方可切，界面照常
+// 渲染（左栏给提示）。候选只看「已确认存在」的，不把尚未检查的当成去处：第二阶段的存在性回填后会再调
+// 一次。只在 UI 线程调用。
+func (a *App) ensureRootSelection() {
+	if a.rootAvailable(a.rootSel) {
+		return
+	}
+	for _, root := range a.lib.Roots {
+		if a.rootExists[root] {
+			a.SelectRoot(root)
+			return
+		}
+	}
 }
 
 // ToggleAsync 切换技能的启用状态；wantOn 是切换后的目标状态。
@@ -827,6 +887,7 @@ func (a *App) RemoveRootAsync(root string) {
 			}
 			a.lib = lib
 			delete(a.rootCounts, root)
+			delete(a.rootExists, root)
 			// 要不要换目录在这里、UI 线程上判断：排队期间用户可能已切走。
 			if root == a.cfg.Root {
 				a.SelectRoot(lib.Default())
@@ -878,6 +939,8 @@ func (a *App) DiscoverAgentRootsAsync(home string) {
 			}
 			a.lib = lib
 			for r, n := range counts {
+				// 发现只会加入当时确实存在的目录。
+				a.setRootExists(r, true)
 				a.rootCounts[r] = n
 			}
 			a.status, a.statusErr = locales.UiStatusRootsDiscovered(len(added)), false

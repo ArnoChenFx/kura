@@ -64,6 +64,7 @@ func (c *Config) ScanAll() ([]*Skill, error) {
 
 // CountEnabled 返回根目录里技能文件夹的数量，只列目录、不读元数据也不算
 // 哈希，供界面的目录徽标使用。目录不存在或读失败时返回 0。
+// 链接目录（联接点、目录符号链接）与 Scan 同一口径：指向存在的目录才算（isSkillDirEntry）。
 func (c *Config) CountEnabled() int {
 	entries, err := os.ReadDir(c.Root)
 	if err != nil {
@@ -71,7 +72,7 @@ func (c *Config) CountEnabled() int {
 	}
 	n := 0
 	for _, e := range entries {
-		if e.IsDir() && !strings.HasPrefix(e.Name(), ".") {
+		if !strings.HasPrefix(e.Name(), ".") && isSkillDirEntry(c.Root, e) {
 			n++
 		}
 	}
@@ -79,6 +80,8 @@ func (c *Config) CountEnabled() int {
 }
 
 // scanDir 列出 dir 下的一级子目录，构造 Skill 视图。目录不存在视为空。
+// 「子目录」按 isSkillDirEntry 判定：普通目录，以及指向存在目录的链接（Windows 联接点、
+// 目录符号链接）；断链不显示。
 func scanDir(dir string, state State) ([]*Skill, error) {
 	f, err := os.Open(dir)
 	if err != nil {
@@ -103,7 +106,7 @@ func scanDir(dir string, state State) ([]*Skill, error) {
 	}
 	skills := make([]*Skill, 0, len(entries))
 	for _, e := range entries {
-		if !e.IsDir() || strings.HasPrefix(e.Name(), ".") {
+		if strings.HasPrefix(e.Name(), ".") || !isSkillDirEntry(dir, e) {
 			continue
 		}
 		skills = append(skills, buildSkill(filepath.Join(dir, e.Name()), e.Name(), state))

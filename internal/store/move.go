@@ -23,6 +23,10 @@ import (
 // 因此失败时 src 原样保留，不丢数据。
 //
 // 非「跨设备」的错误（权限、路径不存在等）原样返回，不用回退掩盖真实问题。
+//
+// src 是链接（Windows 联接点、目录符号链接）时，移动的是链接本身：同卷的 os.Rename 就是把链接
+// 换个位置，目标目录不动。跨卷时不走上面的「复制 + 删除」回退——那会把链接展开成完整的真目录，
+// 惄惄把「移动」变成「复制它指向的内容」，而且最后删源只是摘掉链接；见 moveLinkAcrossVolumes。
 func moveDir(src, dst string) error {
 	err := os.Rename(src, dst)
 	if err == nil {
@@ -30,6 +34,9 @@ func moveDir(src, dst string) error {
 	}
 	if !isCrossDevice(err) {
 		return err
+	}
+	if fi, lerr := os.Lstat(src); lerr == nil && isLinkMode(fi.Mode()) {
+		return moveLinkAcrossVolumes(src, dst, fi.Mode())
 	}
 	// 跨卷回退：staging 目录与 dst 同卷，保证最后一步 Rename 原子。
 	staging := dst + moveTmpSuffix
@@ -49,6 +56,32 @@ func moveDir(src, dst string) error {
 	// 只把残留状态说清楚，由调用方报给用户。
 	if err := os.RemoveAll(src); err != nil {
 		return i18n.Wrapf(err, "storeErrCrossVolumeSource", func() string { return locales.StoreErrCrossVolumeSource(src, dst) })
+	}
+	return nil
+}
+
+// moveLinkAcrossVolumes 把链接 src 跨卷移到 dst，保留链接语义，做不到就报明确的错，绝不默默改成复制内容：
+//
+//   - 符号链接：在 dst 用同一个目标重建符号链接（相对目标先换成绝对路径，否则在新位置会指到别处），
+//     再摘掉源链接；摘源失败则回滚刚建的链接，源原样保留。Windows 上没有权限创建符号链接时同样报错。
+//   - 联接点：标准库造不出联接点（os.Symlink 只造符号链接），直接报错，源链接不动。
+//
+// 任何失败都不会留下残缺：源链接保持原位，dst 不存在。
+func moveLinkAcrossVolumes(src, dst string, mode os.FileMode) error {
+	render := func() string { return locales.StoreErrLinkCrossVolume(src, dst) }
+	if mode&os.ModeSymlink == 0 {
+		return i18n.NewError("storeErrLinkCrossVolume", render)
+	}
+	target, err := os.Readlink(src)
+	if err != nil {
+		return i18n.Wrapf(err, "storeErrLinkCrossVolume", render)
+	}
+	if err := os.Symlink(absLinkTarget(src, target), dst); err != nil {
+		return i18n.Wrapf(err, "storeErrLinkCrossVolume", render)
+	}
+	if err := os.Remove(src); err != nil {
+		os.Remove(dst) // 回滚：只摘掉刚建的链接
+		return i18n.Wrapf(err, "storeErrLinkCrossVolume", render)
 	}
 	return nil
 }

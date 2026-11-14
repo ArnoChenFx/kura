@@ -271,9 +271,11 @@ func TestCorruptRootsListKeepsDefaultUsable(t *testing.T) {
 	}
 }
 
-// TestMissingExtraRootShowsBannerAndCanBeRemoved 验证已添加的目录后来在磁盘
-// 上消失时：显示提示，但仍可以从列表里移除。
-func TestMissingExtraRootShowsBannerAndCanBeRemoved(t *testing.T) {
+// TestMissingExtraRootIsHiddenAndSelectionFallsBack 验证已添加的目录后来在磁盘上消失时：
+// 左栏不再显示它，正在看它的话自动回到默认目录，计数徽标不留残留值。
+// 它仍记在 config.json 里：只是隐藏，不是遗忘。（这条用例原来要求消失的目录显示横幅并可移除，
+// 现在的需求是「左栏只出现存在的目录」，所以改写。）
+func TestMissingExtraRootIsHiddenAndSelectionFallsBack(t *testing.T) {
 	a, cfg := newTestApp(t)
 	seedSkill(t, cfg, "base", nil)
 	other := makeRoot(t, "extra", "gone-soon")
@@ -281,16 +283,25 @@ func TestMissingExtraRootShowsBannerAndCanBeRemoved(t *testing.T) {
 		t.Fatal(err)
 	}
 	tt := showApp(a, 1280, 800)
+	click(t, a, tt, rootLabel(other))
+	if a.cfg.Root != other {
+		t.Fatalf("前提不成立：应已切到 %s，实际 %s", other, a.cfg.Root)
+	}
 	if err := os.RemoveAll(other); err != nil {
 		t.Fatal(err)
 	}
 
-	click(t, a, tt, rootLabel(other))
-	if !tt.HasText("技能目录不存在") {
-		t.Errorf("目录消失后应提示，文本 %v", tt.Texts())
+	click(t, a, tt, "刷新")
+	if _, ok := tt.Find(rootLabel(other)); ok {
+		t.Errorf("消失的目录不应再出现在左栏，文本 %v", tt.Texts())
 	}
-	click(t, a, tt, "从列表移除此目录")
-	if a.cfg.Root != cfg.Root || tt.HasText("技能目录不存在") {
-		t.Errorf("移除后应回到默认目录且提示消失：cfg.Root=%s 文本 %v", a.cfg.Root, tt.Texts())
+	if a.rootSel != cfg.Root || a.cfg.Root != cfg.Root || !tt.HasText("base 开关") {
+		t.Errorf("正在看的目录消失后应回到默认目录：rootSel=%s cfg.Root=%s 文本 %v", a.rootSel, a.cfg.Root, tt.Texts())
+	}
+	if _, ok := a.rootCounts[other]; ok {
+		t.Errorf("消失的目录不应留下计数徽标：%v", a.rootCounts)
+	}
+	if lib, err := store.LoadLibrary(cfg); err != nil || len(lib.Roots) != 2 {
+		t.Errorf("只是隐藏，config.json 仍应记录该目录：Roots=%v err=%v", lib.Roots, err)
 	}
 }

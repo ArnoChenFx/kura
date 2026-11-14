@@ -260,7 +260,7 @@ func (c *Config) upToDatePreview(ctx context.Context, name string, meta *Meta, c
 		return nil, err
 	}
 	if !p.LocalModified {
-		files, err := listFilesContext(ctx, c.SkillPath(name))
+		files, err := listFilesContext(ctx, c.SkillPath(name), walkOpts{})
 		if err != nil {
 			return nil, err
 		}
@@ -274,7 +274,9 @@ func (c *Config) contentPreview(ctx context.Context, name string, meta *Meta, ne
 	if !fileExists(newDir) {
 		return nil, i18n.NewError("storeErrUpstreamDirMissing", func() string { return locales.StoreErrUpstreamDirMissing(newDir) })
 	}
-	p, err := diffTreeContext(ctx, c.SkillPath(name), newDir)
+	// 新内容来自 git clone 时不进入树里的链接目录（仓库不可信）；本地来源是用户自己的目录，照常进入。
+	newOpt := walkOpts{noSubLinks: meta.Source.Type == SourceGitHub}
+	p, err := diffTreeContext(ctx, c.SkillPath(name), newDir, newOpt)
 	if err != nil {
 		return nil, err
 	}
@@ -286,7 +288,7 @@ func (c *Config) contentPreview(ctx context.Context, name string, meta *Meta, ne
 		return nil, err
 	}
 	// 新哈希排除 .git 与元数据文件，与「Update 完成后 HashDir 的结果」一致。
-	p.NewHash, err = hashTreeExcludingContext(ctx, newDir, skipUpstream)
+	p.NewHash, err = hashTreeExcludingContext(ctx, newDir, skipUpstream, newOpt)
 	if err != nil {
 		return nil, err
 	}
@@ -316,36 +318,30 @@ func skipUpstream(rel string) bool {
 // exclude 的相对路径（目录命中时整棵剪枝）。实现与 hash.go 保持一致：
 // 相对路径 / 分隔、字节序排序、内容按「路径\0内容\0」拼接后取 sha256。
 func hashTreeExcluding(dir string, exclude func(rel string) bool) (string, error) {
-	return hashTreeExcludingContext(context.Background(), dir, exclude)
+	return hashTreeExcludingContext(context.Background(), dir, exclude, walkOpts{})
 }
 
-func hashTreeExcludingContext(ctx context.Context, dir string, exclude func(rel string) bool) (string, error) {
+// hashTreeExcludingContext 的 opt 决定对树里链接目录的态度：本地来源与已安装内容用零值（进入），
+// git clone 的产物用 noSubLinks（不进入，理由见 walkOpts）。
+func hashTreeExcludingContext(ctx context.Context, dir string, exclude func(rel string) bool, opt walkOpts) (string, error) {
 	var paths []string
-	err := filepath.WalkDir(dir, func(p string, d os.DirEntry, err error) error {
+	err := walkTree(dir, opt, func(e treeEntry) error {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		if err != nil {
-			return err
-		}
-		rel, rerr := filepath.Rel(dir, p)
-		if rerr != nil {
-			return rerr
-		}
-		rel = filepath.ToSlash(rel)
-		if rel == "." {
+		if e.Rel == "." {
 			return nil
 		}
-		if exclude != nil && exclude(rel) {
-			if d.IsDir() {
+		if exclude != nil && exclude(e.Rel) {
+			if e.IsDir {
 				return filepath.SkipDir
 			}
 			return nil
 		}
-		if d.IsDir() {
+		if e.IsDir {
 			return nil
 		}
-		paths = append(paths, rel)
+		paths = append(paths, e.Rel)
 		return nil
 	})
 	if err != nil {
@@ -373,15 +369,17 @@ func hashTreeExcludingContext(ctx context.Context, dir string, exclude func(rel 
 // 已安装一侧的 .git 同样跳过：正常安装流程不会把 .git 带进技能目录
 // （Add/Update 都会剥离），万一用户手工放入，跳过可避免整片噪音行。
 func diffTree(oldDir, newDir string) (*UpdatePreview, error) {
-	return diffTreeContext(context.Background(), oldDir, newDir)
+	return diffTreeContext(context.Background(), oldDir, newDir, walkOpts{})
 }
 
-func diffTreeContext(ctx context.Context, oldDir, newDir string) (*UpdatePreview, error) {
-	oldFiles, err := listFilesContext(ctx, oldDir)
+// diffTreeContext 的 newOpt 是新内容一侧的遍历选项：已安装的一侧始终进入链接目录（链接形式的
+// 技能、或技能里的链接子目录），新内容该不该进入取决于它来自哪里（git clone 不进入）。
+func diffTreeContext(ctx context.Context, oldDir, newDir string, newOpt walkOpts) (*UpdatePreview, error) {
+	oldFiles, err := listFilesContext(ctx, oldDir, walkOpts{})
 	if err != nil {
 		return nil, err
 	}
-	newFiles, err := listFilesContext(ctx, newDir)
+	newFiles, err := listFilesContext(ctx, newDir, newOpt)
 	if err != nil {
 		return nil, err
 	}
@@ -453,36 +451,30 @@ func diffTreeContext(ctx context.Context, oldDir, newDir string) (*UpdatePreview
 // 根级 .kura-meta.json 一律跳过（kura 自管文件，不属于技能内容），
 // .git 目录整棵剪枝（两侧一致，理由见 diffTree）。
 func listFiles(dir string) (map[string]string, error) {
-	return listFilesContext(context.Background(), dir)
+	return listFilesContext(context.Background(), dir, walkOpts{})
 }
 
-func listFilesContext(ctx context.Context, dir string) (map[string]string, error) {
+// listFilesContext 的 opt 决定对树里链接目录的态度（见 hashTreeExcludingContext）。值里的路径经过链接
+// 目录也能直接读。
+func listFilesContext(ctx context.Context, dir string, opt walkOpts) (map[string]string, error) {
 	files := map[string]string{}
-	err := filepath.WalkDir(dir, func(p string, d os.DirEntry, err error) error {
+	err := walkTree(dir, opt, func(e treeEntry) error {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		if err != nil {
-			return err
-		}
-		rel, rerr := filepath.Rel(dir, p)
-		if rerr != nil {
-			return rerr
-		}
-		rel = filepath.ToSlash(rel)
-		if rel == "." {
+		if e.Rel == "." {
 			return nil
 		}
-		if d.IsDir() {
-			if rel == ".git" || strings.HasPrefix(rel, ".git/") {
+		if e.IsDir {
+			if e.Rel == ".git" || strings.HasPrefix(e.Rel, ".git/") {
 				return filepath.SkipDir
 			}
 			return nil
 		}
-		if rel == MetaFileName {
+		if e.Rel == MetaFileName {
 			return nil
 		}
-		files[rel] = p
+		files[e.Rel] = e.Path
 		return nil
 	})
 	if err != nil {
