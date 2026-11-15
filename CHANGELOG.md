@@ -1,232 +1,232 @@
-# 更新日志
+# Changelog
 
-kura 遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 的格式: 版本号是唯一的小节标题(`## <version>`),MyGo 更新器在打包时会从本文件提取对应版本的小节作为发布说明,展示在原生更新窗口里。因此**每个版本的说明必须以 `## <版本号>` 开头**(MyGo 也能识别 `[<版本号>]` 形式的标题)。
+kura follows the [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) format: the version number is the only section heading (`## <version>`). When packaging, the MyGo updater extracts that version's section from this file and shows it as the release notes in the native update window. Therefore **each version's notes must start with `## <version>`** (MyGo also recognizes headings of the form `[<version>]`).
 
-应用版本号的唯一来源是 `mygo.json` 的 `version` 字段(打包时由 MyGo 注入); `internal/cli` 的 `Version` 常量是 CLI 二进制自己的版本号,不参与自更新, 发版时需人工与 `mygo.json` 保持一致。
+The sole source of the application version is the `version` field in `mygo.json` (injected by MyGo at pack time). The `Version` constant in `internal/cli` is the CLI binary's own version number; it is not part of self-update, and must be kept in sync with `mygo.json` by hand when releasing.
 
 ## [Unreleased]
 
 ## 0.1.23
 
-- 链接形式的技能（Windows 联接点、目录符号链接）现在和普通技能一样：在列表与详情里出现、参与计数、能被哈希与快照、启用/停用/移入回收站/恢复、更新与恢复历史版本。快照永远是穿透复制的真实内容，永久删除只摘掉链接本身，断链按「目录不存在」忽略。更新与历史恢复会写进链接指向的真实目录，链接本身保持不动。
-- 左栏只列出当前存在的技能目录：文件夹消失的目录不再占一行，选中的目录消失时切到第一个存在的目录，一个都不存在时给一句提示。目录仍记在 `config.json` 里，回来刷新就重现。
-- 技能区可以按修改时间排序（新的在前，默认），保留按名称作为可切换的选项；在时钟图标上再点一次反转方向。排序方式记在 `config.json` 的 `sort`，命令行 `list --json` 多一个 `modTime` 字段，但输出顺序仍是按名称。
-- 升级 MyGo 至 0.9.0。
+- Skills that are links (Windows junctions, directory symlinks) now behave like ordinary skills: they appear in the list and the detail pane, count toward totals, can be hashed and snapshotted, and support enable / disable / move to trash / restore, as well as update and restore of historical versions. A snapshot is always a through-copy of the real content; permanent delete only removes the link itself; a broken link is ignored as "directory does not exist". Update and historical restore write into the real directory the link points to; the link itself is left in place.
+- The left rail lists only skill directories that currently exist: a directory whose folder has disappeared no longer takes a row. If the selected directory disappears, the first existing directory is selected; if none exist, a short hint is shown. Directories are still recorded in `config.json`, and reappear when you refresh after they come back.
+- The skills area can be sorted by modified time (newest first, the default), with sort by name kept as a toggleable option. Clicking the clock icon again reverses the direction. The sort order is stored as `sort` in `config.json`. The CLI `list --json` output gains a `modTime` field, but the output order is still by name.
+- Upgraded MyGo to 0.9.0.
 
 ## 0.1.22
 
-- 依赖升级：MyGo 0.6.3 → 0.8.3。窗口、滚动、输入与更新的行为不变；kura 用到的 API 没有删除或改名，业务代码未改。
-- 滚到底再往回拨鼠标滚轮时立刻响应（上游 0.7.0 起反向滚轮不再被尚未走完的行程吸收）。
-- Windows 与 macOS 的安装包换了文件名：`kura-setup-<版本>-<架构>.exe`、`kura-<版本>-<架构>.dmg`（原来的名字是 `kura Setup <版本> amd64.exe` 与 `kura <版本> <架构>.dmg`）；Release 另附 `install.ps1` 与 `SHA256SUMS`。已安装的副本照旧自更新。
+- Dependency upgrade: MyGo 0.6.3 → 0.8.3. Window, scrolling, input, and update behavior are unchanged. None of the APIs kura uses were removed or renamed, and no application code was changed.
+- Scrolling back up after reaching the bottom responds immediately (from upstream 0.7.0, a reverse wheel movement is no longer absorbed by a journey that has not finished).
+- Windows and macOS installers have new file names: `kura-setup-<version>-<arch>.exe`, `kura-<version>-<arch>.dmg` (the old names were `kura Setup <version> amd64.exe` and `kura <version> <arch>.dmg`). The Release also includes `install.ps1` and `SHA256SUMS`. Already-installed copies keep self-updating as before.
 
 ## 0.1.21
 
-- 每次启动 kura 都检查一次应用更新：启动约 10 秒后查一次，只有上次成功检查在 10 分钟以内才跳过（挡住连续重启、崩溃重启攒出的重复请求），同一次运行里之后仍每 24 小时一次。原来首检按「上次成功检查 + 24 小时」排期，当天查过一次就等于当天之后不再查，重启也看不到蓝点。
-- 版本变了（刚装完新版本）或记录里没有版本时，仍然启动后立刻查一次，行为与 0.1.18 一致。
+- kura now checks for app updates on every launch: one check about 10 seconds after startup, skipped only if the last successful check was within 10 minutes (this blocks repeated requests piled up by rapid restarts or crash restarts). Later in the same run it is still once every 24 hours. Previously the first check was scheduled as "last successful check + 24 hours", so a check earlier that day meant no further check that day, and a restart would not show the blue dot either.
+- If the version has changed (a new version was just installed) or the record has no version, a check still runs immediately after launch, same as in 0.1.18.
 
 ## 0.1.20
 
-- 升级 MyGo 至 0.6.3：Windows 上隐藏标题栏并启用材质时，最大化窗口不再露出系统的标题栏按钮；隐藏的滚动条轨道也放行点击；表格最后一列不再有可拖拽的边。
-- Windows 的文本框独占按键，编辑菜单里的 Ctrl+V 只粘贴一次；大段文字的内联变换每段只查找一次，滚动更省。
+- Upgraded MyGo to 0.6.3: on Windows, when the title bar is hidden and material is enabled, a maximized window no longer shows the system's title-bar buttons; the hidden scrollbar track also lets clicks through; and the last column of a table no longer has a draggable edge.
+- On Windows, text fields exclusively handle keys, so Ctrl+V in the Edit menu pastes only once; inline transforms of large text search each paragraph only once, which makes scrolling cheaper.
 
 ## 0.1.19
 
-- 升级 MyGo 至 0.6.2：Linux 上拉丁词之间的中文标点改用该语言的字体绘制，触控板双指捏合会作为输入事件上报，Wayland 下第二个实例能把激活令牌转给已在运行的窗口。
+- Upgraded MyGo to 0.6.2: on Linux, Chinese punctuation between Latin words is drawn with that language's font; a two-finger trackpad pinch is reported as an input event; and on Wayland a second instance can forward the activation token to the already-running window.
 
 ## 0.1.18
 
-- 修复装完新版本后一直等不到更新提示：手动检查并升级之后，插件刚刷新的检查时间会把后台检查推到 24 小时后，重启也不会查。
-- 后台检查现在记下检查时的应用版本；记录的版本与当前运行版本不一致，或旧版本留下的记录没有版本，都不再采信那条时间，启动约 10 秒后重新检查一次。
+- Fixed a bug where the update hint never appeared after a new version was installed: after a manual check and upgrade, the plugin's freshly refreshed check time pushed the next background check 24 hours out, and a restart would not check either.
+- Background checks now record the app version at check time. If the recorded version does not match the currently running version, or an older version left a record with no version, that timestamp is no longer trusted, and a check runs again about 10 seconds after launch.
 
 ## 0.1.17
 
-- 升级 MyGo 至 0.6.0，采用框架的局部重绘、增量布局和不可见窗口暂停绘制能力。
-- 所有滚动区改用 MyGo 原生平滑滚动及默认步长，保留搜索回顶、榜单切换、目录浏览位置和减少动效行为。
-- 扫描、安装、翻译及其他后台任务统一使用 MyGo loading 插件的圆环指示器，跟随深浅主题与系统减少动效偏好。
-- Linux 安装包移除不需要的 WebKitGTK 依赖，仅保留原生界面所需的 GTK。
+- Upgraded MyGo to 0.6.0, adopting the framework's partial redraws, incremental layout, and paused painting for hidden windows.
+- Every scroll area now uses MyGo's native smooth scrolling and default step size, keeping jump-to-top on search, board switching, directory scroll positions, and reduce-motion behavior.
+- Scanning, installing, translation, and other background tasks uniformly use the MyGo loading plugin's circular indicator, which follows the light/dark theme and the system's reduce-motion preference.
+- The Linux package no longer depends on WebKitGTK, which it does not need; only the GTK required by the native UI is kept.
 
 ## 0.1.16
 
-- 修复左右面板分割线与背景边界错位的问题，保留原有拖拽调整栏宽的操作范围。
-- 将回收站空状态文案改为“回收站为空”。
-- 清理过期的开发记录和任务脚本，保留当前验证、接口与发布文档。
+- Fixed a misalignment between the left/right pane splitters and the background edges, keeping the existing drag ranges for resizing the panes.
+- Changed the trash empty-state copy to "No skills in the trash".
+- Cleaned up outdated development notes and task scripts, keeping the current verification, API, and release docs.
 
 ## 0.1.15
 
-- 修复技能详情底部操作按钮的布局，在窄面板与中英文界面下保持清晰的分组和间距。
-- 降低免费翻译的请求频率，遇到限流后按服务要求冷却并提示稍后重试；切换技能或关闭译文时停止过时请求，保留已完成段落供续译。
+- Fixed the layout of the action buttons at the bottom of skill details, keeping clear grouping and spacing in a narrow pane and in both the Chinese and English UIs.
+- Lowered the request rate of the free translation services; after being rate-limited they cool down as the service requires and prompt you to retry later. Switching skills or turning translation off stops stale requests, and completed sections are kept so you can resume.
 
-免费翻译仍受服务端的地区/IP 配额限制，不能保证完全避免 429；微软匿名翻译仍为实验性。
+Free translation is still subject to the service's regional/IP quota limits, so 429s cannot be guaranteed to be avoided entirely. Anonymous Microsoft translation remains experimental.
 
 ## 0.1.14
 
-新增免密钥翻译、可选择的批量更新和历史快照恢复，改善长文阅读与多目录浏览。
+Adds key-free translation, optional batch updates, and restoring from historical snapshots, and improves long-document reading and browsing across multiple directories.
 
-- 默认提供免密钥 Google 翻译，并可选择实验性的微软翻译或自定义 OpenAI 兼容 API；保留已有自定义配置，切换服务时取消旧请求并清理缓存。
-- 长文翻译在后台分段，显示进度并支持停止与续译；已完成段落在内存中保留，异常大的文档在读取阶段限制大小。
-- 每个目录分别记住搜索、筛选、选中技能副本和滚动位置；本地搜索支持来源仓库与路径。
-- 批量更新支持逐项勾选，保留成功/失败结果并只重试失败项；本地修改默认不勾选并明确提醒。
-- 新增历史快照、逐文件文本差异与确认恢复；恢复前保存当前版本，预览过期或恢复失败时保护当前内容。
-- 设置和历史面板在较小窗口下保持操作按钮可见；移除视图、筛选与主题切换按钮底部的小条，保留选中背景。
+- Key-free Google Translate is provided by default, and you can also choose experimental Microsoft Translator or a custom OpenAI-compatible API. Existing custom settings are kept; switching services cancels in-flight requests and clears the cache.
+- Long-document translation runs in the background in sections, shows progress, and supports stopping and resuming. Completed sections are kept in memory, and unusually large documents are size-limited at the read stage.
+- Each directory separately remembers its search, filters, selected skill copy, and scroll position. Local search supports the source repository and the path.
+- Batch updates support per-item checkboxes, keep success/failure results, and retry only the failed items. Locally modified skills are unchecked by default, with an explicit warning.
+- Adds historical snapshots, per-file text diffs, and confirmed restore. The current version is saved before restore; if the preview is stale or the restore fails, the current content is protected.
+- The Settings and History panels keep their action buttons visible in smaller windows. The small bar under the view, filter, and theme-toggle buttons is removed; the selected background is kept.
 
-已知限制：Google 短文和 Markdown 翻译已通过实网验证；微软匿名接口在当前验证环境返回 401，尚未验证成功，因此标为实验性。连接失败时保留原文，可手动选择其他翻译服务。
+Known limitations: Google translation of short text and Markdown has been verified against the live service. The anonymous Microsoft API returned 401 in the current verification environment and has not yet been verified successfully, so it is marked experimental. On a connection failure the original text is kept, and you can manually choose another translation service.
 
 ## 0.1.13
 
-改善滚动手感，减少顶部空间占用，并加快大型技能库的浏览与目录切换。
+Scrolling feels better, the top of the window takes less space, and browsing a large skill library or switching directories is faster.
 
-- 缩小鼠标滚轮步长并增加平滑滚动，触控板保留原生连续滚动；搜索或切榜单时立即回到顶部。
-- 压缩顶部工具区，为技能卡片留出更多空间；窄窗口的操作和筛选自动换行，完整目录路径可悬停查看。
-- 本地列表按可见范围加载，长名称和来源不再挤压操作区；缓存搜索结果，切换目录后优先显示当前目录内容。
-- 技能市场支持按名称和来源仓库搜索已加载的条目，加载更多后自动补入匹配结果。
-- 安装显示下载、解析和写入阶段；更新检查可以取消，切换目录会停止旧检查。
-- 修复旧目录任务完成后干扰新目录状态或关闭新评审面板的问题。
-- 修复 Windows 下根路径误指向普通文件时被当成空目录、更新检查误报成功的问题。
+- Shorter mouse-wheel steps and smoother scrolling; the trackpad keeps native continuous scrolling. Search or switching boards jumps back to the top immediately.
+- The top toolbar is tightened to leave more room for skill cards. Actions and filters in a narrow window wrap automatically, and the full directory path can be viewed on hover.
+- The local list loads by visible range; long names and sources no longer squeeze the action area. Search results are cached, and after switching directories the current directory's content is shown first.
+- The skill market can search already-loaded entries by name and source repository; matches from "Load more" are added automatically.
+- Install shows the download, parse, and write phases. An update check can be cancelled, and switching directories stops the previous check.
+- Fixed a bug where a completed task from an old directory could interfere with the new directory's state or close a newly opened review panel.
+- Fixed a bug on Windows where a root path that incorrectly pointed at a regular file was treated as an empty directory, and an update check was falsely reported as successful.
 
 ## 0.1.12
 
-重新设计技能库、技能市场和应用 Logo，采用石墨灰黑与纸白银灰两套主题，并修复同名技能副本的选择与操作。
+The skill library, skill market, and app logo are redesigned, with a graphite-black theme and a paper-white silver-gray theme, and selection and actions for same-named skill copies are fixed.
 
-- **界面层次更新**：重新整理标题、工具栏、筛选、卡片和详情面板；应用 Logo 改为银灰与石墨黑。
-- **独立设计亮色主题**：白色标题与详情面板、银灰画布和侧栏、洁白卡片；通过细描边、轻投影和浮起的选中项区分交互状态。
-- **细腻动效**：卡片悬停、按钮按压、选择切换与内容进入增加短过渡，遵循系统的减少动效偏好。
-- **同名副本互不混淆**：启用、停用和回收站里的同名技能分别保留选择、控件身份与全文缓存；移动或恢复完成后详情跟随结果，期间改选或关闭详情则保留用户的新选择。
-- **正确移除停用副本**：从停用技能的详情或右键菜单移入回收站时，只移动该停用副本，并在移动前保存快照。
-- **切换主题保留滚动位置**：长列表在深浅主题之间切换时保持当前位置。
+- **Updated visual hierarchy**: titles, the toolbar, filters, cards, and the detail pane are reorganized; the app logo is now silver-gray and graphite black.
+- **A purpose-built light theme**: a white title and detail pane, a silver-gray canvas and sidebar, and clean white cards. Fine strokes, light shadows, and a raised selected state distinguish interaction states.
+- **Subtle motion**: short transitions are added for card hover, button press, selection changes, and content entering, honoring the system's reduce-motion preference.
+- **Same-named copies are no longer confused**: enabled, disabled, and trashed skills that share a name each keep their own selection, control identity, and full-text cache. After a move or restore completes, the detail pane follows the result; if you change the selection or close the detail pane in the meantime, your new choice is kept.
+- **Disabled copies are removed correctly**: moving to the trash from a disabled skill's detail pane or context menu moves only that disabled copy, and a snapshot is saved first.
+- **Theme switches keep the scroll position**: a long list stays at its current position when switching between dark and light themes.
 
 ## 0.1.11
 
-后台检查不再自动弹出更新窗口：查到新版本只在左栏「检查更新」按钮上亮一个蓝点，点按钮或应用菜单才打开更新窗口。
+Background checks no longer open the update window on their own: when a new version is found, only a blue dot lights up on the "Check for updates" button in the left rail. The update window opens only when you click the button or use the app menu.
 
-- **后台查到新版本只亮蓝点**：此前插件在后台查到新版本（且没勾「以后自动下载并安装更新」）会自己弹出更新窗口，抢焦点、闪任务栏。现在插件的调度关掉，后台检查改由 kura 负责：启动约 10 秒后查一次，之后每天一次；查到新版本亮左栏「检查更新」按钮右上角的蓝点，悬停提示「kura 有新版本可用」。
-- **打开窗口即熄灭蓝点**：点左栏「检查更新」或应用菜单「检查更新…」，照常打开更新窗口（安装更新 / 稍后提醒我 / 跳过这个版本），蓝点同时熄灭。后台检查发现已是最新时蓝点也会熄灭。
-- **跳过的版本不再亮蓝点**：在更新窗口里选「跳过这个版本」后，同一个版本不再亮蓝点，更新的版本照常提示。
-- **「自动检查更新」偏好移到 `config.json`**：存为 `autoCheckUpdates`（缺省为开），设置里的开关照旧。升级后第一次启动会把插件 `updater.json` 里原来的 `automaticChecks` 迁移过来，之后以 `config.json` 为准。
-- **「以后自动下载并安装更新」照常工作**：勾上之后由插件接管后台检查，静默下载并安装，下次启动生效；这一档不亮蓝点。
+- **A background check that finds a new version only lights the blue dot**: previously, when the plugin found a new version in the background (and "Automatically download and install updates in the future" was not checked) it would open the update window itself, stealing focus and flashing the taskbar. The plugin's scheduler is now turned off, and background checks are handled by kura: one check about 10 seconds after launch, then once a day. When a new version is found, the blue dot at the top-right of the left-rail "Check for updates" button lights up, and the hover tip is "A new version of kura is available".
+- **Opening the window clears the blue dot**: clicking "Check for updates" in the left rail or "Check for Updates…" in the app menu opens the update window as usual (Install Update / Remind Me Later / Skip This Version), and the blue dot is cleared at the same time. The blue dot is also cleared when a background check finds that you are already up to date.
+- **A skipped version no longer lights the blue dot**: after you choose "Skip This Version" in the update window, that same version no longer lights the blue dot; newer versions are still announced as usual.
+- **The "Check for updates automatically" preference moves to `config.json`**: stored as `autoCheckUpdates` (on by default); the switch in Settings is unchanged. On the first launch after upgrading, the old `automaticChecks` value in the plugin's `updater.json` is migrated over, and `config.json` is the source of truth after that.
+- **"Automatically download and install updates in the future" still works as before**: once it is checked, the plugin takes over background checks, downloads and installs silently, and the update takes effect at the next launch; this mode does not light the blue dot.
 
 ## 0.1.10
 
-技能市场：在 kura 里浏览 skills.sh 的榜单并把技能装进当前技能目录。
+Skill market: browse skills.sh rankings inside kura and install a skill into the current skills directory.
 
-- **技能市场页面**：标题栏右边的地球按钮把三栏换成市场页，「返回技能目录」回到三栏。三个榜单（**总榜 / 热度 / 趋势**）在一个分段控件里切换，各自分页（「加载更多」）、各自缓存（切回来不重读），读失败保留原因并可重试。总榜是默认的那个。
-- **技能详情页**：头像、名字、来源、安装次数，SKILL.md frontmatter 的描述，两个外部链接（在后台用系统浏览器打开，不阻塞界面），技能里的文件列表，以及渲染出的 SKILL.md 全文。「原文 / 译文」开关与本地详情页共用同一个全局开关、同一套翻译设置与缓存规则；市场的译文 key 带 `market:` / `mdoc:` 前缀，同名的本地技能不共用译文。
-- **从市场安装**：走新增的 `store.AddSkillByName`——只 clone 一次仓库，按 `npx skills add --skill` 的规则按名字找技能（不分大小写：SKILL.md 的 `name` 优先，没写 `name` 才看目录名，仓库根的技能按仓库名）。装出来的元数据（来源、commit、子目录树哈希）与「安装」弹窗装的完全一样，之后的「检查更新」照常工作。同一时间只装一个；装的途中切换了目录，旧结果不改选中。
-- **榜单里有装不了的记录**：部分榜单条目的来源不是 `owner/repo` 形状（如 `open.feishu.cn`），它们不是 GitHub 仓库，市场会跳过而不是显示成可安装。总榜第一页 200 条里有 28 条属于这种。
-- **不落盘**：榜单与技能快照都只在内存里，不写进任何技能目录，也不留缓存文件。
-- **修正**：`frontmatterDescription` 原来只把 `>` 与 `|` 当块头，`>-` / `|-` / `|+` 会被当成字面值（详情页描述显示成「>-」）。真实数据里 `>-` 最常见，现在按块头处理。
-- **修正**：市场页把左右内边距加在滚动容器外面，内容铺到滚动区右缘，会被画在右侧 12 DIP 内的滚动条压住。现在留白加在滚动内容上（同本地详情页），左右各 61px，滚动条落在留白槽里。
+- **Skill market page**: the globe button on the right of the title bar replaces the three-pane view with the market page; "Back to skills" returns to the three panes. Three boards (**All time / Hot / Trending**) switch in a segmented control, each with its own pagination ("Load more") and its own cache (switching back does not refetch). If a load fails, the reason is kept and it can be retried. All time is the default board.
+- **Skill detail page**: avatar, name, source, install count, the description from the SKILL.md frontmatter, two external links (opened in the system browser in the background, without blocking the UI), the file list inside the skill, and the rendered full text of SKILL.md. The "Original" / "Translated" switch shares the same global switch, translation settings, and cache rules as the local detail page; market translation keys are prefixed with `market:` / `mdoc:`, so a local skill of the same name does not share translations.
+- **Install from the market**: goes through the new `store.AddSkillByName`: the repository is cloned only once, and the skill is found by name using the same rules as `npx skills add --skill` (case-insensitive: the `name` in SKILL.md wins; if there is no `name`, the directory name is used; a skill at the repository root uses the repository name). The metadata written on install (source, commit, subdirectory tree hash) is identical to what the "Install skill" dialog writes, so later "Check for updates" works as usual. Only one install runs at a time; if you switch directories mid-install, the old result does not change the selection.
+- **Some ranking entries cannot be installed**: some board entries have a source that is not in `owner/repo` shape (for example `open.feishu.cn`). They are not GitHub repositories, and the market skips them rather than showing them as installable. 28 of the 200 entries on the first All time page are of this kind.
+- **Nothing is written to disk**: both the boards and the skill snapshots live in memory only; they are not written into any skill directory, and no cache file is kept.
+- **Fix**: `frontmatterDescription` previously treated only `>` and `|` as block indicators, so `>-` / `|-` / `|+` were taken as literal values (the detail-page description showed up as ">-"). In real data `>-` is the most common; it is now treated as a block indicator.
+- **Fix**: the market page applied left/right padding outside the scroll container, so content ran to the right edge of the scroll area and was covered by the scrollbar drawn in the rightmost 12 DIP. Padding is now applied to the scroll content (same as the local detail page), 61px on each side, and the scrollbar sits in the padding gutter.
 
 ## 0.1.9
 
-三处界面修正与一个自更新偏好，另把 mygo 升到 v0.5.5。
+Three UI fixes and a self-update preference, plus a mygo upgrade to v0.5.5.
 
-- **右键只弹菜单，不再顺手换右栏**：右键技能卡片或列表行现在只弹出那一项自己的上下文菜单，不再把右栏换成它的详情。菜单里的动作本来就以被右键的技能为准，与右栏在看哪个技能无关，所以换选中没有意义；而「右键一下右栏就跳过去」是用户没要求的副作用。选中仍只由左键决定（网格单元格与列表行）。
+- **Right-click only opens the menu, and no longer also switches the right pane**: right-clicking a skill card or list row now only opens that item's own context menu, and no longer replaces the right pane with its details. Actions in the menu already target the skill that was right-clicked, regardless of which skill the right pane is showing, so changing the selection had no purpose; "right-click once and the right pane jumps there" was a side effect nobody asked for. Selection is still decided only by a left click (grid cells and list rows).
 
-- **设置里新增「自动检查更新」开关（默认勾上）**：偏好的真值存在**更新器插件的 `updater.json`**（不是 `config.json`）——读 `updater.AutomaticChecks`、写 `updater.SetAutomaticChecks`，所以默认值天然是「勾上」，也跟插件自己的调度一致：关掉后插件不再后台检查。弹窗每次打开都现读一次真值，不拿可能过时的内存副本。
+- **New "Check for updates automatically" switch in Settings (on by default)**: the preference's source of truth lives in **the updater plugin's `updater.json`** (not `config.json`): read via `updater.AutomaticChecks`, written via `updater.SetAutomaticChecks`, so the default is naturally "on", and it stays consistent with the plugin's own scheduling: after it is turned off, the plugin no longer checks in the background. The dialog re-reads the source of truth every time it opens, and does not use a possibly stale in-memory copy.
 
-- **后台查到新版本时，左栏「检查更新」按钮的右上角有一个蓝色小圆点**：插件没有「发现新版本」的回调，也没有「后台发现新版但只提示、不弹窗」的模式，所以 kura 在插件每次完成检查后自己再问一次（`mygo.Updater.Check`，30 秒超时）：用 `LastCheck` 去重、一次只跑一个查询、查询失败时**不动**蓝点状态（不因为一次网络抖动把用户已经看到的提示收回去）。蓝点是绝对定位的子元素，不改变按钮的位置与尺寸，也不吃点击；颜色取自 kura 的调色板（浅色 `#2f7dd1` / 深色 `#5aa9f0`）。点「检查更新」即清掉蓝点，悬停提示也换成「kura 有新版本可用」。
+- **When a background check finds a new version, a small blue dot appears at the top-right of the "Check for updates" button in the left rail**: the plugin has no "new version found" callback, and no mode that "the background found a new version but only hints, without opening a window", so after every plugin check kura asks once more itself (`mygo.Updater.Check`, 30-second timeout): it deduplicates with `LastCheck`, runs only one query at a time, and on query failure **leaves** the blue-dot state alone (a single network blip must not take back a hint the user has already seen). The dot is an absolutely positioned child; it does not change the button's position or size, and it does not eat clicks. Its color comes from kura's palette (Light `#2f7dd1` / Dark `#5aa9f0`). Clicking "Check for updates" clears the blue dot, and the hover tip also changes to "A new version of kura is available".
 
-- **设置弹窗里「更新」自成一组**：用一条分隔线隔开，翻译那一组的消息（密钥说明、「没填全」提醒）留在分隔线之前，免得读成在说自动检查更新。
+- **"Updates" is its own group in the settings dialog**: a separator line divides it off, and the translation group's messages (the API-key note, and the "incomplete" reminder) stay above the separator so they are not read as talking about automatic update checks.
 
-- **依赖**：mygo 升到 v0.5.5（此前 v0.5.1）。kura 用到的四个包（`ui`、`ui/markdown`、`i18n`、`plugins/updater`）导出 API 只增不减，无需改业务代码；新增的 `ui.SplitPercent`、`Element.Blur` 等暂时未用。
+- **Dependencies**: mygo is upgraded to v0.5.5 (previously v0.5.1). The four packages kura uses (`ui`, `ui/markdown`, `i18n`, `plugins/updater`) only add exported API, never remove it, so no application code changes are needed; new APIs such as `ui.SplitPercent` and `Element.Blur` are unused for now.
 
 ## 0.1.8
 
-界面按 MyGo 的官方方案重做两块：全文页的 Markdown 渲染与全部界面文案。
+Two parts of the UI are rebuilt the official MyGo way: Markdown rendering on the Full text page, and all UI copy.
 
-- **全文页改用官方 Markdown 视图**：详情页「全文」不再用手写渲染器（原 `internal/ui/markdown.go` 1066 行），改用 MyGo v0.5.1 的 `ui/markdown`（完整 CommonMark 0.31.2 + GFM）。表格不再是「一堆竖线」、任务列表显示成真正的复选框、代码块有语法高亮与「拷贝」按钮、行内代码与链接正常排在一行；脚注、公式、图片描述也可辨。kura 只保留官方视图不做、而我们要做的两件事：跳过 `SKILL.md` 开头的 YAML frontmatter，以及给超大源码一个截断上限。渲染主题只在窗口外观（浅色/深色/跟随系统）变化时重建，不每帧新建。
+- **Full text page uses the official Markdown view**: the "Full text" tab on the detail page no longer uses the handwritten renderer (the old `internal/ui/markdown.go`, 1066 lines) and switches to `ui/markdown` from MyGo v0.5.1 (full CommonMark 0.31.2 + GFM). Tables are no longer "a pile of vertical bars", task lists render as real checkboxes, code blocks have syntax highlighting and a "Copy" button, and inline code and links sit correctly on one line; footnotes, formulas, and image descriptions are also readable. kura keeps only the two things the official view does not do, and that we need: skipping the YAML frontmatter at the start of `SKILL.md`, and a truncation cap for very large sources. The render theme is rebuilt only when the window appearance (Light / Dark / Auto) changes, not on every frame.
 
-- **文案迁到 MyGo 官方 catalogs**：全部界面文案从自写的 `internal/i18n` 加四个包各自的 `catalog.go`，迁到 `locales/en.json` 与 `locales/zh-Hans.json`（ARB + ICU MessageFormat），由 `go tool mygo generate` 生成类型化取值函数。421 条文案一一对应迁移，**中文与英文的措辞逐字未变**（有回归脚本守住）。错误仍按 key 判断身份（`errors.Is` 跨语言成立），文字则每次按当前语言现取，所以后台任务里产生、切语言之后才显示的错误也是新语言的句子。
+- **Copy moved to official MyGo catalogs**: all UI copy moves from the custom `internal/i18n` plus each of the four packages' own `catalog.go` into `locales/en.json` and `locales/zh-Hans.json` (ARB + ICU MessageFormat), with typed accessor functions generated by `go tool mygo generate`. All 421 strings were migrated one-to-one; **the Chinese and English wording is unchanged, character for character** (a regression script guards this). Errors are still identified by key (`errors.Is` holds across languages), while the text is fetched in the current language each time, so an error produced by a background task and shown only after you switch language is also a sentence in the new language.
 
-- **顺带的收益与修正**：MyGo 自己的控件、菜单与文件夹选择框文案现在也跟着界面语言变（中文用户看到「完成」「取消」而不是 "Done"/"Cancel"），这是自写方案做不到的。另外修掉三处：繁体中文系统（`zh-TW`/`zh-Hant`/`zh-HK`）下窗口语言会错误地退成英文（同一台机器上命令行却是中文）；「非测试代码不硬编码中文」的守卫有一半在空转（扫目录时把根条目当成隐藏目录跳过，一个文件都没检查）；以及随旧渲染器退役的一条死文案（「另有 N 行未显示」）。
+- **Incidental gains and fixes**: MyGo's own widgets, menus, and folder pickers now follow the interface language as well (Chinese users see the Chinese labels instead of "Done"/"Cancel"), which the custom setup could not do. Three other fixes: on Traditional Chinese systems (`zh-TW`/`zh-Hant`/`zh-HK`) the window language incorrectly fell back to English (while the CLI on the same machine was Chinese); the "no hardcoded Chinese in non-test code" guard was half idle (the directory walk treated the root entry as a hidden directory and skipped it, so not a single file was checked); and a dead string retired with the old renderer ("N more lines not shown").
 
-- **依赖**：mygo 升到 v0.5.1（此前 v0.4.8）。CI 增加 `go tool mygo i18n check`。
+- **Dependencies**: mygo is upgraded to v0.5.1 (previously v0.4.8). CI adds `go tool mygo i18n check`.
 
 ## 0.1.7
 
-列表扫描不再计算内容哈希，「仓库根即技能」的仓库能正常安装了。
+Listing no longer computes content hashes, and repositories whose root is the skill can now be installed.
 
-- **扫描更快**：「技能集合仓库」里带大量文件的技能不再拖慢列表刷新——扫描只读元数据，不再为每个技能（含停用与回收站里的）读完整个目录算哈希。`kura doctor` 在核对内容漂移时按需计算，行为不变。
-- **修复「禁用技能被误报缺元数据」**：禁用中且元数据完好的技能不再被 `kura doctor` 报成「元数据缺少 contentHash」（退出码 3 的假阳性）。
-- **修复「仓库根即技能」装不上**：`SKILL.md` 直接放在仓库根的仓库（如 `dualface/ste-zh`）此前在界面里点「安装」会报「仓库内不存在目录 .」；子路径 `.` 现在与留空同义（整仓检出），CLI 的 `--sub-path .` 同样可用。
+- **Faster scans**: skills with a large number of files in a "skill-collection repository" no longer slow down list refreshes: scanning reads only metadata, and no longer hashes the entire directory for every skill (including disabled and trashed ones). `kura doctor` still computes the hash on demand when checking for content drift; that behavior is unchanged.
+- **Fix: disabled skills were falsely reported as missing metadata**: a disabled skill whose metadata is intact is no longer reported by `kura doctor` as "the metadata has no contentHash" (a false positive with exit code 3).
+- **Fix: repositories whose root is the skill could not be installed**: for repositories that put `SKILL.md` at the repository root (such as `dualface/ste-zh`), clicking "Install" in the UI used to report "store: no such folder in the repository: .". A subpath of `.` is now treated the same as leaving it empty (check out the whole repository); the CLI's `--sub-path .` works the same way.
 
 ## 0.1.6
 
-详情页不再显示内容哈希。
+The detail page no longer shows a content hash.
 
-- **删除详情「哈希」行**：右栏元数据里那一行哈希是内部指纹，对使用没有价值（版本对比看来源/Commit/时间，内容漂移由 `kura doctor` 与「检查更新」的评审面板提示），整行移除，中英文界面同步。评审面板里的「本地有改动」警告保留。
-- **文档同步**：README 与 `docs/note/updates.md` 的过期说法更新（自更新链路已在 Windows 上实测通关、mygo 版本号对齐），`REQUIREMENTS.md` 相应条目更新。
+- **Removed the "Hash" row from the detail pane**: that hash in the right-pane metadata was an internal fingerprint and had no value for use (version comparison looks at source / Commit / time; content drift is reported by `kura doctor` and the "Check for updates" review panel). The whole row is removed, in both the Chinese and English UIs. The "Changed locally" warning on the review panel is kept.
+- **Docs updated**: outdated wording in the README and `docs/note/updates.md` is updated (the self-update path has been verified end-to-end on Windows; the mygo version number is aligned), and the corresponding items in `REQUIREMENTS.md` are updated.
 
 ## 0.1.5
 
-界面支持中英双语：第一次打开跟随系统语言，系统是中文就用中文，否则用英文。
+The interface is bilingual (Chinese and English): the first launch follows the system language, using Chinese when the system is Chinese and English otherwise.
 
-- **双语界面**：窗口与命令行都支持中文和英文。界面语言是 `~/.kura/config.json` 里的 `lang`（`system` | `zh` | `en`，缺省 `system`），在设置弹窗的「界面语言 / Language」里可随时切换，**选中即生效**（「保存」只管翻译 API 那一组）。`system` 的含义是：系统 locale 以 `zh` 开头就用中文，其余（含空、`C`、`POSIX`、`ja`、`de`…）一律英文。
-- **命令行**：`kura` 新增 `--lang system|zh|en` 与环境变量 `KURA_LANG`（优先级：flag → 环境变量 → `config.json` → 系统 locale）。`--help`、列表、体检与全部错误信息都随语言变化。
-- **文案集中管理**：所有界面文案搬进各包的 `catalog.go`（中文与英文两份，key 一致），用新的 `internal/i18n` 读取。中文取值与改动前**逐字一致**——你熟悉的中文界面一个字没变。错误改用「带 key 的错误」：切换语言后文字会变，但 `errors.Is` 判断照旧（顺带修掉了旧版错误里 `store: store:` 的重复前缀）。
-- **不翻译**：技能名、描述、路径、网址这些用户数据，以及语言的自带名（简体中文、日本語、English…）永远原样显示。
-- **回归守卫**：新增测试会在任何非测试源文件里残留硬编码中文界面文案时失败，并逐条列出行号；另一条保证中英目录的 key 完全一致。
-- **修复**：`internal/selfupdate` 的窗口测试原先断言中文界面但没有固定语言，双语化后会在英文环境下失败，现已按其它包的同样方式固定语言。
+- **Bilingual UI**: both the window and the command line support Chinese and English. The interface language is `lang` in `~/.kura/config.json` (`system` | `zh` | `en`, default `system`). It can be switched at any time from "Language" in the settings dialog, and **takes effect as soon as it is selected** ("Save" only applies to the translation-API group). `system` means: use Chinese when the system locale starts with `zh`, and English for everything else (including empty, `C`, `POSIX`, `ja`, `de`, ...).
+- **CLI**: `kura` gains `--lang system|zh|en` and the `KURA_LANG` environment variable (precedence: flag → environment variable → `config.json` → system locale). `--help`, lists, doctor, and every error message follow the language.
+- **Copy centralized**: all UI copy has moved into each package's `catalog.go` (Chinese and English, with matching keys) and is read through the new `internal/i18n`. The Chinese values are **character-for-character identical** to what they were before the change: the Chinese interface you already know has not changed by a single character. Errors are now "errors with a key": the wording changes after you switch language, but `errors.Is` checks still work (this also fixes the duplicated `store: store:` prefix in older error messages).
+- **Not translated**: user data such as skill names, descriptions, paths, and URLs, as well as a language's own name (the endonyms for Simplified Chinese, Japanese, English, ...), is always shown as-is.
+- **Regression guards**: a new test fails if any hardcoded Chinese UI copy remains in a non-test source file, listing each line number; another test ensures the Chinese and English catalogs have exactly the same keys.
+- **Fix**: the window tests in `internal/selfupdate` previously asserted the Chinese UI without pinning the language, so they would fail in an English environment after bilingual support landed. They now pin the language the same way the other packages do.
 
 ## 0.1.4
 
-一个仓库装多个技能、文档补齐，并升级到 MyGo v0.4.8。
+Install several skills from one repository at once, documentation is brought up to date, and MyGo is upgraded to v0.4.8.
 
-- **一个仓库一次装多个技能**：仓库里有多个技能时，安装弹窗把候选列成勾选列表（默认不勾，带全选/全不选，超过 8 行滚动），主按钮显示「安装选中的 N 个」。同一批只 clone 一次、只取一次树、只做一次稀疏检出；某一项失败（重名、上游没这个目录、子目录非法）只让它自己失败，其余照装。
-- **默认安装名取 `SKILL.md` 的 `name` 字段**：优先级是「显式填的名字 → frontmatter 的 `name` → 来源目录名」，仓库根就是技能时回退成仓库名（不会再冒出随机克隆目录名）。名字不能当目录名用时（含 `<>:"|?*`、控制字符、结尾空格或点、Windows 设备名等）静默换下一个候选。
-- **改仓库后旧候选失效**：候选列表属于发现它的那个 `owner/repo`+分支；改掉仓库字段就丢弃旧列表，发现结果晚到且表单已改时整份丢弃，绝不悄悄装错仓库。
-- **双语 README 与 REQUIREMENTS 重写**：新增 `README.md`（英文）与 `README-zh.md`（中文）；`REQUIREMENTS.md` 重写为 14 节，补上多根目录、自动发现、批量安装、永久删除、翻译、自更新、CLI、验证要求，并把未实现/未验证/受限的部分单列一节。
-- **升级 MyGo v0.4.6 → v0.4.8**（v0.4.7/v0.4.8 为纯增量改动）。
-- **文档与注释不再写本机路径**：`C:\Users\<名字>`、`E:\Project`、本机专有工具名等一律换成 `~`、`%USERPROFILE%`、`<仓库根>` 之类通用写法；示例里的真实仓库名也换成通用占位。
-- **`tools/` 只留可复用脚本**：保留截图脚本、`demo-discover`、守望脚本与评审 brief，并写了 `tools/README.md`；一次性的日志、截图、补丁、备份用完即删，`.gitignore` 忽略 `tools/*.log` 与 `tools/**/*.png`。
-- **文档去硬折行**：所有 Markdown 改为一段/一条一行（原来按 80 列硬折，中文本该连着的句子会被渲染成多一个空格）。
+- **Install several skills from one repository in one go**: when a repository contains multiple skills, the install dialog lists the candidates as a checklist (none selected by default, with Select all / Deselect all; it scrolls beyond 8 rows). The primary button shows "Install N selected". The same batch clones once, takes the tree once, and does one sparse checkout; if one item fails (name conflict, the directory is missing upstream, or the subdirectory is invalid) only that item fails, and the rest still install.
+- **Default install name comes from the `name` field in `SKILL.md`**: the priority is "the name you typed → the `name` in the frontmatter → the source directory name". When the repository root is the skill, it falls back to the repository name (random clone-directory names no longer appear). If the name cannot be used as a directory name (contains `<>:"|?*`, control characters, a trailing space or dot, a Windows device name, and so on) the next candidate is substituted silently.
+- **Old candidates are invalidated when the repository changes**: the candidate list belongs to the `owner/repo`+branch that discovered it; changing the repository field discards the old list. If a discovery result arrives late and the form has already changed, the whole result is discarded, so the wrong repository is never installed quietly.
+- **Bilingual README and a rewritten REQUIREMENTS**: added `README.md` (English) and `README-zh.md` (Chinese); `REQUIREMENTS.md` is rewritten as 14 sections, covering multiple roots, auto-discovery, batch install, permanent deletion, translation, self-update, the CLI, and verification requirements, with unimplemented / unverified / limited parts listed in a section of their own.
+- **Upgraded MyGo v0.4.6 → v0.4.8** (v0.4.7/v0.4.8 are incremental-only changes).
+- **Docs and comments no longer contain machine-local paths**: `C:\Users\<name>`, `E:\Project`, and machine-specific tool names are replaced with generic forms such as `~`, `%USERPROFILE%`, and `<repo-root>`; real repository names in examples are also replaced with generic placeholders.
+- **`tools/` keeps only reusable scripts**: the screenshot script, `demo-discover`, the watch script, and the review brief are kept, and `tools/README.md` is added. One-off logs, screenshots, patches, and backups are deleted after use; `.gitignore` ignores `tools/*.log` and `tools/**/*.png`.
+- **Docs no longer use hard line wraps**: every Markdown file is one paragraph or one list item per line (they used to be hard-wrapped at column 80, which inserted an extra space into Chinese sentences that should have stayed joined).
 
 ## 0.1.3
 
-第一轮界面反馈落地：栏宽可拖、目录可排序、全文可翻译、回收站可永久删除。
+The first round of UI feedback is in: pane widths are draggable, roots can be reordered, full text can be translated, and trash items can be deleted permanently.
 
-- **栏宽可拖**:左栏与详情栏之间的分割线现在能拖动调宽（左栏 168–420、详情栏 260–560），窗口放不下时两侧栏按可用宽度一起让位，窗口变宽后自动恢复你拖出的宽度。
-- **左栏底栏缩成一行**:外观开关与图标按钮并排。
-- **标题栏图标**:窗口左上角改用 kura 自己的图标。
-- **技能按名排序**:卡片永远按名字排，停用的技能不再沉到列表底部。
-- **回收站可「永久删除…」**:带确认框；删除前必定先写一份内容快照，快照无效（被清空、路径是符号链接、内容对不上）时重新写一份，写不下去就中止删除并保留回收站副本。
-- **全文页可逐段翻译**:详情栏「全文」页可把 SKILL.md 逐段翻成目标语言；代码块整块保留、不在中间断开。译文只在内存里，**不写**任何技能文件。
-- **目录列表可拖动排序**:默认目录固定在第一位。
-- **启动时自动发现本机 agent 技能目录**（Claude Code、Codex、Cursor 等）并加入列表；你移除过的目录以后不会再被加回来。
-- **修复（评审发现的六条）**:并发的目录操作可能互相覆盖 `config.json`（自动发现的目录会被永久挤掉）；「永久删除」的技能名带 `../` 之类时可能越出回收站删掉站外目录；快照被清空或换成符号链接时仍会被当作已快照；Markdown 缩进代码块被误当成围栏导致分段退化；改翻译配置后旧任务继续发请求并混用新旧设置；窗口变窄时不夹紧已拖宽的侧栏导致中间栏被挤没。六条都带回归测试。
+- **Draggable pane widths**: the splitters between the left rail and the detail pane can now be dragged to resize them (left rail 168–420, detail pane 260–560). When the window is too narrow, both side panes yield together to the available width; when the window grows again, the widths you dragged to are restored automatically.
+- **Left-rail footer collapsed to one row**: the appearance switch and icon buttons sit side by side.
+- **Title-bar icon**: the top-left of the window now uses kura's own icon.
+- **Skills sorted by name**: cards are always ordered by name; disabled skills no longer sink to the bottom of the list.
+- **Trash items can be "Delete permanently…"**: with a confirmation dialog. A content snapshot is always written first; if the snapshot is invalid (emptied, the path is a symlink, or the content does not match), it is rewritten, and if it still cannot be written the delete is aborted and the trash copy is kept.
+- **Full text can be translated section by section**: the "Full text" tab in the detail pane can translate SKILL.md section by section into the target language. Code blocks are kept intact and are not split in the middle. Translations live in memory only and **are not written** to any skill file.
+- **Root list can be reordered by dragging**: the default root stays first.
+- **Agent skill directories on this machine are discovered automatically at startup** (Claude Code, Codex, Cursor, and so on) and added to the list. Directories you have removed are not added back later.
+- **Fixes (six found in review)**: concurrent directory operations could overwrite each other's `config.json` (auto-discovered directories could be dropped permanently); "Delete permanently" could escape the trash and delete a directory outside it when the skill name contained `../` or similar; a snapshot that had been emptied or replaced with a symlink could still be treated as already snapshotted; indented Markdown code blocks were mistaken for fenced ones, which degraded segmentation; after translation settings changed, old tasks kept sending requests and mixed old and new settings; when the window narrowed, already-widened side panes were not clamped, which squeezed the middle pane away. All six have regression tests.
 
 ## 0.1.2
 
-更新检查更快、更省流量,并在界面与命令行里报出「本地被手改过」。
+Update checks are faster and use less bandwidth, and both the UI and the CLI now report "changed locally".
 
-- **更新检查改用 git 对象哈希**:不再依赖本地时钟或文件时间,由粗到细、能判定就停。先用 `git ls-remote` 比对上游 commit;变了才做一次只取树的浅克隆 (`--depth 1 --filter=blob:none --no-checkout`,不含文件内容)比对技能目录的树哈希;仍不同才稀疏检出该目录逐文件比较。上游没变时**一个文件都不下载**。
-- **同一仓库共用一次检查**:`update --check --all`、评审面板的「检查更新」与批量更新,都按仓库(URL + ref)分组,共用一次 `ls-remote`、一次克隆与一次稀疏检出,不再对每个技能各来一遍。
-- **本地改动提示**:已安装内容与安装/更新时记录的哈希不一致时,检查会标记「本地有改动」,不再误报成「有更新」;应用更新仍会覆盖这些改动,覆盖前照旧先做快照。
-- **元数据新增 `source.tree`**:记录安装时技能目录的树哈希。旧元数据(以及从 `.skill-lock.json` 导入的)没有这个字段时自动退回逐文件比较,**无需迁移**。
-- **修复**:带 `subPath` 的技能在更新后,元数据里的 `source.commit` 会被写成空串,导致下次检查退化成逐文件比较。
-- **命令行**:`update --check` 的 JSON 增加 `basis`(`commit` / `tree` / `content`,说明凭什么判定)与 `localModified`;文本输出在「已是最新」后注明理由,并单独提示本地改动。
+- **Update checks use git object hashes**: they no longer depend on the local clock or file times. Checks go coarse-to-fine and stop as soon as a verdict is possible. First, `git ls-remote` compares the upstream commit; only if it changed is a tree-only shallow clone (`--depth 1 --filter=blob:none --no-checkout`, no file contents) used to compare the skill directory's tree hash; only if that still differs is the directory sparsely checked out and compared file by file. When upstream has not changed, **no files are downloaded**.
+- **One check shared per repository**: `update --check --all`, "Check for updates" on the review panel, and batch updates all group by repository (URL + ref) and share one `ls-remote`, one clone, and one sparse checkout, instead of repeating that work for every skill.
+- **Local-edit notice**: when installed content does not match the hash recorded at install/update time, the check is marked "Changed locally" instead of being misreported as an update. Applying an update still overwrites those edits; a snapshot is taken first, as before.
+- **New metadata field `source.tree`**: records the tree hash of the skill directory at install time. Old metadata (and metadata imported from `.skill-lock.json`) that lacks this field automatically falls back to a file-by-file comparison; **no migration is required**.
+- **Fix**: after an update, skills with a `subPath` had `source.commit` in their metadata written as an empty string, which made the next check fall back to a file-by-file comparison.
+- **CLI**: JSON from `update --check` now includes `basis` (`commit` / `tree` / `content`, explaining what the verdict is based on) and `localModified`. Text output notes the reason after "up to date", and reports local edits separately.
 
 ## 0.1.1
 
-界面改版与技能文本翻译,并修掉三个 Windows 上的实际缺陷。
+A UI overhaul and skill-text translation, plus fixes for three real defects on Windows.
 
-- **跨盘移动修复**:在 Windows 上把技能停用或移入回收站时,若技能根目录与 `~/.kura` 不在同一个盘(例如技能装在 E:、kura 数据在 C:),此前会直接失败并报 `The system cannot move the file to a different disk drive`。现在移动改为优先同盘改名、跨盘回退到「复制到目标卷的临时目录 → 同卷改名落位 → 删除源」,失败时清掉临时目录且源目录原样保留。
-- **安装与更新不再弹黑窗**:Windows 上调用 git 时不再新开一个命令行窗口 (`CREATE_NO_WINDOW`)。
-- **多技能仓库自动发现**:从 GitHub 仓库安装技能时,若仓库根目录没有 `SKILL.md`(例如 `mattpocock/skills` 这类把技能放在 `skills/<分类>/<技能>/` 下的仓库),kura 现在会自动发现仓库里的全部技能。唯一候选直接安装,多个候选则列出候选让你挑选(CLI 退出码 1,`--json` 给出结构化 `candidates`)。
-- **自绘标题栏**:窗口改用无系统标题栏,由 kura 自绘一条可拖动、双击最大化的顶栏,同时保留系统的最小化/最大化/关闭按钮;「检查更新」移到左栏左下角。
-- **详情栏**:元数据与位置信息文字可选中拷贝;来源是 GitHub 时可直接点击在浏览器打开;新增「概览/全文」两个 tab,全文页渲染 `SKILL.md` 的 Markdown(标题、列表、代码块、引用、链接)。
-- **排列模式**:技能区可在卡片网格与两行列表之间切换,选择会被记住。
-- **设置与翻译**:新增设置弹窗,可配置 OpenAI 兼容的翻译 API 与全局目标语言;详情与卡片描述可切换显示「原文/译文」。翻译只用于界面显示,保存在内存里,**绝不改动技能目录里的任何文件**;密钥以明文保存在 `~/.kura/settings.json`(文件权限 0600)。
+- **Cross-drive move fix**: on Windows, disabling a skill or moving it to the trash failed outright with `The system cannot move the file to a different disk drive` when the skills root and `~/.kura` were on different drives (for example skills on E: and kura data on C:). Moves now prefer a same-drive rename, and fall back across drives to "copy into a temporary directory on the destination volume → rename into place on that volume → delete the source". On failure the temporary directory is cleaned up and the source is left untouched.
+- **Install and update no longer flash a console window**: calling git on Windows no longer opens a new command-line window (`CREATE_NO_WINDOW`).
+- **Auto-discovery of multi-skill repositories**: when installing a skill from a GitHub repository, if the repository root has no `SKILL.md` (for example repositories like `mattpocock/skills` that keep skills under `skills/<category>/<skill>/`), kura now discovers every skill in the repository. A single candidate is installed directly; several candidates are listed for you to pick from (CLI exit code 1, `--json` returns a structured `candidates` list).
+- **Custom title bar**: the window no longer uses the system title bar. kura draws its own draggable top bar that maximizes on double-click, while keeping the system's minimize/maximize/close buttons. "Check for updates" moves to the bottom-left of the left rail.
+- **Detail pane**: metadata and location text can be selected and copied; a GitHub source can be clicked to open it in the browser. Two new tabs, "Overview" / "Full text", are added; the Full text page renders the Markdown of `SKILL.md` (headings, lists, code blocks, block quotes, links).
+- **Layout mode**: the skills area can switch between a card grid and a two-line list; the choice is remembered.
+- **Settings and translation**: a new settings dialog configures an OpenAI-compatible translation API and a global target language. Detail and card descriptions can switch between "Original" / "Translated". Translations are for display only, kept in memory, and **never modify any file in the skill directory**; the API key is stored in plain text at `~/.kura/settings.json` (file mode 0600).
 
 ## 0.1.0
 
-kura 首个版本:一个管理 agent 技能(Skills)的桌面应用与配套 CLI, 基于 MyGo 原生 UI(无 webview)。
+kura's first release: a desktop app and companion CLI for managing agent skills (Skills), built with a MyGo native UI (no webview).
 
-- **技能库**:扫描技能根目录,展示每个技能的名称、描述与启用状态; 按名称/描述搜索过滤。
-- **启用 / 停用**:把技能目录在根目录与 `~/.kura/disabled/` 之间移动, 状态即位置,绝不复制。
-- **移除 / 恢复**:把技能移入 `~/.kura/trash/`(可恢复),移除前自动快照到 `~/.kura/snapshots/`。
-- **导入元数据**:读取 `~/.agents/.skill-lock.json`(只读,绝不改写), 把安装来源(GitHub 仓库与仓库内路径,或本地路径)、安装器插件名与安装时间收进技能的 `.kura-meta.json`;已有元数据的技能一律跳过。
-- **更新预览**:对有安装来源的技能重新拉取上游,以文件级 diff 展示将要变更的内容,逐文件审阅后再落盘;更新前同样先快照。
-- **诊断**:`kura doctor` 检查根目录、锁定文件与元数据的常见问题。
-- **CLI**:与桌面应用同一套能力的无界面入口(`kura list / add / update / disable / enable / remove / restore / import-meta / doctor`),输出机器可读的 JSON。
-- **自更新**(应用级):应用菜单提供「检查更新…」,后台每天自动检查一次; 下载、Ed25519 签名校验、替换与重启全部由 MyGo 原生更新窗口完成。更新以 `vX.Y.Z` 标签的 GitHub Release 发布,详见 [docs/note/updates.md](docs/note/updates.md)。
+- **Skill library**: scans the skills root and shows each skill's name, description, and enabled state; filter by searching name or description.
+- **Enable / disable**: moves the skill folder between the root and `~/.kura/disabled/`. State is location; nothing is ever copied.
+- **Remove / restore**: moves the skill into `~/.kura/trash/` (restorable), automatically snapshotting to `~/.kura/snapshots/` first.
+- **Import metadata**: reads `~/.agents/.skill-lock.json` (read-only, never rewritten) and records the install source (a GitHub repository and the path inside it, or a local path), the installer plugin name, and the install time in the skill's `.kura-meta.json`; skills that already have metadata are always skipped.
+- **Update preview**: for skills with an install source, pulls upstream again and shows a file-level diff of what would change; review file by file before writing. A snapshot is taken first, as with updates.
+- **Doctor**: `kura doctor` checks the root, the lock file, and metadata for common problems.
+- **CLI**: a headless entry point with the same capabilities as the desktop app (`kura list / add / update / disable / enable / remove / restore / import-meta / doctor`), emitting machine-readable JSON.
+- **Self-update** (app-level): the app menu provides "Check for Updates…"; a background check also runs once a day. Download, Ed25519 signature verification, replacement, and relaunch are all handled by the native MyGo update window. Updates are published as GitHub Releases tagged `vX.Y.Z`; see [docs/note/updates.md](docs/note/updates.md).
